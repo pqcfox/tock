@@ -43,6 +43,7 @@ pub struct EarlGreyDefaultPeripherals<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyP
     pub usb: lowrisc::usbdev::Usb<'a>,
     pub uart0: lowrisc::uart::Uart<'a>,
     pub otbn: lowrisc::otbn::Otbn<'a>,
+    pub otp: lowrisc::otp::Otp,
     pub gpio_port: crate::gpio::Port<'a>,
     pub i2c0: lowrisc::i2c::I2c<'a>,
     pub spi_host0: lowrisc::spi_host::SpiHost<'a>,
@@ -64,6 +65,7 @@ impl<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig>
             usb: lowrisc::usbdev::Usb::new(crate::usbdev::USB0_BASE),
             uart0: lowrisc::uart::Uart::new(crate::uart::UART0_BASE, CFG::PERIPHERAL_FREQ),
             otbn: lowrisc::otbn::Otbn::new(crate::otbn::OTBN_BASE),
+            otp: lowrisc::otp::Otp::new(crate::otp::OTP_BASE),
             gpio_port: crate::gpio::Port::new::<PINMUX>(),
             i2c0: lowrisc::i2c::I2c::new(crate::i2c::I2C0_BASE, (1 / CFG::CPU_FREQ) * 1000 * 1000),
             spi_host0: lowrisc::spi_host::SpiHost::new(
@@ -92,6 +94,7 @@ impl<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig>
     pub fn init(&'static self) {
         kernel::deferred_call::DeferredCallClient::register(&self.aes);
         kernel::deferred_call::DeferredCallClient::register(&self.uart0);
+        self.otp.init().expect("Failed to initialize OTP");
     }
 }
 
