@@ -42,6 +42,7 @@ pub struct EarlGrey<
 pub struct EarlGreyDefaultPeripherals<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig> {
     pub aes: crate::aes::Aes<'a>,
     pub hmac: lowrisc::hmac::Hmac<'a>,
+    pub clkmgr: crate::clkmgr::Clkmgr,
     pub usb: lowrisc::usb::Usb<'a>,
     pub uart0: lowrisc::uart::Uart<'a>,
     pub otbn: lowrisc::otbn::Otbn<'a>,
@@ -65,6 +66,7 @@ impl<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig>
         Self {
             aes: crate::aes::Aes::new(),
             hmac: lowrisc::hmac::Hmac::new(crate::hmac::HMAC0_BASE),
+            clkmgr: crate::clkmgr::Clkmgr::new(),
             usb: lowrisc::usb::Usb::new(crate::usbdev::USB0_BASE),
             uart0: lowrisc::uart::Uart::new(crate::uart::UART0_BASE, CFG::PERIPHERAL_FREQ),
             otbn: lowrisc::otbn::Otbn::new(crate::otbn::OTBN_BASE),

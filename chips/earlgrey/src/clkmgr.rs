@@ -1,0 +1,717 @@
+// Licensed under the Apache License, Version 2.0 or the MIT License.
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+// Copyright Tock Contributors 2022.
+
+//! Provides access to determine the clock status, enable and disable clocks and
+//!  clock measurement checks, get and clear errors.
+
+use kernel::debug;
+use kernel::utilities::registers::interfaces::{ReadWriteable, Readable, Writeable};
+use kernel::utilities::StaticRef;
+use kernel::ErrorCode;
+
+use crate::registers::clkmgr_regs::{
+    ClkmgrRegisters, CLK_ENABLES, CLK_HINTS, CLK_HINTS_STATUS, EXTCLK_CTRL, EXTCLK_CTRL_REGWEN,
+    EXTCLK_STATUS, FATAL_ERR_CODE, IO_DIV2_MEAS_CTRL_EN, IO_DIV2_MEAS_CTRL_SHADOWED,
+    IO_DIV4_MEAS_CTRL_EN, IO_DIV4_MEAS_CTRL_SHADOWED, IO_MEAS_CTRL_EN, IO_MEAS_CTRL_SHADOWED,
+    JITTER_ENABLE, JITTER_REGWEN, MAIN_MEAS_CTRL_EN, MAIN_MEAS_CTRL_SHADOWED, MEASURE_CTRL_REGWEN,
+    RECOV_ERR_CODE, USB_MEAS_CTRL_EN, USB_MEAS_CTRL_SHADOWED,
+};
+use crate::registers::top_earlgrey::CLKMGR_AON_BASE_ADDR;
+
+pub struct Clkmgr {
+    registers: StaticRef<ClkmgrRegisters>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum ExtClkState {
+    ExtClkOnHighSpeed,
+    ExtClkOnLowSpeed,
+    ExtClkOff,
+    ExtClkError,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum GateableClk {
+    UsbPeri,
+    IoPeri,
+    IoDiv2Peri,
+    IoDiv4Peri,
+    TransClkMainOTBN,
+    TransClkMainKMAC,
+    TransClkMainHMAC,
+    TransClkMainAES,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum MeasCtrlClk {
+    Io,
+    IoDiv2,
+    IoDiv4,
+    MainClk,
+    UsbClk,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum RecovErrCode {
+    UsbTimeoutErr,
+    MainTimeoutErr,
+    IoDiv4TimeoutErr,
+    IoDiv2TimeoutErr,
+    IoTimeoutErr,
+    UsbMeasureErr,
+    MainMeasureErr,
+    IoDiv4MeasureErr,
+    IoDiv2MeasureErr,
+    IoMeasureErr,
+    ShadowUpdateErr,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum FatalErrCode {
+    ShadowStorageErr,
+    IdleCnt,
+    RegIntg,
+}
+
+const MULTI_BIT_BOOL_4TRUE: u32 = 0x6;
+const MULTI_BIT_BOOL_4FALSE: u32 = 0x9;
+
+pub const CLK_MGR_BASE: StaticRef<ClkmgrRegisters> =
+    unsafe { StaticRef::new(CLKMGR_AON_BASE_ADDR as *const ClkmgrRegisters) };
+
+fn wait_for(count: usize, f: impl Fn() -> bool) -> bool {
+    for _ in 0..count {
+        if f() {
+            return true;
+        }
+    }
+    false
+}
+
+fn test_helper(test_text: &str, f: impl Fn() -> bool) -> bool {
+    static mut TEST_ID: usize = 0;
+    unsafe {
+        TEST_ID += 1;
+        if f() {
+            // debug!("*   Test No. {} Passed!", TEST_ID);
+            // debug!("*  ");
+            true
+        } else {
+            debug!("*   Test No. {} Failed! : {}", TEST_ID, test_text);
+            false
+        }
+    }
+}
+
+impl Clkmgr {
+    pub fn new() -> Self {
+        Self {
+            registers: CLK_MGR_BASE,
+        }
+    }
+
+    pub fn set_extclk(&self, req_state: ExtClkState, timeout: usize) -> bool {
+        let (extclk_en, extclk_hispeed, feedback_expected) = match req_state {
+            ExtClkState::ExtClkOnHighSpeed => (
+                EXTCLK_CTRL::SEL.val(MULTI_BIT_BOOL_4TRUE),
+                EXTCLK_CTRL::HI_SPEED_SEL.val(MULTI_BIT_BOOL_4TRUE),
+                MULTI_BIT_BOOL_4TRUE,
+            ),
+            ExtClkState::ExtClkOnLowSpeed => (
+                EXTCLK_CTRL::SEL.val(MULTI_BIT_BOOL_4TRUE),
+                EXTCLK_CTRL::HI_SPEED_SEL.val(MULTI_BIT_BOOL_4FALSE),
+                MULTI_BIT_BOOL_4TRUE,
+            ),
+            ExtClkState::ExtClkOff => (
+                EXTCLK_CTRL::SEL.val(MULTI_BIT_BOOL_4FALSE),
+                EXTCLK_CTRL::HI_SPEED_SEL.val(MULTI_BIT_BOOL_4FALSE),
+                MULTI_BIT_BOOL_4FALSE,
+            ),
+            _ => return false,
+        };
+        self.registers
+            .extclk_ctrl_regwen
+            .modify(EXTCLK_CTRL_REGWEN::EN::SET);
+
+        self.registers.extclk_ctrl.write(extclk_en + extclk_hispeed);
+
+        // self.registers
+        //     .extclk_ctrl_regwen
+        //     .modify(EXTCLK_CTRL_REGWEN::EN::CLEAR);
+
+        wait_for(timeout, || {
+            self.registers.extclk_status.read(EXTCLK_STATUS::ACK) == feedback_expected
+        })
+    }
+
+    pub fn get_extclk_sts(&self) -> ExtClkState {
+        match (
+            self.registers.extclk_ctrl.read(EXTCLK_CTRL::SEL),
+            self.registers.extclk_ctrl.read(EXTCLK_CTRL::HI_SPEED_SEL),
+            self.registers.extclk_status.read(EXTCLK_STATUS::ACK),
+        ) {
+            (MULTI_BIT_BOOL_4TRUE, MULTI_BIT_BOOL_4TRUE, MULTI_BIT_BOOL_4TRUE) => {
+                ExtClkState::ExtClkOnHighSpeed
+            }
+            (MULTI_BIT_BOOL_4TRUE, MULTI_BIT_BOOL_4FALSE, MULTI_BIT_BOOL_4TRUE) => {
+                ExtClkState::ExtClkOnLowSpeed
+            }
+            (MULTI_BIT_BOOL_4FALSE, _, MULTI_BIT_BOOL_4FALSE) => ExtClkState::ExtClkOff,
+            (_, _, _) => ExtClkState::ExtClkError,
+        }
+    }
+
+    pub fn set_clk_jitter(&self, jitter_enabled: bool) {
+        self.registers.jitter_regwen.write(JITTER_REGWEN::EN::SET);
+
+        match jitter_enabled {
+            true => self
+                .registers
+                .jitter_enable
+                .write(JITTER_ENABLE::VAL.val(MULTI_BIT_BOOL_4TRUE)),
+            false => self
+                .registers
+                .jitter_enable
+                .write(JITTER_ENABLE::VAL.val(MULTI_BIT_BOOL_4FALSE)),
+        };
+
+        self.registers.jitter_regwen.write(JITTER_REGWEN::EN::CLEAR);
+    }
+
+    pub fn get_clk_jitter(&self) -> bool {
+        !matches!(
+            self.registers.jitter_enable.read(JITTER_ENABLE::VAL),
+            MULTI_BIT_BOOL_4FALSE
+        )
+    }
+
+    /// Returns true if the clock enable has succeeded and false if it did not succeed.
+    pub fn set_clk_enable(&self, clk: GateableClk, req: bool) -> bool {
+        if self.is_clk_enabled(clk) != req {
+            match clk {
+                GateableClk::UsbPeri
+                | GateableClk::IoPeri
+                | GateableClk::IoDiv2Peri
+                | GateableClk::IoDiv4Peri => {
+                    let bit = match clk {
+                        GateableClk::UsbPeri => CLK_ENABLES::CLK_USB_PERI_EN,
+                        GateableClk::IoPeri => CLK_ENABLES::CLK_IO_PERI_EN,
+                        GateableClk::IoDiv2Peri => CLK_ENABLES::CLK_IO_DIV2_PERI_EN,
+                        GateableClk::IoDiv4Peri => CLK_ENABLES::CLK_IO_DIV4_PERI_EN,
+                        _ => unreachable!(),
+                    };
+                    self.registers.clk_enables.modify(bit.val(req as u32));
+                }
+                GateableClk::TransClkMainOTBN
+                | GateableClk::TransClkMainKMAC
+                | GateableClk::TransClkMainHMAC
+                | GateableClk::TransClkMainAES => {
+                    let bit = match clk {
+                        GateableClk::TransClkMainOTBN => CLK_HINTS::CLK_MAIN_OTBN_HINT,
+                        GateableClk::TransClkMainKMAC => CLK_HINTS::CLK_MAIN_KMAC_HINT,
+                        GateableClk::TransClkMainHMAC => CLK_HINTS::CLK_MAIN_HMAC_HINT,
+                        GateableClk::TransClkMainAES => CLK_HINTS::CLK_MAIN_AES_HINT,
+                        _ => unreachable!(),
+                    };
+                    self.registers.clk_hints.modify(bit.val(req as u32));
+                }
+            }
+            self.is_clk_enabled(clk)
+        } else {
+            true
+        }
+    }
+
+    // Returns true if the clock is enabled and false if the clock is not enabled.
+    pub fn is_clk_enabled(&self, clk: GateableClk) -> bool {
+        match clk {
+            GateableClk::UsbPeri
+            | GateableClk::IoPeri
+            | GateableClk::IoDiv2Peri
+            | GateableClk::IoDiv4Peri => {
+                let bit = match clk {
+                    GateableClk::UsbPeri => CLK_ENABLES::CLK_USB_PERI_EN,
+                    GateableClk::IoPeri => CLK_ENABLES::CLK_IO_PERI_EN,
+                    GateableClk::IoDiv2Peri => CLK_ENABLES::CLK_IO_DIV2_PERI_EN,
+                    GateableClk::IoDiv4Peri => CLK_ENABLES::CLK_IO_DIV4_PERI_EN,
+                    _ => unreachable!(),
+                };
+                self.registers.clk_enables.is_set(bit)
+            }
+            GateableClk::TransClkMainOTBN
+            | GateableClk::TransClkMainKMAC
+            | GateableClk::TransClkMainHMAC
+            | GateableClk::TransClkMainAES => {
+                let bit = match clk {
+                    GateableClk::TransClkMainOTBN => CLK_HINTS_STATUS::CLK_MAIN_OTBN_VAL,
+                    GateableClk::TransClkMainKMAC => CLK_HINTS_STATUS::CLK_MAIN_KMAC_VAL,
+                    GateableClk::TransClkMainHMAC => CLK_HINTS_STATUS::CLK_MAIN_HMAC_VAL,
+                    GateableClk::TransClkMainAES => CLK_HINTS_STATUS::CLK_MAIN_AES_VAL,
+                    _ => unreachable!(),
+                };
+                self.registers.clk_hints_status.is_set(bit)
+            }
+        }
+    }
+
+    // Returns true if the clock is enabled and false if the clock is not enabled.
+    pub fn set_clk_meas_ctrl(
+        &self,
+        clk: MeasCtrlClk,
+        en: bool,
+        lo: u32,
+        hi: u32,
+    ) -> Result<(), ErrorCode> {
+        let set_req = match en {
+            true => MULTI_BIT_BOOL_4TRUE,
+            false => MULTI_BIT_BOOL_4FALSE,
+        };
+
+        let lo_req = if lo < 0x3FF {
+            lo
+        } else {
+            return Err(ErrorCode::INVAL);
+        };
+
+        let hi_req = if hi < 0x3FF {
+            hi
+        } else {
+            return Err(ErrorCode::INVAL);
+        };
+
+        self.registers
+            .measure_ctrl_regwen
+            .write(MEASURE_CTRL_REGWEN::EN::SET);
+
+        match clk {
+            MeasCtrlClk::Io => {
+                self.registers
+                    .io_meas_ctrl_en
+                    .write(IO_MEAS_CTRL_EN::EN.val(set_req));
+                self.registers.io_meas_ctrl_shadowed.write(
+                    IO_MEAS_CTRL_SHADOWED::LO.val(lo_req) + IO_MEAS_CTRL_SHADOWED::HI.val(hi_req),
+                );
+                self.registers.io_meas_ctrl_shadowed.write(
+                    IO_MEAS_CTRL_SHADOWED::LO.val(lo_req) + IO_MEAS_CTRL_SHADOWED::HI.val(hi_req),
+                );
+            }
+            MeasCtrlClk::IoDiv2 => {
+                self.registers
+                    .io_div2_meas_ctrl_en
+                    .write(IO_DIV2_MEAS_CTRL_EN::EN.val(set_req));
+                self.registers.io_div2_meas_ctrl_shadowed.write(
+                    IO_DIV2_MEAS_CTRL_SHADOWED::LO.val(lo_req)
+                        + IO_DIV2_MEAS_CTRL_SHADOWED::HI.val(hi_req),
+                );
+                self.registers.io_div2_meas_ctrl_shadowed.write(
+                    IO_DIV2_MEAS_CTRL_SHADOWED::LO.val(lo_req)
+                        + IO_DIV2_MEAS_CTRL_SHADOWED::HI.val(hi_req),
+                );
+            }
+            MeasCtrlClk::IoDiv4 => {
+                self.registers
+                    .io_div4_meas_ctrl_en
+                    .write(IO_DIV4_MEAS_CTRL_EN::EN.val(set_req));
+                self.registers.io_div4_meas_ctrl_shadowed.write(
+                    IO_DIV4_MEAS_CTRL_SHADOWED::LO.val(lo_req)
+                        + IO_DIV4_MEAS_CTRL_SHADOWED::HI.val(hi_req),
+                );
+                self.registers.io_div4_meas_ctrl_shadowed.write(
+                    IO_DIV4_MEAS_CTRL_SHADOWED::LO.val(lo_req)
+                        + IO_DIV4_MEAS_CTRL_SHADOWED::HI.val(hi_req),
+                );
+            }
+            MeasCtrlClk::MainClk => {
+                self.registers
+                    .main_meas_ctrl_en
+                    .write(MAIN_MEAS_CTRL_EN::EN.val(set_req));
+                self.registers.main_meas_ctrl_shadowed.write(
+                    MAIN_MEAS_CTRL_SHADOWED::LO.val(lo_req)
+                        + MAIN_MEAS_CTRL_SHADOWED::HI.val(hi_req),
+                );
+                self.registers.main_meas_ctrl_shadowed.write(
+                    MAIN_MEAS_CTRL_SHADOWED::LO.val(lo_req)
+                        + MAIN_MEAS_CTRL_SHADOWED::HI.val(hi_req),
+                );
+            }
+            MeasCtrlClk::UsbClk => {
+                self.registers
+                    .usb_meas_ctrl_en
+                    .write(USB_MEAS_CTRL_EN::EN.val(set_req));
+                self.registers.usb_meas_ctrl_shadowed.write(
+                    USB_MEAS_CTRL_SHADOWED::LO.val(lo_req) + USB_MEAS_CTRL_SHADOWED::HI.val(hi_req),
+                );
+                self.registers.usb_meas_ctrl_shadowed.write(
+                    USB_MEAS_CTRL_SHADOWED::LO.val(lo_req) + USB_MEAS_CTRL_SHADOWED::HI.val(hi_req),
+                );
+            }
+        };
+        // self.registers
+        //     .measure_ctrl_regwen
+        //     .write(MEASURE_CTRL_REGWEN::EN::CLEAR);
+
+        Ok(())
+    }
+
+    // Returns true if the clock is enabled and false if the clock is not enabled.
+    pub fn get_clk_meas_ctrl(&self, clk: MeasCtrlClk) -> (bool, u32, u32) {
+        let en: u32;
+        let lo: u32;
+        let hi: u32;
+
+        match clk {
+            MeasCtrlClk::Io => {
+                en = self.registers.io_meas_ctrl_en.read(IO_MEAS_CTRL_EN::EN);
+                lo = self
+                    .registers
+                    .io_meas_ctrl_shadowed
+                    .read(IO_MEAS_CTRL_SHADOWED::LO);
+                hi = self
+                    .registers
+                    .io_meas_ctrl_shadowed
+                    .read(IO_MEAS_CTRL_SHADOWED::HI);
+            }
+            MeasCtrlClk::IoDiv2 => {
+                en = self
+                    .registers
+                    .io_div2_meas_ctrl_en
+                    .read(IO_DIV2_MEAS_CTRL_EN::EN);
+                lo = self
+                    .registers
+                    .io_div2_meas_ctrl_shadowed
+                    .read(IO_DIV2_MEAS_CTRL_SHADOWED::LO);
+                hi = self
+                    .registers
+                    .io_div2_meas_ctrl_shadowed
+                    .read(IO_DIV2_MEAS_CTRL_SHADOWED::HI);
+            }
+            MeasCtrlClk::IoDiv4 => {
+                en = self
+                    .registers
+                    .io_div4_meas_ctrl_en
+                    .read(IO_DIV4_MEAS_CTRL_EN::EN);
+                lo = self
+                    .registers
+                    .io_div4_meas_ctrl_shadowed
+                    .read(IO_DIV4_MEAS_CTRL_SHADOWED::LO);
+                hi = self
+                    .registers
+                    .io_div4_meas_ctrl_shadowed
+                    .read(IO_DIV4_MEAS_CTRL_SHADOWED::HI);
+            }
+            MeasCtrlClk::MainClk => {
+                en = self.registers.main_meas_ctrl_en.read(MAIN_MEAS_CTRL_EN::EN);
+                lo = self
+                    .registers
+                    .main_meas_ctrl_shadowed
+                    .read(MAIN_MEAS_CTRL_SHADOWED::LO);
+                hi = self
+                    .registers
+                    .main_meas_ctrl_shadowed
+                    .read(MAIN_MEAS_CTRL_SHADOWED::HI);
+            }
+            MeasCtrlClk::UsbClk => {
+                en = self.registers.usb_meas_ctrl_en.read(USB_MEAS_CTRL_EN::EN);
+                lo = self
+                    .registers
+                    .usb_meas_ctrl_shadowed
+                    .read(USB_MEAS_CTRL_SHADOWED::LO);
+                hi = self
+                    .registers
+                    .usb_meas_ctrl_shadowed
+                    .read(USB_MEAS_CTRL_SHADOWED::HI);
+            }
+        };
+        let en_sts = matches!(en, MULTI_BIT_BOOL_4TRUE);
+        (en_sts, lo, hi)
+    }
+
+    pub fn is_recov_err_code_present(&self, err: RecovErrCode) -> bool {
+        match err {
+            RecovErrCode::UsbTimeoutErr => self
+                .registers
+                .recov_err_code
+                .is_set(RECOV_ERR_CODE::USB_TIMEOUT_ERR),
+            RecovErrCode::MainTimeoutErr => self
+                .registers
+                .recov_err_code
+                .is_set(RECOV_ERR_CODE::MAIN_TIMEOUT_ERR),
+            RecovErrCode::IoDiv4TimeoutErr => self
+                .registers
+                .recov_err_code
+                .is_set(RECOV_ERR_CODE::IO_DIV4_TIMEOUT_ERR),
+            RecovErrCode::IoDiv2TimeoutErr => self
+                .registers
+                .recov_err_code
+                .is_set(RECOV_ERR_CODE::IO_DIV2_TIMEOUT_ERR),
+            RecovErrCode::IoTimeoutErr => self
+                .registers
+                .recov_err_code
+                .is_set(RECOV_ERR_CODE::IO_TIMEOUT_ERR),
+            RecovErrCode::UsbMeasureErr => self
+                .registers
+                .recov_err_code
+                .is_set(RECOV_ERR_CODE::USB_MEASURE_ERR),
+            RecovErrCode::MainMeasureErr => self
+                .registers
+                .recov_err_code
+                .is_set(RECOV_ERR_CODE::MAIN_MEASURE_ERR),
+            RecovErrCode::IoDiv4MeasureErr => self
+                .registers
+                .recov_err_code
+                .is_set(RECOV_ERR_CODE::IO_DIV4_MEASURE_ERR),
+            RecovErrCode::IoDiv2MeasureErr => self
+                .registers
+                .recov_err_code
+                .is_set(RECOV_ERR_CODE::IO_DIV2_MEASURE_ERR),
+            RecovErrCode::IoMeasureErr => self
+                .registers
+                .recov_err_code
+                .is_set(RECOV_ERR_CODE::IO_MEASURE_ERR),
+            RecovErrCode::ShadowUpdateErr => self
+                .registers
+                .recov_err_code
+                .is_set(RECOV_ERR_CODE::SHADOW_UPDATE_ERR),
+        }
+    }
+
+    pub fn clear_recov_err_code(&self, err: RecovErrCode) {
+        match err {
+            RecovErrCode::UsbTimeoutErr => self
+                .registers
+                .recov_err_code
+                .write(RECOV_ERR_CODE::USB_TIMEOUT_ERR::SET),
+            RecovErrCode::MainTimeoutErr => self
+                .registers
+                .recov_err_code
+                .write(RECOV_ERR_CODE::MAIN_TIMEOUT_ERR::SET),
+            RecovErrCode::IoDiv4TimeoutErr => self
+                .registers
+                .recov_err_code
+                .write(RECOV_ERR_CODE::IO_DIV4_TIMEOUT_ERR::SET),
+            RecovErrCode::IoDiv2TimeoutErr => self
+                .registers
+                .recov_err_code
+                .write(RECOV_ERR_CODE::IO_DIV2_TIMEOUT_ERR::SET),
+            RecovErrCode::IoTimeoutErr => self
+                .registers
+                .recov_err_code
+                .write(RECOV_ERR_CODE::IO_TIMEOUT_ERR::SET),
+            RecovErrCode::MainMeasureErr => self
+                .registers
+                .recov_err_code
+                .write(RECOV_ERR_CODE::MAIN_MEASURE_ERR::SET),
+            RecovErrCode::UsbMeasureErr => self
+                .registers
+                .recov_err_code
+                .write(RECOV_ERR_CODE::USB_MEASURE_ERR::SET),
+            RecovErrCode::IoDiv4MeasureErr => self
+                .registers
+                .recov_err_code
+                .write(RECOV_ERR_CODE::IO_DIV4_MEASURE_ERR::SET),
+            RecovErrCode::IoDiv2MeasureErr => self
+                .registers
+                .recov_err_code
+                .write(RECOV_ERR_CODE::IO_DIV2_MEASURE_ERR::SET),
+            RecovErrCode::IoMeasureErr => self
+                .registers
+                .recov_err_code
+                .write(RECOV_ERR_CODE::IO_MEASURE_ERR::SET),
+            RecovErrCode::ShadowUpdateErr => self
+                .registers
+                .recov_err_code
+                .write(RECOV_ERR_CODE::SHADOW_UPDATE_ERR::SET),
+        };
+    }
+
+    pub fn get_recov_err_codes(&self) -> u32 {
+        self.registers.recov_err_code.get()
+    }
+
+    pub fn is_fatal_err_code_present(&self, err: FatalErrCode) -> bool {
+        match err {
+            FatalErrCode::ShadowStorageErr => self
+                .registers
+                .fatal_err_code
+                .is_set(FATAL_ERR_CODE::SHADOW_STORAGE_ERR),
+            FatalErrCode::IdleCnt => self
+                .registers
+                .fatal_err_code
+                .is_set(FATAL_ERR_CODE::IDLE_CNT),
+            FatalErrCode::RegIntg => self
+                .registers
+                .fatal_err_code
+                .is_set(FATAL_ERR_CODE::REG_INTG),
+        }
+    }
+
+    pub fn get_fatal_err_codes(&self) -> u32 {
+        self.registers.fatal_err_code.get()
+    }
+
+    pub fn run_tests(&self) -> bool {
+        debug!("* Start running clkmgr tests!");
+        test_helper("Check exclk On High Speed timeout 0 ", || {
+            self.set_extclk(ExtClkState::ExtClkOnHighSpeed, 0) == false
+        });
+        test_helper("Check exclk On High Speed timeout 1000 ", || {
+            (self.set_extclk(ExtClkState::ExtClkOnHighSpeed, 10000) == true)
+                && (self.registers.extclk_ctrl.get() == 0x66)
+                && (self.registers.extclk_status.get() == 0x6)
+        });
+        test_helper("Check exclk status ExtClkOnHighSpeed ", || {
+            self.get_extclk_sts() == ExtClkState::ExtClkOnHighSpeed
+        });
+        test_helper("Check exclk On ExtClkOnLowSpeed ", || {
+            (self.set_extclk(ExtClkState::ExtClkOnLowSpeed, 1000) == true)
+                && (self.registers.extclk_ctrl.get() == 0x96)
+                && (self.registers.extclk_status.get() == 0x6)
+        });
+        test_helper("Check exclk status ExtClkOnLowSpeed ", || {
+            (self.get_extclk_sts() == ExtClkState::ExtClkOnLowSpeed)
+                && (self.registers.extclk_ctrl.get() == 0x96)
+                && (self.registers.extclk_status.get() == 0x6)
+        });
+        test_helper("Check exclk On ExtClkOff ", || {
+            (self.set_extclk(ExtClkState::ExtClkOff, 10000) == true)
+                && (self.registers.extclk_ctrl.get() == 0x99)
+                && (self.registers.extclk_status.get() == 0x9)
+        });
+        test_helper("Check exclk status ExtClkOff ", || {
+            (self.get_extclk_sts() == ExtClkState::ExtClkOff)
+                && (self.registers.extclk_ctrl.get() == 0x99)
+                && (self.registers.extclk_status.get() == 0x9)
+        });
+
+        self.set_clk_jitter(true);
+        test_helper("Check Jitter enable ", || {
+            (self.get_clk_jitter() == true) && (self.registers.jitter_enable.get() == 0x6)
+        });
+
+        self.set_clk_jitter(false);
+        test_helper("Check Jitter disable ", || {
+            (self.get_clk_jitter() == false) && (self.registers.jitter_enable.get() == 0x9)
+        });
+
+        self.set_clk_jitter(true);
+        test_helper("Check Jitter enable ", || {
+            (self.get_clk_jitter() == true) && (self.registers.jitter_enable.get() == 0x6)
+        });
+
+        let cklist = [
+            GateableClk::UsbPeri,
+            GateableClk::IoPeri,
+            GateableClk::IoDiv2Peri,
+            GateableClk::IoDiv4Peri,
+            GateableClk::TransClkMainOTBN,
+            GateableClk::TransClkMainKMAC,
+            GateableClk::TransClkMainHMAC,
+            GateableClk::TransClkMainAES,
+        ];
+        for iter in cklist.iter() {
+            self.set_clk_enable(*iter, false);
+            test_helper(" Check Clk disable ", || {
+                self.is_clk_enabled(*iter) == false
+                // (self.is_clk_enabled(*iter) == false)
+                //&& (self.registers.clk_enables.get() == 0x6)
+            });
+            self.set_clk_enable(*iter, true);
+            test_helper(" Check Clk enable ", || {
+                self.is_clk_enabled(*iter) == true
+                // (self.is_clk_enabled(*iter) == false)
+                //&& (self.registers.clk_enables.get() == 0x6)
+            });
+        }
+
+        // Test the recoverable error reading before messing with the measurement control because that will induce errors.
+        let cklist = [
+            (RecovErrCode::UsbTimeoutErr, false, 0x0),
+            (RecovErrCode::MainTimeoutErr, false, 0x0),
+            (RecovErrCode::IoDiv4TimeoutErr, false, 0x0),
+            (RecovErrCode::IoDiv2TimeoutErr, false, 0x0),
+            (RecovErrCode::IoTimeoutErr, false, 0x0),
+            (RecovErrCode::UsbMeasureErr, false, 0x0),
+            (RecovErrCode::IoDiv4MeasureErr, false, 0x0),
+            (RecovErrCode::IoDiv2MeasureErr, false, 0x0),
+            (RecovErrCode::IoMeasureErr, false, 0x0),
+            (RecovErrCode::ShadowUpdateErr, false, 0x0),
+        ];
+        for (err, expected_ret, expected_reg) in cklist {
+            test_helper(" Check Recoverable error reading ", || {
+                self.is_recov_err_code_present(err) == expected_ret
+                    && (self.get_recov_err_codes() == expected_reg)
+                    && (self.registers.recov_err_code.get() == expected_reg)
+            });
+        }
+        let cklist = [
+            (MeasCtrlClk::Io, true, 0x2, 0xA, Ok(())),
+            (MeasCtrlClk::Io, true, 0xA, 0xB, Ok(())),
+            (MeasCtrlClk::Io, true, 0x4, 0xC, Ok(())),
+            (MeasCtrlClk::Io, true, 0xA, 0xFFFF, Err(ErrorCode::INVAL)),
+            (MeasCtrlClk::Io, false, 0x1D6, 0x1EA, Err(ErrorCode::INVAL)),
+            (MeasCtrlClk::IoDiv2, true, 0, 10, Ok(())),
+            (MeasCtrlClk::IoDiv2, true, 0, 0xFFFF, Err(ErrorCode::INVAL)),
+            (MeasCtrlClk::IoDiv2, false, 0xE6, 0xFA, Ok(())),
+            (MeasCtrlClk::IoDiv4, true, 0, 10, Ok(())),
+            (MeasCtrlClk::IoDiv4, true, 0, 0xFFFF, Err(ErrorCode::INVAL)),
+            (MeasCtrlClk::IoDiv4, false, 0x6E, 0x82, Ok(())),
+            (MeasCtrlClk::MainClk, true, 0, 10, Ok(())),
+            (MeasCtrlClk::MainClk, true, 0, 0xFFFF, Err(ErrorCode::INVAL)),
+            (MeasCtrlClk::MainClk, false, 0x1FA, 0x1FE, Ok(())),
+            (MeasCtrlClk::UsbClk, true, 0, 10, Ok(())),
+            (MeasCtrlClk::UsbClk, true, 0, 0xFFFF, Err(ErrorCode::INVAL)),
+            (MeasCtrlClk::UsbClk, false, 0xE6, 0xFA, Ok(())),
+        ];
+
+        for (clock, clk_meas_set, lo, hi, expected_response) in cklist {
+            let current_resp = self.set_clk_meas_ctrl(clock, clk_meas_set, lo, hi);
+            if Ok(()) == expected_response {
+                test_helper(" Check Clk Meas set ", || {
+                    self.get_clk_meas_ctrl(clock) == (clk_meas_set, lo, hi)
+                        && (expected_response == current_resp)
+                });
+            }
+        }
+        let cklist = [
+            (RecovErrCode::UsbTimeoutErr, false, 0x3E),
+            (RecovErrCode::MainTimeoutErr, false, 0x3E),
+            (RecovErrCode::IoDiv4TimeoutErr, false, 0x3E),
+            (RecovErrCode::IoDiv2TimeoutErr, false, 0x3E),
+            (RecovErrCode::IoTimeoutErr, false, 0x3E),
+            (RecovErrCode::UsbMeasureErr, true, 0x3E),
+            (RecovErrCode::MainMeasureErr, true, 0x1E),
+            (RecovErrCode::IoDiv4MeasureErr, true, 0xE),
+            (RecovErrCode::IoDiv2MeasureErr, true, 0x6),
+            (RecovErrCode::IoMeasureErr, true, 0x2),
+            (RecovErrCode::ShadowUpdateErr, false, 0x0),
+        ];
+        for (err, expected_ret, expected_reg) in cklist {
+            test_helper(" Check Recoverable error reading and clearing", || {
+                self.is_recov_err_code_present(err) == expected_ret
+                    && (self.registers.recov_err_code.get() == expected_reg)
+            });
+            if expected_ret == true {
+                self.clear_recov_err_code(err);
+                test_helper(" Check Recoverable error clearing", || {
+                    self.is_recov_err_code_present(err) == false
+                });
+            }
+        }
+        let cklist = [
+            (FatalErrCode::ShadowStorageErr, false, 0x0),
+            (FatalErrCode::IdleCnt, false, 0x0),
+            (FatalErrCode::RegIntg, false, 0x0),
+        ];
+        for (err, expected_ret, expected_reg) in cklist {
+            test_helper(" Check Non-recoverable error reading and clearing", || {
+                self.is_fatal_err_code_present(err) == expected_ret
+                    && (self.get_fatal_err_codes() == expected_reg)
+                    && (self.registers.fatal_err_code.get() == expected_reg)
+            });
+        }
+        debug!("* Finished running clkmgr tests!");
+
+        true
+    }
+}
