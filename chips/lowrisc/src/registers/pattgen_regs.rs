@@ -54,8 +54,14 @@ register_bitfields![u32,
         FATAL_FAULT OFFSET(0) NUMBITS(1) [],
     ],
     pub(crate) CTRL [
-        ENABLE_CH0 OFFSET(0) NUMBITS(1) [],
-        ENABLE_CH1 OFFSET(1) NUMBITS(1) [],
+        ENABLE_CH0 OFFSET(0) NUMBITS(1) [
+            Clear = 0,
+            Set = 1,
+        ],
+        ENABLE_CH1 OFFSET(1) NUMBITS(1) [
+            Clear = 0,
+            Set = 1,
+        ],
         POLARITY_CH0 OFFSET(2) NUMBITS(1) [],
         POLARITY_CH1 OFFSET(3) NUMBITS(1) [],
     ],
