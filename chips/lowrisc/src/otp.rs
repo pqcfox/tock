@@ -17,12 +17,15 @@ use kernel::utilities::registers::interfaces::{Readable, ReadWriteable, Writeabl
 
 use core::num::NonZeroUsize;
 
+/// Number of possible errors
 const NUMBER_ERRORS: NonZeroUsize = create_non_zero_usize!(14);
+/// Mask for STATUS register to determine whether an error occurred
 const MASK_ERRORS: NonZeroUsize = create_non_zero_usize!((1 << NUMBER_ERRORS.get()) - 1);
+/// One past maximum OTP address
 const MAX_PAST_OTP_ADDRESS: NonZeroUsize = create_non_zero_usize!(2048);
 
 /// Address of a 32-bit word
-pub struct OtpAddress32(u32);
+pub struct OtpAddress32(usize);
 
 impl OtpAddress32 {
     /// Create a new OTP address for a 32-bit word.
@@ -36,9 +39,9 @@ impl OtpAddress32 {
     /// + Ok(Self): the OTP address
     /// + Err(()): if `raw_address` does not fit in the 10-bit address space and is not properly
     /// aligned.
-    pub const fn new(raw_address: u32) -> Result<Self, ()> {
+    pub const fn new(raw_address: usize) -> Result<Self, ()> {
         // CAST: u32 == usize on RV32I
-        if raw_address >= MAX_PAST_OTP_ADDRESS.get() as u32 || raw_address & 0b11 != 0 {
+        if raw_address >= MAX_PAST_OTP_ADDRESS.get() || raw_address & 0b11 != 0 {
             Err(())
         } else {
             Ok(Self(raw_address))
@@ -51,7 +54,8 @@ impl OtpAddress32 {
     ///
     /// The underlying 32-bit unsigned number.
     pub const fn as_u32(self) -> u32 {
-        self.0
+        // CAST: u32 == usize on RV32I
+        self.0 as u32
     }
 }
 
@@ -212,5 +216,84 @@ impl Otp {
         }
 
         Ok(self.get_word32())
+    }
+}
+
+pub mod tests {
+    use super::*;
+
+    /// Test that INTEGRITY_CHECK_PERIOD register is locked.
+    fn test_integrity_check_period_lock(otp: &Otp) {
+        kernel::debug!("Starting testing integrity check period lock.");
+
+        let old_integrity_check_period = otp.registers.integrity_check_period.get();
+        otp.set_integrity_check_period(1234);
+        let new_integrity_check_period = otp.registers.integrity_check_period.get();
+        assert_eq!(
+            old_integrity_check_period,
+            new_integrity_check_period,
+            "Integrity check period must be immutable after lock"
+        );
+
+        kernel::debug!("Finished testing integrity check period lock.");
+    }
+
+    /// Test that CONSISTENCY_CHECK_PERIOD register is locked.
+    fn test_consistency_check_period_lock(otp: &Otp) {
+        kernel::debug!("Starting testing consistency check period lock.");
+
+        let old_consistency_check_period = otp.registers.consistency_check_period.get();
+        otp.set_consistency_check_period(1234);
+        let new_consistency_check_period = otp.registers.consistency_check_period.get();
+        assert_eq!(
+            old_consistency_check_period,
+            new_consistency_check_period,
+            "Integrity check period must be immutable after lock"
+        );
+
+        kernel::debug!("Finished testing consistency check period lock.");
+    }
+
+    /// Test if check registers are locked
+    fn test_check_registers_lock(otp: &Otp) {
+        test_integrity_check_period_lock(otp);
+        test_consistency_check_period_lock(otp);
+    }
+
+    /// Test if reading device ID works
+    fn test_read_device_id(otp: &Otp) {
+        kernel::debug!("Starting testing reading device ID.");
+
+        const DEVICE_ID_SIZE: usize = 8;
+        let mut device_id = [0u32; DEVICE_ID_SIZE];
+
+        const DEVICE_ID_START_ADDRESS: usize = 0x680;
+        let mut raw_address = DEVICE_ID_START_ADDRESS;
+
+        for word in &mut device_id {
+            let otp_address = OtpAddress32::new(raw_address).expect("Attempting to create invalid OTP address");
+            *word = otp.read_word32(otp_address).expect("Read failed");
+            raw_address += core::mem::size_of::<u32>();
+        }
+
+        const EXPECTED_DEVICE_ID: [u32; DEVICE_ID_SIZE] =
+            [0xBA2A15F5, 0xC5C33741, 0xCA6A93CD, 0x0383A1EE, 0xB11B1215, 0x4DED8AEC, 0x5FE9D22C, 0x064DDF32];
+        assert_eq!(
+            EXPECTED_DEVICE_ID,
+            device_id,
+            "The read device ID does not match the expected value"
+        );
+
+        kernel::debug!("Finished testing reading device ID.");
+    }
+
+    /// Run all OTP tests
+    pub fn run_all(otp: &Otp) {
+        kernel::debug!("Starting OTP tests...");
+
+        test_check_registers_lock(otp);
+        test_read_device_id(otp);
+
+        kernel::debug!("Finished OTP tests. Everything is alright!");
     }
 }
