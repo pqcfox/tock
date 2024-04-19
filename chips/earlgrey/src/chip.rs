@@ -94,7 +94,13 @@ impl<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig>
     pub fn init(&'static self) {
         kernel::deferred_call::DeferredCallClient::register(&self.aes);
         kernel::deferred_call::DeferredCallClient::register(&self.uart0);
-        self.otp.init().expect("Failed to initialize OTP");
+        // Recommended value by documentation
+        const INTEGRITY_CHECK_PERIOD: u32 = 0x3_FFFF;
+        // Recommended value by documentation
+        const CONSISTENCY_CHECK_PERIOD: u32 = 0x3_FFFF;
+        // Recommended value by documentation is at least 100_000.
+        const CHECK_TIMEOUT: u32 = 100_000;
+        self.otp.init(INTEGRITY_CHECK_PERIOD, CONSISTENCY_CHECK_PERIOD, CHECK_TIMEOUT).expect("Failed to initialize OTP");
     }
 }
 
