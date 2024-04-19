@@ -36,7 +36,7 @@ impl OtpAddress32 {
     ///
     /// # Return value
     ///
-    /// + Ok(Self): the OTP address
+    /// + Ok(Self): the OTP address if `raw_address` is valid
     /// + Err(()): if `raw_address` does not fit in the 10-bit address space and is not properly
     /// aligned.
     pub const fn new(raw_address: usize) -> Result<Self, ()> {
@@ -49,6 +49,41 @@ impl OtpAddress32 {
     }
 
     /// Convert the [OtpAddress32] to a 32-bit unsigned number
+    ///
+    /// # Return value
+    ///
+    /// The underlying 32-bit unsigned number.
+    pub const fn as_u32(self) -> u32 {
+        // CAST: u32 == usize on RV32I
+        self.0 as u32
+    }
+}
+
+/// Address of a 64-bit word
+pub struct OtpAddress64(usize);
+
+impl OtpAddress64 {
+    /// Create a new OTP address for a 64-bit word.
+    ///
+    /// # Parameters
+    ///
+    /// + `raw_address`: the value that should represent an OTP address
+    ///
+    /// # Return value
+    ///
+    /// + Ok(Self): the OTP address if `raw_address` is valid
+    /// + Err(()): if `raw_address` does not fit in the 10-bit address space and is not properly
+    /// aligned.
+    pub const fn new(raw_address: usize) -> Result<Self, ()> {
+        // CAST: u32 == usize on RV32I
+        if raw_address >= MAX_PAST_OTP_ADDRESS.get() || raw_address & 0b111 != 0 {
+            Err(())
+        } else {
+            Ok(Self(raw_address))
+        }
+    }
+
+    /// Convert the [OtpAddress64] to a 32-bit unsigned number
     ///
     /// # Return value
     ///
@@ -170,9 +205,18 @@ impl Otp {
         !self.registers.status.is_set(STATUS::DAI_IDLE)
     }
 
-    /// Set the address for the next operation
+    /// Set the address for the next 32-bit operation
     fn set_address32(&self, address: OtpAddress32) {
-        self.registers.direct_access_address.modify(DIRECT_ACCESS_ADDRESS::DIRECT_ACCESS_ADDRESS.val(address.as_u32()));
+        self.registers.direct_access_address.modify(
+            DIRECT_ACCESS_ADDRESS::DIRECT_ACCESS_ADDRESS.val(address.as_u32())
+        );
+    }
+
+    /// Set the address for the next 64-bit operation
+    fn set_address64(&self, address: OtpAddress64) {
+        self.registers.direct_access_address.modify(
+            DIRECT_ACCESS_ADDRESS::DIRECT_ACCESS_ADDRESS.val(address.as_u32())
+        );
     }
 
     /// Start a read
@@ -187,6 +231,16 @@ impl Otp {
     /// The bottom half of DIRECT_ACCESS_RDATA
     fn get_word32(&self) -> u32 {
         self.registers.direct_access_rdata[0].get()
+    }
+
+    /// Get a 64-bit word from DIRECT_ACCESS_RDATA register
+    ///
+    /// # Return value
+    ///
+    /// The bottom half of DIRECT_ACCESS_RDATA
+    fn get_word64(&self) -> u64 {
+        ((self.registers.direct_access_rdata[0].get() as u64) << 32) +
+            self.registers.direct_access_rdata[1].get() as u64
     }
 
     /// Read a 32-bit word.
@@ -216,6 +270,35 @@ impl Otp {
         }
 
         Ok(self.get_word32())
+    }
+
+    /// Read a 64-bit word.
+    ///
+    /// # Parameters
+    ///
+    /// + `address`: the address of the word to be read
+    ///
+    /// # Return value
+    ///
+    /// + Ok(u64): the read value
+    /// + Err(ErrorCode): an error occurred:
+    ///     + ErrorCode::BUSY: the peripheral is busy
+    ///     + ErrorCode::FAIL: the read operation failed
+    pub fn read_word64(&self, address: OtpAddress64) -> Result<u64, ErrorCode> {
+        if self.is_busy() {
+            return Err(ErrorCode::BUSY);
+        }
+
+        self.set_address64(address);
+        self.start_read();
+
+        while self.is_busy() {}
+
+        if self.has_errors() {
+            return Err(ErrorCode::FAIL);
+        }
+
+        Ok(self.get_word64())
     }
 }
 
@@ -272,7 +355,7 @@ pub mod tests {
 
         for word in &mut device_id {
             let otp_address = OtpAddress32::new(raw_address).expect("Attempting to create invalid OTP address");
-            *word = otp.read_word32(otp_address).expect("Read failed");
+            *word = otp.read_word32(otp_address).expect("Reading device ID failed");
             raw_address += core::mem::size_of::<u32>();
         }
 
@@ -287,12 +370,34 @@ pub mod tests {
         kernel::debug!("Finished testing reading device ID.");
     }
 
+    fn test_creator_digest(otp: &Otp) {
+        kernel::debug!("Starting testing creator software configure digest.");
+
+        const CREATOR_SW_CFG_DIGEST_ADDRESS: OtpAddress64 = match OtpAddress64::new(0x358) {
+            Ok(otp_address) => otp_address,
+            Err(()) => unreachable!(),
+        };
+
+        let actual_digest = otp.read_word64(CREATOR_SW_CFG_DIGEST_ADDRESS)
+            .expect("Reading creator software configure digest address failed");
+        const EXPECTED_DIGEST: u64 = 0;
+
+        assert_eq!(
+            EXPECTED_DIGEST,
+            actual_digest,
+            "The read creator software configure digest does not match the expected value"
+        );
+
+        kernel::debug!("Finished testing creator software configure digest.");
+    }
+
     /// Run all OTP tests
     pub fn run_all(otp: &Otp) {
         kernel::debug!("Starting OTP tests...");
 
         test_check_registers_lock(otp);
         test_read_device_id(otp);
+        test_creator_digest(otp);
 
         kernel::debug!("Finished OTP tests. Everything is alright!");
     }
