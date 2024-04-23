@@ -15,12 +15,22 @@ use kernel::ErrorCode;
 
 use core::num::NonZeroUsize;
 
+/// Pattern generator driver
 pub struct PattGen<'a> {
     registers: StaticRef<PattgenRegisters>,
     client: OptionalCell<&'a dyn PattGenClient<Channel>>,
 }
 
 impl PattGen<'_> {
+    /// Pattern generator constructor
+    ///
+    /// # Parameters
+    ///
+    /// + `registers`: pattern generator registers
+    ///
+    /// # Return value
+    ///
+    /// A new instance of [PattGen]
     pub fn new(registers: StaticRef<PattgenRegisters>) -> Self {
         let pattern_generator = Self {
             registers,
@@ -32,36 +42,64 @@ impl PattGen<'_> {
         pattern_generator
     }
     
+    /// Initializes the driver
     fn init(&self) {
         self.enable_interrupts();
     }
 
+    /// Enables interrupts
     fn enable_interrupts(&self) {
         self.registers.intr_enable.modify(INTR::DONE_CH0::SET + INTR::DONE_CH1::SET);
     }
 
+    /// Sets channel 0 predivider
+    ///
+    /// # Parameters
+    ///
+    /// + `predivider`: channel 0 input clock predivider to be set
     fn set_predivider0(&self, predivider: usize) {
         // CAST: usize == u32 on RV32I
         self.registers.prediv_ch0.set(predivider as u32);
     }
 
+    /// Sets channel 1 predivider
+    ///
+    /// # Parameters
+    ///
+    /// + `predivider`: channel 1 predivider to be set
     fn set_predivider1(&self, predivider: usize) {
         // CAST: usize == u32 on RV32I
         self.registers.prediv_ch1.set(predivider as u32);
     }
 
+    /// Sets channel 0 pattern
+    ///
+    /// # Parameters
+    ///
+    /// + `pattern`: channel 0 pattern to be set
     fn set_pattern0(&self, pattern: &[u32; 2]) {
         // PANIC: data_ch0.len() == 2
         self.registers.data_ch0[0].set(pattern[0]);
         self.registers.data_ch0[1].set(pattern[1]);
     }
 
+    /// Sets channel 1 pattern
+    ///
+    /// # Parameters
+    ///
+    /// + `pattern`: channel 1 pattern to be set
     fn set_pattern1(&self, pattern: &[u32; 2]) {
         // PANIC: data_ch0.len() == 2
         self.registers.data_ch1[0].set(pattern[0]);
         self.registers.data_ch1[1].set(pattern[1]);
     }
 
+    /// Sets channel 0 pattern length and patern repetition count
+    ///
+    /// # Parameters
+    ///
+    /// + `pattern_length`: pattern length in bits
+    /// + `repetion_count`: pattern repetition count
     fn set_pattern0_length_and_repetition(
         &self,
         pattern_length: PatternLength,
@@ -74,6 +112,12 @@ impl PattGen<'_> {
         );
     }
 
+    /// Sets channel 1 pattern length and patern repetition count
+    ///
+    /// # Parameters
+    ///
+    /// + `pattern_length`: pattern length in bits
+    /// + `repetion_count`: pattern repetition count
     fn set_pattern1_length_and_repetition(
         &self,
         pattern_length: PatternLength,
@@ -86,6 +130,15 @@ impl PattGen<'_> {
         );
     }
 
+    /// Configures channel 0 with the given parameters
+    ///
+    ///
+    /// # Parameters
+    ///
+    /// + `pattern`: pattern to be used
+    /// + `pattern_length`: pattern length in bits
+    /// + `repetition_count`: pattern repetition count
+    /// + `predivider`: predivider for input clock
     fn configure_channel0(
         &self,
         pattern: &[u32; 2],
@@ -98,6 +151,15 @@ impl PattGen<'_> {
         self.set_pattern0_length_and_repetition(pattern_length, repetion_count);
     }
 
+    /// Configures channel 1 with the given parameters
+    ///
+    ///
+    /// # Parameters
+    ///
+    /// + `pattern`: pattern to be used
+    /// + `pattern_length`: pattern length in bits
+    /// + `repetition_count`: pattern repetition count
+    /// + `predivider`: predivider for input clock
     fn configure_channel1(
         &self,
         pattern: &[u32; 2],
@@ -110,25 +172,30 @@ impl PattGen<'_> {
         self.set_pattern1_length_and_repetition(pattern_length, repetion_count);
     }
 
+    /// Clears channel 0 done interrupt
     fn clear_channel0_interrupt(&self) {
         self.registers.intr_state.modify(INTR::DONE_CH0::SET);
     }
 
+    /// Clears channel 1 done interrupt
     fn clear_channel1_interrupt(&self) {
         self.registers.intr_state.modify(INTR::DONE_CH1::SET);
     }
 
+    /// Channel 0 done interrupt handler
     pub fn handle_channel0_interrupt(&self) {
         self.clear_channel0_interrupt();
         self.client.map(|client| client.pattgen_done(Channel::Channel0));
     }
 
+    /// Channel 1 done interrupt handler
     pub fn handle_channel1_interrupt(&self) {
         self.clear_channel1_interrupt();
         self.client.map(|client| client.pattgen_done(Channel::Channel1));
     }
 }
 
+/// List of all possible pattern generator channels.
 pub enum Channel {
     Channel0,
     Channel1,
@@ -146,9 +213,20 @@ impl TryFrom<usize> for Channel {
     }
 }
 
+/// Pattern length in bits
 pub struct PatternLength(usize);
 
 impl PatternLength {
+    /// [PatternLength] constructor
+    ///
+    /// # Parameters
+    ///
+    /// + `value`: the value to be used as a pattern length
+    ///
+    /// # Return value
+    ///
+    /// + Ok(Self): `value` is valid
+    /// + Err(()): ̀`value` is invalid
     const fn new(value: NonZeroUsize) -> Result<Self, ()> {
         let inner_value = value.get();
         if inner_value > 64 {
@@ -158,6 +236,11 @@ impl PatternLength {
         }
     }
 
+    /// Cast [PatternLength] to u32
+    ///
+    /// # Return value
+    ///
+    /// The inner value of [PatternLength] casted to u32
     const fn as_u32(self) -> u32 {
         // CAST: usize == u32 on RV32I
         self.0 as u32
@@ -172,9 +255,20 @@ impl TryFrom<NonZeroUsize> for PatternLength {
     }
 }
 
+/// Pattern repetition count
 pub struct PatternRepetitionCount(usize);
 
 impl PatternRepetitionCount {
+    /// [PatternRepetitionCount] constructor
+    ///
+    /// # Parameters
+    ///
+    /// + `value`: the value to be used as a pattern repetition count
+    ///
+    /// # Return value
+    ///
+    /// + Ok(Self): `value` is valid
+    /// + Err(()): ̀`value` is invalid
     const fn new(value: NonZeroUsize) -> Result<Self, ()> {
         let inner_value = value.get();
         if inner_value > 1024 {
@@ -184,6 +278,11 @@ impl PatternRepetitionCount {
         }
     }
 
+    /// Cast [PatternRepetitionCount] to u32
+    ///
+    /// # Return value
+    ///
+    /// The inner value of [PatternRepetitionCount] casted to u32
     const fn as_u32(self) -> u32 {
         // CAST: usize == u32 on RV32I
         self.0 as u32
@@ -212,31 +311,30 @@ impl<'a> PattGenHIL<'a> for PattGen<'a> {
         channel: Channel,
     ) -> Result<(), ErrorCode> {
         // Configure the channel accordingly
-        let enable_field_value = match channel {
+        match channel {
             Channel::Channel0 => {
+                // The enable bit must be cleared after it's set
+                self.registers.ctrl.modify(CTRL::ENABLE_CH0::CLEAR);
                 self.configure_channel0(
                     pattern,
                     pattern_length,
                     pattern_repetition_count,
                     predivider,
                 );
-                self.registers.ctrl.modify(CTRL::ENABLE_CH0::CLEAR);
-                CTRL::ENABLE_CH0::SET
+                self.registers.ctrl.modify(CTRL::ENABLE_CH0::SET);
             },
             Channel::Channel1 => {
+                // The enable bit must be cleared after it's set
+                self.registers.ctrl.modify(CTRL::ENABLE_CH1::CLEAR);
                 self.configure_channel1(
                     pattern,
                     pattern_length,
                     pattern_repetition_count,
                     predivider,
                 );
-                self.registers.ctrl.modify(CTRL::ENABLE_CH1::CLEAR);
-                CTRL::ENABLE_CH1::SET
+                self.registers.ctrl.modify(CTRL::ENABLE_CH1::SET);
             },
         };
-
-        // Start pattern generation
-        self.registers.ctrl.modify(enable_field_value);
 
         Ok(())
     }
@@ -283,6 +381,9 @@ pub mod tests {
             Err(()) => unreachable!(),
         };
 
+    /// Predivider used for both channels
+    const PREDIVIDER: usize = 4;
+
     /// Pattern generator test
     pub struct PattGenTest<'a> {
         pattgen: &'a PattGen<'a>,
@@ -312,6 +413,7 @@ pub mod tests {
             }
         }
 
+        /// Returns the currently configured pattern for channel 0
         fn get_pattern_channel0(&self) -> [u32; 2] {
             // SAFETY: a u64 can be viewed as an array of two u32.
             unsafe {
@@ -319,6 +421,7 @@ pub mod tests {
             }
         }
 
+        /// Returns the currently configured pattern for channel 1
         fn get_pattern_channel1(&self) -> [u32; 2] {
             // SAFETY: a u64 can be viewed as an array of two u32.
             unsafe {
@@ -326,26 +429,29 @@ pub mod tests {
             }
         }
 
+        /// Start pattern on channel 0
         fn start_channel0(&self) {
             self.pattgen.start(
                 &self.get_pattern_channel0(),
                 PATTERN_LENGTH,
                 PATTERN_REPETITION_COUNT,
-                4,
+                PREDIVIDER,
                 Channel::Channel0
             ).expect("Failed to start pattern generator for channel 0");
         }
 
+        /// Start pattern on channel 1
         fn start_channel1(&self) {
             self.pattgen.start(
                 &self.get_pattern_channel1(),
                 PATTERN_LENGTH,
                 PATTERN_REPETITION_COUNT,
-                4,
+                PREDIVIDER,
                 Channel::Channel1
             ).expect("Failed to start pattern generator for channel 1")
         }
 
+        /// Generate the next pattern for channel 0
         fn next_pattern_channel0(&self) {
             let old_pattern_channel0 = match self.pattern_channel0.get() {
                 u64::MAX => 0,
@@ -364,6 +470,7 @@ pub mod tests {
             }
         }
 
+        /// Generate the next pattern for channel 1
         fn next_pattern_channel1(&self) {
             let old_pattern_channel1 = match self.pattern_channel1.get() {
                 0 => u64::MAX,
@@ -398,8 +505,7 @@ pub mod tests {
         }
     }
 
-    /// Outputs on the first channel a LED that brights stronger and stronger and on the second
-    /// channel a LED that brights weaker and weaker
+    /// Channel 0 makes a LED brighten, while channel 1 makes a LED fade.
     pub fn run_all<'a>(pattgen_test: &'a PattGenTest<'a>) {
         pattgen_test.pattgen.set_client(pattgen_test);
         pattgen_test.start_channel0();
