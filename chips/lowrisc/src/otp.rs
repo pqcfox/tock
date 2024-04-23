@@ -159,7 +159,17 @@ impl Otp {
 
     /// Locks access to INTEGRITY_CHECK_PERIOD and CONSISTENCY_CHECK_PERIOD registers.
     fn lock_check_registers(&self) {
-        self.registers.check_regwen.modify(CHECK_REGWEN::CHECK_REGWEN::Clear);
+        self.registers.check_regwen.modify(CHECK_REGWEN::CHECK_REGWEN::CLEAR);
+    }
+
+    /// Check if INTEGRITY_CHECK_PERIOD and CONSISTENCY_CHECK_PERIOD registers are locked.
+    fn are_check_registers_locked(&self) -> bool {
+        !self.registers.check_regwen.is_set(CHECK_REGWEN::CHECK_REGWEN)
+    }
+
+    /// Check if check timeout is disabled
+    fn is_timeout_disabled(&self) -> bool {
+        self.registers.check_timeout.get() == 0
     }
 
     /// Initialize peripheral
@@ -184,13 +194,14 @@ impl Otp {
         if self.has_errors() {
             return Err(());
         }
-        self.set_integrity_check_period(integrity_check_period);
-        self.set_consistency_check_period(consistency_check_period);
-        // Check timeout doesn't seem to work.
-        if false {
+        if !self.are_check_registers_locked() {
+            self.set_integrity_check_period(integrity_check_period);
+            self.set_consistency_check_period(consistency_check_period);
+            self.lock_check_registers();
+        }
+        if self.is_timeout_disabled() {
             self.set_check_timeout(timeout);
         }
-        self.lock_check_registers();
 
         Ok(())
     }
@@ -370,17 +381,17 @@ pub mod tests {
         kernel::debug!("Finished testing reading device ID.");
     }
 
-    fn test_creator_digest(otp: &Otp) {
+    fn test_hw_digest(otp: &Otp) {
         kernel::debug!("Starting testing creator software configure digest.");
 
-        const CREATOR_SW_CFG_DIGEST_ADDRESS: OtpAddress64 = match OtpAddress64::new(0x358) {
+        const CREATOR_SW_CFG_DIGEST_ADDRESS: OtpAddress64 = match OtpAddress64::new(0x6C8) {
             Ok(otp_address) => otp_address,
             Err(()) => unreachable!(),
         };
 
         let actual_digest = otp.read_word64(CREATOR_SW_CFG_DIGEST_ADDRESS)
             .expect("Reading creator software configure digest address failed");
-        const EXPECTED_DIGEST: u64 = 0;
+        const EXPECTED_DIGEST: u64 = 0x4e723d153038967f;
 
         assert_eq!(
             EXPECTED_DIGEST,
@@ -397,7 +408,7 @@ pub mod tests {
 
         test_check_registers_lock(otp);
         test_read_device_id(otp);
-        test_creator_digest(otp);
+        test_hw_digest(otp);
 
         kernel::debug!("Finished OTP tests. Everything is alright!");
     }

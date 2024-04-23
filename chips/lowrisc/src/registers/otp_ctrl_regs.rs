@@ -583,10 +583,7 @@ register_bitfields![u32,
         CONSISTENCY OFFSET(1) NUMBITS(1) [],
     ],
     pub(crate) CHECK_REGWEN [
-        CHECK_REGWEN OFFSET(0) NUMBITS(1) [
-            Clear = 0,
-            Set = 1,
-        ],
+        CHECK_REGWEN OFFSET(0) NUMBITS(1) [],
     ],
     pub(crate) CHECK_TIMEOUT [
         CHECK_TIMEOUT OFFSET(0) NUMBITS(32) [],

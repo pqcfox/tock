@@ -100,7 +100,9 @@ impl<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig>
         const CONSISTENCY_CHECK_PERIOD: u32 = 0x3_FFFF;
         // Recommended value by documentation is at least 100_000.
         const CHECK_TIMEOUT: u32 = 100_000;
-        self.otp.init(INTEGRITY_CHECK_PERIOD, CONSISTENCY_CHECK_PERIOD, CHECK_TIMEOUT).expect("Failed to initialize OTP");
+        self.otp
+            .init(INTEGRITY_CHECK_PERIOD, CONSISTENCY_CHECK_PERIOD, CHECK_TIMEOUT)
+            .expect("Failed to initialize OTP");
     }
 }
 
