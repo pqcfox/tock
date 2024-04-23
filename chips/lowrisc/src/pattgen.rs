@@ -5,22 +5,39 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // Copyright Tock Contributors 2022.
 
-use crate::registers::pattgen_regs::{PattgenRegisters, CTRL, SIZE};
+use crate::registers::pattgen_regs::{PattgenRegisters, CTRL, INTR, SIZE};
 
-use kernel::hil::pattgen::PattGen as PattGenHIL;
+use kernel::hil::pattgen::{PattGen as PattGenHIL, PattGenClient};
 use kernel::utilities::registers::interfaces::{ReadWriteable, Writeable};
 use kernel::utilities::StaticRef;
+use kernel::utilities::cells::OptionalCell;
 use kernel::ErrorCode;
 
 use core::num::NonZeroUsize;
 
-pub struct PattGen {
+pub struct PattGen<'a> {
     registers: StaticRef<PattgenRegisters>,
+    client: OptionalCell<&'a dyn PattGenClient<Channel>>,
 }
 
-impl PattGen {
+impl PattGen<'_> {
     pub fn new(registers: StaticRef<PattgenRegisters>) -> Self {
-        Self { registers }
+        let pattern_generator = Self {
+            registers,
+            client: OptionalCell::empty()
+        };
+
+        pattern_generator.init();
+
+        pattern_generator
+    }
+    
+    fn init(&self) {
+        self.enable_interrupts();
+    }
+
+    fn enable_interrupts(&self) {
+        self.registers.intr_enable.modify(INTR::DONE_CH0::SET + INTR::DONE_CH1::SET);
     }
 
     fn set_predivider0(&self, predivider: usize) {
@@ -92,6 +109,24 @@ impl PattGen {
         self.set_pattern1(pattern);
         self.set_pattern1_length_and_repetition(pattern_length, repetion_count);
     }
+
+    fn clear_channel0_interrupt(&self) {
+        self.registers.intr_state.modify(INTR::DONE_CH0::SET);
+    }
+
+    fn clear_channel1_interrupt(&self) {
+        self.registers.intr_state.modify(INTR::DONE_CH1::SET);
+    }
+
+    pub fn handle_channel0_interrupt(&self) {
+        self.clear_channel0_interrupt();
+        self.client.map(|client| client.pattgen_done(Channel::Channel0));
+    }
+
+    pub fn handle_channel1_interrupt(&self) {
+        self.clear_channel1_interrupt();
+        self.client.map(|client| client.pattgen_done(Channel::Channel1));
+    }
 }
 
 pub enum Channel {
@@ -114,6 +149,15 @@ impl TryFrom<usize> for Channel {
 pub struct PatternLength(usize);
 
 impl PatternLength {
+    const fn new(value: NonZeroUsize) -> Result<Self, ()> {
+        let inner_value = value.get();
+        if inner_value > 64 {
+            Err(())
+        } else {
+            Ok(Self(inner_value))
+        }
+    }
+
     const fn as_u32(self) -> u32 {
         // CAST: usize == u32 on RV32I
         self.0 as u32
@@ -124,18 +168,22 @@ impl TryFrom<NonZeroUsize> for PatternLength {
     type Error = ();
 
     fn try_from(value: NonZeroUsize) -> Result<Self, Self::Error> {
-        let inner_value = value.get();
-        if inner_value > 64 {
-            Err(())
-        } else {
-            Ok(Self(inner_value))
-        }
+        Self::new(value)
     }
 }
 
 pub struct PatternRepetitionCount(usize);
 
 impl PatternRepetitionCount {
+    const fn new(value: NonZeroUsize) -> Result<Self, ()> {
+        let inner_value = value.get();
+        if inner_value > 1024 {
+            Err(())
+        } else {
+            Ok(Self(inner_value))
+        }
+    }
+
     const fn as_u32(self) -> u32 {
         // CAST: usize == u32 on RV32I
         self.0 as u32
@@ -146,16 +194,11 @@ impl TryFrom<NonZeroUsize> for PatternRepetitionCount {
     type Error = ();
 
     fn try_from(value: NonZeroUsize) -> Result<Self, Self::Error> {
-        let inner_value = value.get();
-        if inner_value > 1024 {
-            Err(())
-        } else {
-            Ok(Self(inner_value))
-        }
+        Self::new(value)
     }
 }
 
-impl PattGenHIL for PattGen {
+impl<'a> PattGenHIL<'a> for PattGen<'a> {
     type Channel = Channel;
     type PatternLength = PatternLength;
     type PatternRepetitionCount = PatternRepetitionCount;
@@ -177,7 +220,8 @@ impl PattGenHIL for PattGen {
                     pattern_repetition_count,
                     predivider,
                 );
-                CTRL::ENABLE_CH0::Set
+                self.registers.ctrl.modify(CTRL::ENABLE_CH0::CLEAR);
+                CTRL::ENABLE_CH0::SET
             },
             Channel::Channel1 => {
                 self.configure_channel1(
@@ -186,7 +230,8 @@ impl PattGenHIL for PattGen {
                     pattern_repetition_count,
                     predivider,
                 );
-                CTRL::ENABLE_CH1::Set
+                self.registers.ctrl.modify(CTRL::ENABLE_CH1::CLEAR);
+                CTRL::ENABLE_CH1::SET
             },
         };
 
@@ -206,5 +251,158 @@ impl PattGenHIL for PattGen {
         self.registers.ctrl.modify(disable_field_value);
 
         Ok(())
+    }
+
+    fn set_client(&self, client: &'a dyn PattGenClient<Channel>) {
+        self.client.set(client);
+    }
+}
+
+/// Tests for pattern generator
+pub mod tests {
+    use super::*;
+    use core::cell::Cell;
+
+    /// Pattern length
+    const PATTERN_LENGTH: PatternLength =
+        match PatternLength::new(match NonZeroUsize::new(64) {
+            Some(pattern_length) => pattern_length,
+            None => unreachable!(),
+        }) {
+            Ok(pattern_length) => pattern_length,
+            Err(()) => unreachable!(),
+        };
+
+    /// Pattern repetition count
+    const PATTERN_REPETITION_COUNT: PatternRepetitionCount =
+        match PatternRepetitionCount::new(match NonZeroUsize::new(1024) {
+            Some(pattern_repetition_count) => pattern_repetition_count,
+            None => unreachable!(),
+        }) {
+            Ok(pattern_repetition_count) => pattern_repetition_count,
+            Err(()) => unreachable!(),
+        };
+
+    /// Pattern generator test
+    pub struct PattGenTest<'a> {
+        pattgen: &'a PattGen<'a>,
+        pattern_channel0: Cell<u64>,
+        channel0_bit_index: Cell<u64>,
+        pattern_channel1: Cell<u64>,
+        channel1_bit_index: Cell<u64>,
+    }
+
+    impl<'a> PattGenTest<'a> {
+        /// PattGenTest constructor
+        ///
+        /// # Parameters
+        ///
+        /// + `pattgen`: a reference to the pattern generator peripheral
+        ///
+        /// # Return value
+        ///
+        /// A new instance of [PattGenTest].
+        pub fn new(pattgen: &'a PattGen<'a>) -> Self {
+            Self {
+                pattgen,
+                pattern_channel0: Cell::new(0),
+                channel0_bit_index: Cell::new(1),
+                pattern_channel1: Cell::new(u64::MAX),
+                channel1_bit_index: Cell::new(1u64 << 63),
+            }
+        }
+
+        fn get_pattern_channel0(&self) -> [u32; 2] {
+            // SAFETY: a u64 can be viewed as an array of two u32.
+            unsafe {
+                core::mem::transmute(self.pattern_channel0.get().to_le_bytes())
+            }
+        }
+
+        fn get_pattern_channel1(&self) -> [u32; 2] {
+            // SAFETY: a u64 can be viewed as an array of two u32.
+            unsafe {
+                core::mem::transmute(self.pattern_channel1.get().to_le_bytes())
+            }
+        }
+
+        fn start_channel0(&self) {
+            self.pattgen.start(
+                &self.get_pattern_channel0(),
+                PATTERN_LENGTH,
+                PATTERN_REPETITION_COUNT,
+                4,
+                Channel::Channel0
+            ).expect("Failed to start pattern generator for channel 0");
+        }
+
+        fn start_channel1(&self) {
+            self.pattgen.start(
+                &self.get_pattern_channel1(),
+                PATTERN_LENGTH,
+                PATTERN_REPETITION_COUNT,
+                4,
+                Channel::Channel1
+            ).expect("Failed to start pattern generator for channel 1")
+        }
+
+        fn next_pattern_channel0(&self) {
+            let old_pattern_channel0 = match self.pattern_channel0.get() {
+                u64::MAX => 0,
+                old_pattern_channel0 => old_pattern_channel0,
+            };
+
+            let channel0_bit_index = self.channel0_bit_index.get();
+            let new_pattern_channel0 = old_pattern_channel0 | channel0_bit_index;
+
+            self.pattern_channel0.set(new_pattern_channel0);
+
+            if channel0_bit_index == (1u64 << 63) {
+                self.channel0_bit_index.set(1);
+            } else {
+                self.channel0_bit_index.set(channel0_bit_index << 1);
+            }
+        }
+
+        fn next_pattern_channel1(&self) {
+            let old_pattern_channel1 = match self.pattern_channel1.get() {
+                0 => u64::MAX,
+                old_pattern_channel1 => old_pattern_channel1,
+            };
+
+            let channel1_bit_index = self.channel1_bit_index.get();
+            let new_pattern_channel1 = old_pattern_channel1 & !channel1_bit_index;
+
+            self.pattern_channel1.set(new_pattern_channel1);
+
+            if channel1_bit_index == 0 {
+                self.channel1_bit_index.set(1u64 << 63);
+            } else {
+                self.channel1_bit_index.set(channel1_bit_index >> 1);
+            }
+        }
+    }
+
+    impl<'a> PattGenClient<Channel> for PattGenTest<'a> {
+        fn pattgen_done(&self, channel: Channel) {
+            match channel {
+                Channel::Channel0 => {
+                    self.next_pattern_channel0();
+                    self.start_channel0();
+                }
+                Channel::Channel1 => {
+                    self.next_pattern_channel1();
+                    self.start_channel1();
+                }
+            }
+        }
+    }
+
+    /// Outputs on the first channel a LED that brights stronger and stronger and on the second
+    /// channel a LED that brights weaker and weaker
+    pub fn run_all<'a>(pattgen_test: &'a PattGenTest<'a>) {
+        pattgen_test.pattgen.set_client(pattgen_test);
+        pattgen_test.start_channel0();
+        pattgen_test.start_channel1();
     }
 }

@@ -12,7 +12,7 @@ use crate::ErrorCode;
 use core::num::NonZeroUsize;
 
 /// Pattern generator control
-pub trait PattGen {
+pub trait PattGen<'a> {
     type Channel: TryFrom<usize>;
     type PatternLength: TryFrom<NonZeroUsize>;
     type PatternRepetitionCount: TryFrom<NonZeroUsize>;
@@ -29,4 +29,13 @@ pub trait PattGen {
 
     /// Stop the given channel
     fn stop(&self, channel: Self::Channel) -> Result<(), ErrorCode>;
+
+    /// Set a client to receive callbacks
+    fn set_client(&self, client: &'a dyn PattGenClient<Self::Channel>);
+}
+
+/// Pattern generator client
+pub trait PattGenClient<Channel> {
+    /// Callback when pattern generation finished on a given channel
+    fn pattgen_done(&self, channel: Channel);
 }

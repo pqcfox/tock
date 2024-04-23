@@ -50,7 +50,7 @@ pub struct EarlGreyDefaultPeripherals<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyP
     pub flash_ctrl: lowrisc::flash_ctrl::FlashCtrl<'a>,
     pub rng: lowrisc::csrng::CsRng<'a>,
     pub watchdog: lowrisc::aon_timer::AonTimer,
-    pub pattgen: lowrisc::pattgen::PattGen,
+    pub pattgen: lowrisc::pattgen::PattGen<'a>,
     _cfg: PhantomData<CFG>,
     _pinmux: PhantomData<PINMUX>,
 }
@@ -130,6 +130,12 @@ impl<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig> InterruptService
             }
             interrupts::SPIHOST1_ERROR..=interrupts::SPIHOST1_SPIEVENT => {
                 self.spi_host1.handle_interrupt()
+            }
+            interrupts::PATTGENDONECH0 => {
+                self.pattgen.handle_channel0_interrupt();
+            }
+            interrupts::PATTGENDONECH1 => {
+                self.pattgen.handle_channel1_interrupt();
             }
             interrupts::AON_TIMER_AON_WKUP_TIMER_EXPIRED
                 ..=interrupts::AON_TIMER_AON_WDOG_TIMER_BARK => self.watchdog.handle_interrupt(),
