@@ -214,7 +214,7 @@ impl TryFrom<usize> for Channel {
 }
 
 /// Pattern length in bits
-pub struct PatternLength(usize);
+pub struct PatternLength(NonZeroUsize);
 
 impl PatternLength {
     /// [PatternLength] constructor
@@ -232,7 +232,7 @@ impl PatternLength {
         if inner_value > 64 {
             Err(())
         } else {
-            Ok(Self(inner_value))
+            Ok(Self(value))
         }
     }
 
@@ -243,7 +243,7 @@ impl PatternLength {
     /// The inner value of [PatternLength] casted to u32
     const fn as_u32(self) -> u32 {
         // CAST: usize == u32 on RV32I
-        self.0 as u32
+        self.0.get() as u32
     }
 }
 
@@ -256,7 +256,7 @@ impl TryFrom<NonZeroUsize> for PatternLength {
 }
 
 /// Pattern repetition count
-pub struct PatternRepetitionCount(usize);
+pub struct PatternRepetitionCount(NonZeroUsize);
 
 impl PatternRepetitionCount {
     /// [PatternRepetitionCount] constructor
@@ -274,7 +274,7 @@ impl PatternRepetitionCount {
         if inner_value > 1024 {
             Err(())
         } else {
-            Ok(Self(inner_value))
+            Ok(Self(value))
         }
     }
 
@@ -285,7 +285,7 @@ impl PatternRepetitionCount {
     /// The inner value of [PatternRepetitionCount] casted to u32
     const fn as_u32(self) -> u32 {
         // CAST: usize == u32 on RV32I
-        self.0 as u32
+        self.0.get() as u32
     }
 }
 
@@ -341,8 +341,8 @@ impl<'a> PattGenHIL<'a> for PattGen<'a> {
 
     fn stop(&self, channel: Channel) -> Result<(), ErrorCode> {
         let disable_field_value = match channel {
-            Channel::Channel0 => CTRL::ENABLE_CH0::Clear,
-            Channel::Channel1 => CTRL::ENABLE_CH1::Clear,
+            Channel::Channel0 => CTRL::ENABLE_CH0::CLEAR,
+            Channel::Channel1 => CTRL::ENABLE_CH1::CLEAR,
         };
 
         // Disable pattern generation
