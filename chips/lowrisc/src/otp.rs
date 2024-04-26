@@ -443,7 +443,7 @@ impl Otp {
             let word = self.read_word32(address)?;
             let start_byte_index = index << 2;
             let end_byte_index = start_byte_index + SIZE_U32.get();
-            let bytes = word.to_be_bytes();
+            let bytes = word.to_ne_bytes();
             // PANIC: end_byte_index - start_byte_index == SIZE_U32 == 4 == bytes.len()
             field[start_byte_index..end_byte_index].copy_from_slice(&bytes[..]);
         }
@@ -481,7 +481,7 @@ impl Otp {
         let word = self.read_word32(EN_SRAM_IFETCH_FIELD_ADDRESS)?;
         // The byte index within the 32-bit word representing EN_SRAM_IFETCH
         const EN_SRAM_IFETCH_BYTE_INDEX: usize = 0;
-        Ok(word.to_le_bytes()[EN_SRAM_IFETCH_BYTE_INDEX])
+        Ok(word.to_ne_bytes()[EN_SRAM_IFETCH_BYTE_INDEX])
     }
 
     /// Read the EN_CSRNG_SW_APP_READ field
@@ -494,7 +494,7 @@ impl Otp {
         let word = self.read_word32(EN_CSRNG_SW_APP_READ_FIELD_ADDRESS)?;
         // The byte index within the 32-bit word representing EN_CSRNG_SW_APP_READ
         const EN_CSRNG_SW_APP_READ_BYTE_INDEX: NonZeroUsize = create_non_zero_usize!(1);
-        Ok(word.to_le_bytes()[EN_CSRNG_SW_APP_READ_BYTE_INDEX.get()])
+        Ok(word.to_ne_bytes()[EN_CSRNG_SW_APP_READ_BYTE_INDEX.get()])
     }
 
     /// Read the EN_ENTROPY_SRC_FW_READ field
@@ -507,7 +507,7 @@ impl Otp {
         let word = self.read_word32(EN_ENTROPY_SRC_FW_READ_FIELD_ADDRESS)?;
         // The byte index within the 32-bit word representing EN_ENTROPY_SRC_FW_READ
         const EN_ENTROPY_SRC_FW_READ_BYTE_INDEX: NonZeroUsize = create_non_zero_usize!(2);
-        Ok(word.to_le_bytes()[EN_ENTROPY_SRC_FW_READ_BYTE_INDEX.get()])
+        Ok(word.to_ne_bytes()[EN_ENTROPY_SRC_FW_READ_BYTE_INDEX.get()])
     }
 
     /// Read the EN_ENTROPY_SRC_FW_OVER field
@@ -520,7 +520,7 @@ impl Otp {
         let word = self.read_word32(EN_ENTROPY_SRC_FW_OVER_FIELD_ADDRESS)?;
         // The byte index within the 32-bit word representing EN_ENTROPY_SRC_FW_OVER
         const EN_ENTROPY_SRC_FW_OVER_BYTE_INDEX: NonZeroUsize = create_non_zero_usize!(3);
-        Ok(word.to_le_bytes()[EN_ENTROPY_SRC_FW_OVER_BYTE_INDEX.get()])
+        Ok(word.to_ne_bytes()[EN_ENTROPY_SRC_FW_OVER_BYTE_INDEX.get()])
     }
 
     /// Read the hardware configure partition digest
@@ -592,9 +592,9 @@ pub mod tests {
         let device_id = otp.read_device_id().expect("Failed to read device ID");
 
         const EXPECTED_DEVICE_ID: [u8; DEVICE_ID_FIELD_SIZE.get()] = [
-            0xBA, 0x2A, 0x15, 0xF5, 0xC5, 0xC3, 0x37, 0x41, 0xCA, 0x6A, 0x93, 0xCD, 0x03, 0x83,
-            0xA1, 0xEE, 0xB1, 0x1B, 0x12, 0x15, 0x4D, 0xED, 0x8A, 0xEC, 0x5F, 0xE9, 0xD2, 0x2C,
-            0x06, 0x4D, 0xDF, 0x32,
+            0xF5, 0x15, 0x2A, 0xBA, 0x41, 0x37, 0xC3, 0xC5, 0xCD, 0x93, 0x6A, 0xCA, 0xEE, 0xA1,
+            0x83, 0x03, 0x15, 0x12, 0x1B, 0xB1, 0xEC, 0x8A, 0xED, 0x4D, 0x2C, 0xD2, 0xE9, 0x5F,
+            0x32, 0xDF, 0x4D, 0x06,
         ];
 
         assert_eq!(
@@ -605,21 +605,39 @@ pub mod tests {
         kernel::debug!("Finished testing reading device ID.");
     }
 
+    /// Test if reading EN_SRAM_IFETCH works
+    fn test_read_en_sram_ifetch(otp: &Otp) {
+        kernel::debug!("Starting testing reading EN_SRAM_IFETCH.");
+
+        let en_sram_ifetch_id = otp
+            .read_en_sram_ifetch()
+            .expect("Failed to read EN_SRAM_IFETCH");
+
+        const EXPECTED_EN_SRAM_IFETCH: u8 = 150;
+
+        assert_eq!(
+            EXPECTED_EN_SRAM_IFETCH, en_sram_ifetch_id,
+            "The read EN_SRAM_IFETCH does not match the expected value"
+        );
+
+        kernel::debug!("Finished testing reading EN_SRAM_IFETCH.");
+    }
+
     /// Test if reading the hardware digest works
     fn test_hw_digest(otp: &Otp) {
-        kernel::debug!("Starting testing creator software configure digest.");
+        kernel::debug!("Starting testing hardware configure digest.");
 
         let actual_digest = otp
             .read_hw_cfg_digest()
-            .expect("Reading hardware configure digest address failed");
+            .expect("Reading hardware configure digest failed");
         const EXPECTED_DIGEST: u64 = 0x4e723d153038967f;
 
         assert_eq!(
             EXPECTED_DIGEST, actual_digest,
-            "The read creator software configure digest does not match the expected value"
+            "The read hardware configure digest does not match the expected value"
         );
 
-        kernel::debug!("Finished testing creator software configure digest.");
+        kernel::debug!("Finished testing hardware configure digest.");
     }
 
     /// Run all OTP tests
@@ -628,6 +646,7 @@ pub mod tests {
 
         test_check_registers_lock(otp);
         test_read_device_id(otp);
+        test_read_en_sram_ifetch(otp);
         test_hw_digest(otp);
 
         kernel::debug!("Finished OTP tests. Everything is alright!");
