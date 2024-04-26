@@ -65,6 +65,11 @@ impl OtpAddress32 {
     }
 
     /// Returns the next [OtpAddress32]
+    ///
+    /// # Return value
+    ///
+    /// + Some(address): the next [OtpAddress32]
+    /// + None: the current OTP address is the last [OtpAddress32]
     pub const fn next(self) -> Option<Self> {
         let next_raw_address = self.as_u32() as usize + SIZE_U32.get();
         match Self::new(next_raw_address) {
@@ -74,6 +79,7 @@ impl OtpAddress32 {
     }
 }
 
+/// A range of [OtpAddress32]
 struct OtpAddress32Range {
     current_address: OtpAddress32,
     current_index: usize,
@@ -81,6 +87,12 @@ struct OtpAddress32Range {
 }
 
 impl OtpAddress32Range {
+    /// [OtpAddress32Range] constructor
+    ///
+    /// # Parameters
+    ///
+    /// + `otp_address`: starting OTP address
+    /// + `count`: the number of OTP addresses the range should include
     fn new(otp_address: OtpAddress32, count: NonZeroUsize) -> Self {
         Self {
             current_address: otp_address,
@@ -160,24 +172,33 @@ macro_rules! const_new_otp_address64 {
     }};
 }
 
+/// The starting address of device ID
 const DEVICE_ID_FIELD_ADDRESS: OtpAddress32 =
     const_new_otp_address32!(OTP_CTRL_PARAM_DEVICE_ID_OFFSET);
+/// The size of the device ID field in bytes
 const DEVICE_ID_FIELD_SIZE: NonZeroUsize =
     // CAST: u32 == usize on RV32I
     create_non_zero_usize!(OTP_CTRL_PARAM_DEVICE_ID_SIZE as usize);
+/// The starting address of MANUF_STATE field
 const MANUF_STATE_FIELD_ADDRESS: OtpAddress32 =
     const_new_otp_address32!(OTP_CTRL_PARAM_MANUF_STATE_OFFSET);
+/// The size of the MANUF_STATE field in bytes
 const MANUF_STATE_FIELD_SIZE: NonZeroUsize =
     // CAST: u32 == usize on RV32I
     create_non_zero_usize!(OTP_CTRL_PARAM_MANUF_STATE_SIZE as usize);
+/// The starting address of EN_SRAM_IFETCH field
 const EN_SRAM_IFETCH_FIELD_ADDRESS: OtpAddress32 =
     const_new_otp_address32!(OTP_CTRL_PARAM_EN_SRAM_IFETCH_OFFSET);
+/// The starting address of EN_CSRNG_SW_APP_READ field
 // EN_CSRNG_SW_APP_READ belongs to the same OTP word as EN_SRAM_IFETCH
 const EN_CSRNG_SW_APP_READ_FIELD_ADDRESS: OtpAddress32 = EN_SRAM_IFETCH_FIELD_ADDRESS;
+/// The starting address of EN_ENTROPY_SRC_FW_READ field
 // EN_ENTROPY_SRC_FW_READ belongs to the same OTP word as EN_SRAM_IFETCH
 const EN_ENTROPY_SRC_FW_READ_FIELD_ADDRESS: OtpAddress32 = EN_SRAM_IFETCH_FIELD_ADDRESS;
+/// The starting address of EN_ENTROPY_SRC_FW_OVER
 // EN_ENTROPY_SRC_FW_OVER belongs to the same OPT word as EN_SRAM_IFETCH
 const EN_ENTROPY_SRC_FW_OVER_FIELD_ADDRESS: OtpAddress32 = EN_SRAM_IFETCH_FIELD_ADDRESS;
+/// The starting address of HW_CFG_DIGEST field
 const HW_CFG_DIGEST_FIELD_ADDRESS: OtpAddress64 =
     const_new_otp_address64!(OTP_CTRL_PARAM_HW_CFG_DIGEST_OFFSET);
 
@@ -401,6 +422,16 @@ impl Otp {
         Ok(self.get_word64())
     }
 
+    /// Read a field of 8 32-bit words.
+    ///
+    /// # Parameters
+    ///
+    /// + `starting_address`: the starting address of the field
+    ///
+    /// # Return value
+    ///
+    /// + Ok([u8; 32]): the field in big endian
+    /// + Err(ErrorCode): an error occurred during reading
     fn read_field_32bytes(&self, starting_address: OtpAddress32) -> Result<[u8; 32], ErrorCode> {
         const FIELD_SIZE_IN_WORDS: NonZeroUsize = create_non_zero_usize!(32 / SIZE_U32.get());
 
@@ -420,14 +451,32 @@ impl Otp {
         Ok(field)
     }
 
+    /// Read the device ID
+    ///
+    /// # Return value
+    ///
+    /// + Ok([u8; DEVICE_ID_FIELD_SIZE.get()]): the read device ID
+    /// + Err(ErrorCode): an error occurred during reading
     pub fn read_device_id(&self) -> Result<[u8; DEVICE_ID_FIELD_SIZE.get()], ErrorCode> {
         self.read_field_32bytes(DEVICE_ID_FIELD_ADDRESS)
     }
 
+    /// Read the manufacturer state
+    ///
+    /// # Return value
+    ///
+    /// + Ok([u8; MANUF_STATE_FIELD_SIZE.get()]): the read manufacturer state
+    /// + Err(ErrorCode): an error occurred during reading
     pub fn read_manuf_state(&self) -> Result<[u8; MANUF_STATE_FIELD_SIZE.get()], ErrorCode> {
         self.read_field_32bytes(MANUF_STATE_FIELD_ADDRESS)
     }
 
+    /// Read the EN_SRAM_IFETCH field
+    ///
+    /// # Return value
+    ///
+    /// + Ok(u8): the read EN_SRAM_IFETCH field
+    /// + Err(ErrorCode): an error occurred during reading
     pub fn read_en_sram_ifetch(&self) -> Result<u8, ErrorCode> {
         let word = self.read_word32(EN_SRAM_IFETCH_FIELD_ADDRESS)?;
         // The byte index within the 32-bit word representing EN_SRAM_IFETCH
@@ -435,6 +484,12 @@ impl Otp {
         Ok(word.to_le_bytes()[EN_SRAM_IFETCH_BYTE_INDEX])
     }
 
+    /// Read the EN_CSRNG_SW_APP_READ field
+    ///
+    /// # Return value
+    ///
+    /// + Ok(u8): the read EN_CSRNG_SW_APP_READ field
+    /// + Err(ErrorCode): an error occurred during reading
     pub fn read_en_csrng_sw_app_read(&self) -> Result<u8, ErrorCode> {
         let word = self.read_word32(EN_CSRNG_SW_APP_READ_FIELD_ADDRESS)?;
         // The byte index within the 32-bit word representing EN_CSRNG_SW_APP_READ
@@ -442,6 +497,12 @@ impl Otp {
         Ok(word.to_le_bytes()[EN_CSRNG_SW_APP_READ_BYTE_INDEX.get()])
     }
 
+    /// Read the EN_ENTROPY_SRC_FW_READ field
+    ///
+    /// # Return value
+    ///
+    /// + Ok(u8): the read EN_ENTROPY_SRC_FW_READ field
+    /// + Err(ErrorCode): an error occurred during reading
     pub fn read_en_entropy_src_fw_read(&self) -> Result<u8, ErrorCode> {
         let word = self.read_word32(EN_ENTROPY_SRC_FW_READ_FIELD_ADDRESS)?;
         // The byte index within the 32-bit word representing EN_ENTROPY_SRC_FW_READ
@@ -449,6 +510,12 @@ impl Otp {
         Ok(word.to_le_bytes()[EN_ENTROPY_SRC_FW_READ_BYTE_INDEX.get()])
     }
 
+    /// Read the EN_ENTROPY_SRC_FW_OVER field
+    ///
+    /// # Return value
+    ///
+    /// + Ok(u8): the read EN_ENTROPY_SRC_FW_OVER field
+    /// + Err(ErrorCode): an error occurred during reading
     pub fn read_en_entropy_src_fw_over(&self) -> Result<u8, ErrorCode> {
         let word = self.read_word32(EN_ENTROPY_SRC_FW_OVER_FIELD_ADDRESS)?;
         // The byte index within the 32-bit word representing EN_ENTROPY_SRC_FW_OVER
@@ -456,11 +523,29 @@ impl Otp {
         Ok(word.to_le_bytes()[EN_ENTROPY_SRC_FW_OVER_BYTE_INDEX.get()])
     }
 
+    /// Read the hardware configure partition digest
+    ///
+    /// # Return value
+    ///
+    /// + Ok(u64): the read digest
+    /// + Err(ErrorCode): an error occurred during reading
     pub fn read_hw_cfg_digest(&self) -> Result<u64, ErrorCode> {
         self.read_word64(HW_CFG_DIGEST_FIELD_ADDRESS)
     }
 }
 
+/// Tests for OTP
+///
+/// Usage
+/// -----
+///
+/// Inside the board main file, add the following code before loading processes:
+///
+/// ```rust,ignore
+/// lowrisc::otp::tests::run_all(&peripherals.otp);
+/// ```
+///
+/// In case of an error, the tests will panic and print an error message.
 pub mod tests {
     use super::*;
 
@@ -520,6 +605,7 @@ pub mod tests {
         kernel::debug!("Finished testing reading device ID.");
     }
 
+    /// Test if reading the hardware digest works
     fn test_hw_digest(otp: &Otp) {
         kernel::debug!("Starting testing creator software configure digest.");
 
