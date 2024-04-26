@@ -19,7 +19,6 @@ pub const DRIVER_NUM: usize = capsules_core::driver::NUM::Pattgen as usize;
 
 /// List of commands that control the peripheral
 enum PattgenCommand {
-    DriverExistence,
     ConfigurePattern,
     ConfigurePatternParams,
     Start,
@@ -34,6 +33,7 @@ enum LockingCommand {
 
 /// List of all possible commands
 enum Command {
+    DriverExistence,
     PattgenCommand(PattgenCommand),
     LockingCommand(LockingCommand),
 }
@@ -63,7 +63,7 @@ impl TryFrom<usize> for Command {
         const UNLOCK_NUMBER: usize = CommandNumber::Unlock as usize;
 
         match value {
-            DRIVER_EXISTENCE_NUMBER => Ok(Command::PattgenCommand(PattgenCommand::DriverExistence)),
+            DRIVER_EXISTENCE_NUMBER => Ok(Command::DriverExistence),
             CONFIGURE_PATTERN_NUMBER => {
                 Ok(Command::PattgenCommand(PattgenCommand::ConfigurePattern))
             }
@@ -312,7 +312,6 @@ impl<'a, PattGenPeripheral: PattGenHIL<'a>> PattGen<'a, PattGenPeripheral> {
         }
 
         match pattgen_command {
-            PattgenCommand::DriverExistence => CommandReturn::success(),
             PattgenCommand::ConfigurePattern => {
                 // CAST: u32 == usize on RV32I
                 self.configure_pattern(argument1 as u32, argument2 as u32, process_id)
@@ -358,7 +357,7 @@ impl<'a, PattGenPeripheral: PattGenHIL<'a>> PattGen<'a, PattGenPeripheral> {
         process_id: ProcessId,
     ) -> CommandReturn {
         match locking_command {
-            LockingCommand::Lock => {
+             LockingCommand::Lock => {
                 if self.owner.is_some() {
                     CommandReturn::failure(ErrorCode::BUSY)
                 } else {
@@ -376,7 +375,7 @@ impl<'a, PattGenPeripheral: PattGenHIL<'a>> PattGen<'a, PattGenPeripheral> {
                         CommandReturn::failure(ErrorCode::BUSY)
                     }
                 }
-            },
+            }
         }
     }
 
@@ -419,6 +418,7 @@ impl<'a, PattGenPeripheral: PattGenHIL<'a>> SyscallDriver for PattGen<'a, PattGe
         };
 
         match command {
+            Command::DriverExistence => CommandReturn::success(),
             Command::PattgenCommand(pattgen_command) => {
                 self.handle_pattgen_command(pattgen_command, argument1, argument2, process_id)
             }

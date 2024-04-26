@@ -31,6 +31,7 @@ use kernel::hil::entropy::Entropy32;
 use kernel::hil::hasher::Hasher;
 use kernel::hil::i2c::I2CMaster;
 use kernel::hil::led::LedHigh;
+use kernel::hil::pattgen::PattGen;
 use kernel::hil::rng::Rng;
 use kernel::hil::symmetric_encryption::AES128;
 use kernel::platform::scheduler_timer::VirtualSchedulerTimer;
@@ -209,6 +210,7 @@ struct EarlGrey {
             virtual_aes_ccm::VirtualAES128CCM<'static, earlgrey::aes::Aes<'static>>,
         >,
     >,
+    pattgen: &'static capsules_extra::pattgen::PattGen<'static, lowrisc::pattgen::PattGen<'static>>,
     /*
     kv_driver: &'static capsules_extra::kv_driver::KVStoreDriver<
         'static,
@@ -259,6 +261,7 @@ impl SyscallDriverLookup for EarlGrey {
             capsules_core::rng::DRIVER_NUM => f(Some(self.rng)),
             capsules_extra::symmetric_encryption::aes::DRIVER_NUM => f(Some(self.aes)),
             //capsules_extra::kv_driver::DRIVER_NUM => f(Some(self.kv_driver)),
+            capsules_extra::pattgen::DRIVER_NUM => f(Some(self.pattgen)),
             _ => f(None),
         }
     }
@@ -840,6 +843,15 @@ unsafe fn setup() -> (
     hil::symmetric_encryption::AES128GCM::set_client(gcm_client, aes);
     hil::symmetric_encryption::AES128::set_client(gcm_client, ccm_client);
 
+    let pattgen = static_init!(
+        capsules_extra::pattgen::PattGen<lowrisc::pattgen::PattGen<'static>>,
+        capsules_extra::pattgen::PattGen::new(
+            &peripherals.pattgen,
+            board_kernel.create_grant(capsules_extra::pattgen::DRIVER_NUM, &memory_allocation_cap)
+        )
+    );
+    peripherals.pattgen.set_client(pattgen);
+
     let syscall_filter = static_init!(TbfHeaderFilterDefaultAllow, TbfHeaderFilterDefaultAllow {});
     let scheduler = components::sched::priority::PriorityComponent::new(board_kernel)
         .finalize(components::priority_component_static!());
@@ -859,12 +871,22 @@ unsafe fn setup() -> (
             spi_controller,
             aes,
             //kv_driver,
+            pattgen,
             syscall_filter,
             scheduler,
             scheduler_timer,
             watchdog,
         }
     );
+
+    // Pattern generation tests
+    /*
+    let pattgen_test = static_init!(
+        lowrisc::pattgen::tests::PattGenTest,
+        lowrisc::pattgen::tests::PattGenTest::new(&peripherals.pattgen),
+    );
+    lowrisc::pattgen::tests::run_all(pattgen_test);
+    */
 
     kernel::process::load_processes(
         board_kernel,
