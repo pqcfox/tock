@@ -12,5 +12,5 @@ macro_rules! create_non_zero_usize {
             Some(non_zero_usize) => non_zero_usize,
             None => panic!("Attempted to create NonZeroUsize with 0 as value"),
         }
-    }
+    };
 }

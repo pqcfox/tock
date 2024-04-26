@@ -1,6 +1,6 @@
 use kernel::utilities::StaticRef;
-use lowrisc::registers::otp_ctrl_regs::OtpCtrlRegisters;
 pub use lowrisc::otp::Otp;
+use lowrisc::registers::otp_ctrl_regs::OtpCtrlRegisters;
 
 use crate::registers::top_earlgrey::OTP_CTRL_CORE_BASE_ADDR;
 

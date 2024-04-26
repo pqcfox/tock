@@ -8,12 +8,15 @@
 use crate::create_non_zero_usize;
 
 use crate::registers::otp_ctrl_regs::{
-    OtpCtrlRegisters, CHECK_REGWEN, DIRECT_ACCESS_ADDRESS, DIRECT_ACCESS_CMD, STATUS,
+    OtpCtrlRegisters, CHECK_REGWEN, DIRECT_ACCESS_ADDRESS, DIRECT_ACCESS_CMD,
+    OTP_CTRL_PARAM_DEVICE_ID_OFFSET, OTP_CTRL_PARAM_DEVICE_ID_SIZE,
+    OTP_CTRL_PARAM_EN_SRAM_IFETCH_OFFSET, OTP_CTRL_PARAM_HW_CFG_DIGEST_OFFSET,
+    OTP_CTRL_PARAM_MANUF_STATE_OFFSET, OTP_CTRL_PARAM_MANUF_STATE_SIZE, STATUS,
 };
 
-use kernel::ErrorCode;
+use kernel::utilities::registers::interfaces::{ReadWriteable, Readable, Writeable};
 use kernel::utilities::StaticRef;
-use kernel::utilities::registers::interfaces::{Readable, ReadWriteable, Writeable};
+use kernel::ErrorCode;
 
 use core::num::NonZeroUsize;
 
@@ -23,8 +26,11 @@ const NUMBER_ERRORS: NonZeroUsize = create_non_zero_usize!(14);
 const MASK_ERRORS: NonZeroUsize = create_non_zero_usize!((1 << NUMBER_ERRORS.get()) - 1);
 /// One past maximum OTP address
 const MAX_PAST_OTP_ADDRESS: NonZeroUsize = create_non_zero_usize!(2048);
+/// Size of u32
+const SIZE_U32: NonZeroUsize = create_non_zero_usize!(core::mem::size_of::<u32>());
 
 /// Address of a 32-bit word
+#[derive(Clone, Copy)]
 pub struct OtpAddress32(usize);
 
 impl OtpAddress32 {
@@ -57,6 +63,56 @@ impl OtpAddress32 {
         // CAST: u32 == usize on RV32I
         self.0 as u32
     }
+
+    /// Returns the next [OtpAddress32]
+    pub const fn next(self) -> Option<Self> {
+        let next_raw_address = self.as_u32() as usize + SIZE_U32.get();
+        match Self::new(next_raw_address) {
+            Ok(next_address) => Some(next_address),
+            Err(()) => None,
+        }
+    }
+}
+
+struct OtpAddress32Range {
+    current_address: OtpAddress32,
+    current_index: usize,
+    count: NonZeroUsize,
+}
+
+impl OtpAddress32Range {
+    fn new(otp_address: OtpAddress32, count: NonZeroUsize) -> Self {
+        Self {
+            current_address: otp_address,
+            current_index: 0,
+            count,
+        }
+    }
+}
+
+impl Iterator for OtpAddress32Range {
+    type Item = OtpAddress32;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.current_index == self.count.get() {
+            None
+        } else {
+            let current_address = self.current_address;
+            self.current_address = self.current_address.next()?;
+            self.current_index += 1;
+            Some(current_address)
+        }
+    }
+}
+
+// Helper macro to initialize a constant OtpAddress32
+macro_rules! const_new_otp_address32 {
+    ($raw_address:expr) => {{
+        match OtpAddress32::new($raw_address) {
+            Ok(otp_address32) => otp_address32,
+            Err(()) => panic!("Attempting to construct invalid 32-bit word OTP address"),
+        }
+    }};
 }
 
 /// Address of a 64-bit word
@@ -74,7 +130,7 @@ impl OtpAddress64 {
     /// + Ok(Self): the OTP address if `raw_address` is valid
     /// + Err(()): if `raw_address` does not fit in the 10-bit address space and is not properly
     /// aligned.
-    pub const fn new(raw_address: usize) -> Result<Self, ()> {
+    const fn new(raw_address: usize) -> Result<Self, ()> {
         // CAST: u32 == usize on RV32I
         if raw_address >= MAX_PAST_OTP_ADDRESS.get() || raw_address & 0b111 != 0 {
             Err(())
@@ -88,14 +144,46 @@ impl OtpAddress64 {
     /// # Return value
     ///
     /// The underlying 32-bit unsigned number.
-    pub const fn as_u32(self) -> u32 {
+    const fn as_u32(self) -> u32 {
         // CAST: u32 == usize on RV32I
         self.0 as u32
     }
 }
 
+// Helper macro to initialize a constant OtpAddress64
+macro_rules! const_new_otp_address64 {
+    ($raw_address:expr) => {{
+        match OtpAddress64::new($raw_address) {
+            Ok(otp_address64) => otp_address64,
+            Err(()) => panic!("Attempting to construct invalid 64-bit word OTP address"),
+        }
+    }};
+}
+
+const DEVICE_ID_FIELD_ADDRESS: OtpAddress32 =
+    const_new_otp_address32!(OTP_CTRL_PARAM_DEVICE_ID_OFFSET);
+const DEVICE_ID_FIELD_SIZE: NonZeroUsize =
+    // CAST: u32 == usize on RV32I
+    create_non_zero_usize!(OTP_CTRL_PARAM_DEVICE_ID_SIZE as usize);
+const MANUF_STATE_FIELD_ADDRESS: OtpAddress32 =
+    const_new_otp_address32!(OTP_CTRL_PARAM_MANUF_STATE_OFFSET);
+const MANUF_STATE_FIELD_SIZE: NonZeroUsize =
+    // CAST: u32 == usize on RV32I
+    create_non_zero_usize!(OTP_CTRL_PARAM_MANUF_STATE_SIZE as usize);
+const EN_SRAM_IFETCH_FIELD_ADDRESS: OtpAddress32 =
+    const_new_otp_address32!(OTP_CTRL_PARAM_EN_SRAM_IFETCH_OFFSET);
+// EN_CSRNG_SW_APP_READ belongs to the same OTP word as EN_SRAM_IFETCH
+const EN_CSRNG_SW_APP_READ_FIELD_ADDRESS: OtpAddress32 = EN_SRAM_IFETCH_FIELD_ADDRESS;
+// EN_ENTROPY_SRC_FW_READ belongs to the same OTP word as EN_SRAM_IFETCH
+const EN_ENTROPY_SRC_FW_READ_FIELD_ADDRESS: OtpAddress32 = EN_SRAM_IFETCH_FIELD_ADDRESS;
+// EN_ENTROPY_SRC_FW_OVER belongs to the same OPT word as EN_SRAM_IFETCH
+const EN_ENTROPY_SRC_FW_OVER_FIELD_ADDRESS: OtpAddress32 = EN_SRAM_IFETCH_FIELD_ADDRESS;
+const HW_CFG_DIGEST_FIELD_ADDRESS: OtpAddress64 =
+    const_new_otp_address64!(OTP_CTRL_PARAM_HW_CFG_DIGEST_OFFSET);
+
+/// OTP peripheral driver
 pub struct Otp {
-    registers: StaticRef<OtpCtrlRegisters>
+    registers: StaticRef<OtpCtrlRegisters>,
 }
 
 impl Otp {
@@ -109,9 +197,7 @@ impl Otp {
     ///
     /// A new instance of [Otp]
     pub fn new(registers: StaticRef<OtpCtrlRegisters>) -> Self {
-        Self {
-            registers
-        }
+        Self { registers }
     }
 
     /// Check whether an error occurred.
@@ -123,11 +209,7 @@ impl Otp {
     fn has_errors(&self) -> bool {
         let status_value = self.registers.status.get();
         // CAST: usize == u32 on RV32I
-        if status_value & (MASK_ERRORS.get() as u32) != 0 {
-            true
-        } else {
-            false
-        }
+        status_value & (MASK_ERRORS.get() as u32) != 0
     }
 
     /// Sets the maximum period that can be generated for integrity checks.
@@ -159,12 +241,17 @@ impl Otp {
 
     /// Locks access to INTEGRITY_CHECK_PERIOD and CONSISTENCY_CHECK_PERIOD registers.
     fn lock_check_registers(&self) {
-        self.registers.check_regwen.modify(CHECK_REGWEN::CHECK_REGWEN::CLEAR);
+        self.registers
+            .check_regwen
+            .modify(CHECK_REGWEN::CHECK_REGWEN::CLEAR);
     }
 
     /// Check if INTEGRITY_CHECK_PERIOD and CONSISTENCY_CHECK_PERIOD registers are locked.
     fn are_check_registers_locked(&self) -> bool {
-        !self.registers.check_regwen.is_set(CHECK_REGWEN::CHECK_REGWEN)
+        !self
+            .registers
+            .check_regwen
+            .is_set(CHECK_REGWEN::CHECK_REGWEN)
     }
 
     /// Check if check timeout is disabled
@@ -189,7 +276,7 @@ impl Otp {
         &self,
         integrity_check_period: u32,
         consistency_check_period: u32,
-        timeout: u32
+        timeout: u32,
     ) -> Result<(), ()> {
         if self.has_errors() {
             return Err(());
@@ -218,21 +305,23 @@ impl Otp {
 
     /// Set the address for the next 32-bit operation
     fn set_address32(&self, address: OtpAddress32) {
-        self.registers.direct_access_address.modify(
-            DIRECT_ACCESS_ADDRESS::DIRECT_ACCESS_ADDRESS.val(address.as_u32())
-        );
+        self.registers
+            .direct_access_address
+            .modify(DIRECT_ACCESS_ADDRESS::DIRECT_ACCESS_ADDRESS.val(address.as_u32()));
     }
 
     /// Set the address for the next 64-bit operation
     fn set_address64(&self, address: OtpAddress64) {
-        self.registers.direct_access_address.modify(
-            DIRECT_ACCESS_ADDRESS::DIRECT_ACCESS_ADDRESS.val(address.as_u32())
-        );
+        self.registers
+            .direct_access_address
+            .modify(DIRECT_ACCESS_ADDRESS::DIRECT_ACCESS_ADDRESS.val(address.as_u32()));
     }
 
     /// Start a read
     fn start_read(&self) {
-        self.registers.direct_access_cmd.modify(DIRECT_ACCESS_CMD::RD::SET);
+        self.registers
+            .direct_access_cmd
+            .modify(DIRECT_ACCESS_CMD::RD::SET);
     }
 
     /// Get a 32-bit word from DIRECT_ACCESS_RDATA register
@@ -250,8 +339,8 @@ impl Otp {
     ///
     /// The bottom half of DIRECT_ACCESS_RDATA
     fn get_word64(&self) -> u64 {
-        ((self.registers.direct_access_rdata[0].get() as u64) << 32) +
-            self.registers.direct_access_rdata[1].get() as u64
+        ((self.registers.direct_access_rdata[0].get() as u64) << 32)
+            + self.registers.direct_access_rdata[1].get() as u64
     }
 
     /// Read a 32-bit word.
@@ -311,6 +400,65 @@ impl Otp {
 
         Ok(self.get_word64())
     }
+
+    fn read_field_32bytes(&self, starting_address: OtpAddress32) -> Result<[u8; 32], ErrorCode> {
+        const FIELD_SIZE_IN_WORDS: NonZeroUsize = create_non_zero_usize!(32 / SIZE_U32.get());
+
+        let address_range = OtpAddress32Range::new(starting_address, FIELD_SIZE_IN_WORDS);
+
+        let mut field = [0u8; 32];
+
+        for (index, address) in address_range.into_iter().enumerate() {
+            let word = self.read_word32(address)?;
+            let start_byte_index = index << 2;
+            let end_byte_index = start_byte_index + SIZE_U32.get();
+            let bytes = word.to_ne_bytes();
+            // PANIC: end_byte_index - start_byte_index == SIZE_U32 == 4 == bytes.len()
+            field[start_byte_index..end_byte_index].copy_from_slice(&bytes[..]);
+        }
+
+        Ok(field)
+    }
+
+    pub fn read_device_id(&self) -> Result<[u8; DEVICE_ID_FIELD_SIZE.get()], ErrorCode> {
+        self.read_field_32bytes(DEVICE_ID_FIELD_ADDRESS)
+    }
+
+    pub fn read_manuf_state(&self) -> Result<[u8; MANUF_STATE_FIELD_SIZE.get()], ErrorCode> {
+        self.read_field_32bytes(MANUF_STATE_FIELD_ADDRESS)
+    }
+
+    pub fn read_en_sram_ifetch(&self) -> Result<u8, ErrorCode> {
+        let word = self.read_word32(EN_SRAM_IFETCH_FIELD_ADDRESS)?;
+        // The byte index within the 32-bit word representing EN_SRAM_IFETCH
+        const EN_SRAM_IFETCH_BYTE_INDEX: usize = 0;
+        Ok(word.to_ne_bytes()[EN_SRAM_IFETCH_BYTE_INDEX])
+    }
+
+    pub fn read_en_csrng_sw_app_read(&self) -> Result<u8, ErrorCode> {
+        let word = self.read_word32(EN_CSRNG_SW_APP_READ_FIELD_ADDRESS)?;
+        // The byte index within the 32-bit word representing EN_CSRNG_SW_APP_READ
+        const EN_CSRNG_SW_APP_READ_BYTE_INDEX: NonZeroUsize = create_non_zero_usize!(1);
+        Ok(word.to_ne_bytes()[EN_CSRNG_SW_APP_READ_BYTE_INDEX.get()])
+    }
+
+    pub fn read_en_entropy_src_fw_read(&self) -> Result<u8, ErrorCode> {
+        let word = self.read_word32(EN_ENTROPY_SRC_FW_READ_FIELD_ADDRESS)?;
+        // The byte index within the 32-bit word representing EN_ENTROPY_SRC_FW_READ
+        const EN_ENTROPY_SRC_FW_READ_BYTE_INDEX: NonZeroUsize = create_non_zero_usize!(2);
+        Ok(word.to_ne_bytes()[EN_ENTROPY_SRC_FW_READ_BYTE_INDEX.get()])
+    }
+
+    pub fn read_en_entropy_src_fw_over(&self) -> Result<u8, ErrorCode> {
+        let word = self.read_word32(EN_ENTROPY_SRC_FW_OVER_FIELD_ADDRESS)?;
+        // The byte index within the 32-bit word representing EN_ENTROPY_SRC_FW_OVER
+        const EN_ENTROPY_SRC_FW_OVER_BYTE_INDEX: NonZeroUsize = create_non_zero_usize!(3);
+        Ok(word.to_ne_bytes()[EN_ENTROPY_SRC_FW_OVER_BYTE_INDEX.get()])
+    }
+
+    pub fn read_hw_cfg_digest(&self) -> Result<u64, ErrorCode> {
+        self.read_word64(HW_CFG_DIGEST_FIELD_ADDRESS)
+    }
 }
 
 pub mod tests {
@@ -324,8 +472,7 @@ pub mod tests {
         otp.set_integrity_check_period(1234);
         let new_integrity_check_period = otp.registers.integrity_check_period.get();
         assert_eq!(
-            old_integrity_check_period,
-            new_integrity_check_period,
+            old_integrity_check_period, new_integrity_check_period,
             "Integrity check period must be immutable after lock"
         );
 
@@ -340,8 +487,7 @@ pub mod tests {
         otp.set_consistency_check_period(1234);
         let new_consistency_check_period = otp.registers.consistency_check_period.get();
         assert_eq!(
-            old_consistency_check_period,
-            new_consistency_check_period,
+            old_consistency_check_period, new_consistency_check_period,
             "Integrity check period must be immutable after lock"
         );
 
@@ -358,23 +504,16 @@ pub mod tests {
     fn test_read_device_id(otp: &Otp) {
         kernel::debug!("Starting testing reading device ID.");
 
-        const DEVICE_ID_SIZE: usize = 8;
-        let mut device_id = [0u32; DEVICE_ID_SIZE];
+        let device_id = otp.read_device_id().expect("Failed to read device ID");
 
-        const DEVICE_ID_START_ADDRESS: usize = 0x680;
-        let mut raw_address = DEVICE_ID_START_ADDRESS;
+        const EXPECTED_DEVICE_ID: [u8; DEVICE_ID_FIELD_SIZE.get()] = [
+            0xBA, 0x2A, 0x15, 0xF5, 0xC5, 0xC3, 0x37, 0x41, 0xCA, 0x6A, 0x93, 0xCD, 0x03, 0x83,
+            0xA1, 0xEE, 0xB1, 0x1B, 0x12, 0x15, 0x4D, 0xED, 0x8A, 0xEC, 0x5F, 0xE9, 0xD2, 0x2C,
+            0x06, 0x4D, 0xDF, 0x32,
+        ];
 
-        for word in &mut device_id {
-            let otp_address = OtpAddress32::new(raw_address).expect("Attempting to create invalid OTP address");
-            *word = otp.read_word32(otp_address).expect("Reading device ID failed");
-            raw_address += core::mem::size_of::<u32>();
-        }
-
-        const EXPECTED_DEVICE_ID: [u32; DEVICE_ID_SIZE] =
-            [0xBA2A15F5, 0xC5C33741, 0xCA6A93CD, 0x0383A1EE, 0xB11B1215, 0x4DED8AEC, 0x5FE9D22C, 0x064DDF32];
         assert_eq!(
-            EXPECTED_DEVICE_ID,
-            device_id,
+            EXPECTED_DEVICE_ID, device_id,
             "The read device ID does not match the expected value"
         );
 
@@ -384,18 +523,13 @@ pub mod tests {
     fn test_hw_digest(otp: &Otp) {
         kernel::debug!("Starting testing creator software configure digest.");
 
-        const CREATOR_SW_CFG_DIGEST_ADDRESS: OtpAddress64 = match OtpAddress64::new(0x6C8) {
-            Ok(otp_address) => otp_address,
-            Err(()) => unreachable!(),
-        };
-
-        let actual_digest = otp.read_word64(CREATOR_SW_CFG_DIGEST_ADDRESS)
-            .expect("Reading creator software configure digest address failed");
+        let actual_digest = otp
+            .read_hw_cfg_digest()
+            .expect("Reading hardware configure digest address failed");
         const EXPECTED_DIGEST: u64 = 0x4e723d153038967f;
 
         assert_eq!(
-            EXPECTED_DIGEST,
-            actual_digest,
+            EXPECTED_DIGEST, actual_digest,
             "The read creator software configure digest does not match the expected value"
         );
 
