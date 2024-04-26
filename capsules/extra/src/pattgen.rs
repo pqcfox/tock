@@ -8,7 +8,7 @@
 //! Pattern generator capsule for OpenTitan.
 
 use kernel::grant::{AllowRoCount, AllowRwCount, Grant, UpcallCount};
-use kernel::hil::pattgen::PattGen as PattGenHIL;
+use kernel::hil::pattgen::{PattGen as PattGenHIL, PattGenClient};
 use kernel::syscall::{CommandReturn, SyscallDriver};
 use kernel::utilities::cells::OptionalCell;
 use kernel::{ErrorCode, ProcessId};
@@ -79,6 +79,18 @@ impl TryFrom<usize> for Command {
     }
 }
 
+#[repr(usize)]
+enum UpcallId {
+    PattGenDone,
+}
+
+impl UpcallId {
+    const fn to_usize(self) -> usize {
+        // CAST: UpcallId is marked repr(usize)
+        self as usize
+    }
+}
+
 struct ChannelConfig {
     pattern: [u32; 2],
     pattern_length: NonZeroUsize,
@@ -140,7 +152,7 @@ impl AppData {
 }
 
 /// Number of upcalls used by the capsule
-const UPCALL_ID_COUNT: u8 = 0;
+const UPCALL_ID_COUNT: u8 = 1;
 /// Number of read-only allows used by the capsule
 const RO_ALLOW_COUNT: u8 = 0;
 /// Number of read-write allows used by the capsule
@@ -376,6 +388,20 @@ impl<'a, PattGenPeripheral: PattGenHIL<'a>> PattGen<'a, PattGenPeripheral> {
     > {
         <PattGenPeripheral as PattGenHIL<'a>>::Channel::try_from(argument)
     }
+
+    fn schedule_upcall(
+        &self,
+        process_id: ProcessId,
+        channel: <PattGenPeripheral as PattGenHIL<'a>>::Channel,
+    ) {
+        // Ignore any grant errors. There is not much that can be done about that.
+        let _ = self.grant.enter(process_id, |_, kernel_data| {
+            let raw_channel: usize = channel.into();
+            // Ignore the schedule result. There is not much that can be done about that.
+            let _ =
+                kernel_data.schedule_upcall(UpcallId::PattGenDone.to_usize(), (raw_channel, 0, 0));
+        });
+    }
 }
 
 /// Provide an interface for userland.
@@ -404,5 +430,16 @@ impl<'a, PattGenPeripheral: PattGenHIL<'a>> SyscallDriver for PattGen<'a, PattGe
 
     fn allocate_grant(&self, process_id: ProcessId) -> Result<(), kernel::process::Error> {
         self.grant.enter(process_id, |_, _| {})
+    }
+}
+
+impl<'a, PattGenPeripheral: PattGenHIL<'a>>
+    PattGenClient<<PattGenPeripheral as PattGenHIL<'a>>::Channel>
+    for PattGen<'a, PattGenPeripheral>
+{
+    fn pattgen_done(&self, channel: <PattGenPeripheral as PattGenHIL<'a>>::Channel) {
+        if let Some(owner_id) = self.owner.get() {
+            self.schedule_upcall(owner_id, channel);
+        }
     }
 }

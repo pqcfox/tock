@@ -226,6 +226,7 @@ impl TryFrom<usize> for PattgenInterrupt {
 }
 
 /// List of all possible pattern generator channels.
+#[repr(usize)]
 pub enum Channel {
     Channel0,
     Channel1,
@@ -240,6 +241,13 @@ impl TryFrom<usize> for Channel {
             1 => Ok(Channel::Channel1),
             _ => Err(()),
         }
+    }
+}
+
+impl From<Channel> for usize {
+    fn from(value: Channel) -> Self {
+        // CAST: Channel is marked repr(usize)
+        value as usize
     }
 }
 
