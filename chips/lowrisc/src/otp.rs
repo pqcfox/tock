@@ -412,7 +412,7 @@ impl Otp {
             let word = self.read_word32(address)?;
             let start_byte_index = index << 2;
             let end_byte_index = start_byte_index + SIZE_U32.get();
-            let bytes = word.to_ne_bytes();
+            let bytes = word.to_be_bytes();
             // PANIC: end_byte_index - start_byte_index == SIZE_U32 == 4 == bytes.len()
             field[start_byte_index..end_byte_index].copy_from_slice(&bytes[..]);
         }
@@ -432,28 +432,28 @@ impl Otp {
         let word = self.read_word32(EN_SRAM_IFETCH_FIELD_ADDRESS)?;
         // The byte index within the 32-bit word representing EN_SRAM_IFETCH
         const EN_SRAM_IFETCH_BYTE_INDEX: usize = 0;
-        Ok(word.to_ne_bytes()[EN_SRAM_IFETCH_BYTE_INDEX])
+        Ok(word.to_le_bytes()[EN_SRAM_IFETCH_BYTE_INDEX])
     }
 
     pub fn read_en_csrng_sw_app_read(&self) -> Result<u8, ErrorCode> {
         let word = self.read_word32(EN_CSRNG_SW_APP_READ_FIELD_ADDRESS)?;
         // The byte index within the 32-bit word representing EN_CSRNG_SW_APP_READ
         const EN_CSRNG_SW_APP_READ_BYTE_INDEX: NonZeroUsize = create_non_zero_usize!(1);
-        Ok(word.to_ne_bytes()[EN_CSRNG_SW_APP_READ_BYTE_INDEX.get()])
+        Ok(word.to_le_bytes()[EN_CSRNG_SW_APP_READ_BYTE_INDEX.get()])
     }
 
     pub fn read_en_entropy_src_fw_read(&self) -> Result<u8, ErrorCode> {
         let word = self.read_word32(EN_ENTROPY_SRC_FW_READ_FIELD_ADDRESS)?;
         // The byte index within the 32-bit word representing EN_ENTROPY_SRC_FW_READ
         const EN_ENTROPY_SRC_FW_READ_BYTE_INDEX: NonZeroUsize = create_non_zero_usize!(2);
-        Ok(word.to_ne_bytes()[EN_ENTROPY_SRC_FW_READ_BYTE_INDEX.get()])
+        Ok(word.to_le_bytes()[EN_ENTROPY_SRC_FW_READ_BYTE_INDEX.get()])
     }
 
     pub fn read_en_entropy_src_fw_over(&self) -> Result<u8, ErrorCode> {
         let word = self.read_word32(EN_ENTROPY_SRC_FW_OVER_FIELD_ADDRESS)?;
         // The byte index within the 32-bit word representing EN_ENTROPY_SRC_FW_OVER
         const EN_ENTROPY_SRC_FW_OVER_BYTE_INDEX: NonZeroUsize = create_non_zero_usize!(3);
-        Ok(word.to_ne_bytes()[EN_ENTROPY_SRC_FW_OVER_BYTE_INDEX.get()])
+        Ok(word.to_le_bytes()[EN_ENTROPY_SRC_FW_OVER_BYTE_INDEX.get()])
     }
 
     pub fn read_hw_cfg_digest(&self) -> Result<u64, ErrorCode> {
