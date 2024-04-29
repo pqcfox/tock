@@ -294,10 +294,20 @@ impl<'a, PattGenPeripheral: PattGenHIL<'a>> PattGen<'a, PattGenPeripheral> {
     }
 
     fn is_owner(&self, process_id: ProcessId) -> bool {
-        match self.owner.get() {
+        match self.get_owner() {
             None => false,
             Some(owner_id) => owner_id == process_id,
         }
+    }
+
+    fn get_owner(&self) -> Option<ProcessId> {
+        let owner_id = self.owner.get()?;
+
+        if let Err(kernel::process::Error::NoSuchApp) = self.grant.enter(owner_id, |_, _| {}) {
+            return None;
+        }
+
+        Some(owner_id)
     }
 
     fn handle_pattgen_command(
@@ -351,31 +361,45 @@ impl<'a, PattGenPeripheral: PattGenHIL<'a>> PattGen<'a, PattGenPeripheral> {
         }
     }
 
+    fn handle_lock_command(&self, process_id: ProcessId) -> CommandReturn {
+        match self.get_owner() {
+            Some(owner_id) => {
+                let error_code = match owner_id == process_id {
+                    false => ErrorCode::BUSY,
+                    true =>  ErrorCode::ALREADY,
+                };
+
+                CommandReturn::failure(error_code)
+            }
+            None => {
+                self.owner.set(process_id);
+                CommandReturn::success()
+            }
+        }
+    }
+
+    fn handle_unlock_command(&self, process_id: ProcessId) -> CommandReturn {
+        match self.get_owner() {
+            None => CommandReturn::failure(ErrorCode::ALREADY),
+            Some(owner_id) => {
+                if owner_id == process_id {
+                    self.owner.clear();
+                    CommandReturn::success()
+                } else {
+                    CommandReturn::failure(ErrorCode::BUSY)
+                }
+            }
+        }
+    }
+
     fn handle_locking_command(
         &self,
         locking_command: LockingCommand,
         process_id: ProcessId,
     ) -> CommandReturn {
         match locking_command {
-             LockingCommand::Lock => {
-                if self.owner.is_some() {
-                    CommandReturn::failure(ErrorCode::BUSY)
-                } else {
-                    self.owner.set(process_id);
-                    CommandReturn::success()
-                }
-            }
-            LockingCommand::Unlock => match self.owner.get() {
-                None => CommandReturn::failure(ErrorCode::ALREADY),
-                Some(owner_id) => {
-                    if owner_id == process_id {
-                        self.owner.clear();
-                        CommandReturn::success()
-                    } else {
-                        CommandReturn::failure(ErrorCode::BUSY)
-                    }
-                }
-            }
+            LockingCommand::Lock => self.handle_lock_command(process_id),
+            LockingCommand::Unlock => self.handle_unlock_command(process_id),
         }
     }
 
