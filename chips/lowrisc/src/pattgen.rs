@@ -8,9 +8,9 @@
 use crate::registers::pattgen_regs::{PattgenRegisters, CTRL, INTR, SIZE};
 
 use kernel::hil::pattgen::{PattGen as PattGenHIL, PattGenClient};
+use kernel::utilities::cells::OptionalCell;
 use kernel::utilities::registers::interfaces::{ReadWriteable, Writeable};
 use kernel::utilities::StaticRef;
-use kernel::utilities::cells::OptionalCell;
 use kernel::ErrorCode;
 
 use core::num::NonZeroUsize;
@@ -34,14 +34,14 @@ impl PattGen<'_> {
     pub fn new(registers: StaticRef<PattgenRegisters>) -> Self {
         let pattern_generator = Self {
             registers,
-            client: OptionalCell::empty()
+            client: OptionalCell::empty(),
         };
 
         pattern_generator.init();
 
         pattern_generator
     }
-    
+
     /// Initializes the driver
     fn init(&self) {
         self.enable_interrupts();
@@ -49,7 +49,9 @@ impl PattGen<'_> {
 
     /// Enables interrupts
     fn enable_interrupts(&self) {
-        self.registers.intr_enable.modify(INTR::DONE_CH0::SET + INTR::DONE_CH1::SET);
+        self.registers
+            .intr_enable
+            .modify(INTR::DONE_CH0::SET + INTR::DONE_CH1::SET);
     }
 
     /// Sets channel 0 predivider
@@ -185,13 +187,15 @@ impl PattGen<'_> {
     /// Channel 0 done interrupt handler
     pub fn handle_channel0_interrupt(&self) {
         self.clear_channel0_interrupt();
-        self.client.map(|client| client.pattgen_done(Channel::Channel0));
+        self.client
+            .map(|client| client.pattgen_done(Channel::Channel0));
     }
 
     /// Channel 1 done interrupt handler
     pub fn handle_channel1_interrupt(&self) {
         self.clear_channel1_interrupt();
-        self.client.map(|client| client.pattgen_done(Channel::Channel1));
+        self.client
+            .map(|client| client.pattgen_done(Channel::Channel1));
     }
 }
 
@@ -322,7 +326,7 @@ impl<'a> PattGenHIL<'a> for PattGen<'a> {
                     predivider,
                 );
                 self.registers.ctrl.modify(CTRL::ENABLE_CH0::SET);
-            },
+            }
             Channel::Channel1 => {
                 // The enable bit must be cleared after it's set
                 self.registers.ctrl.modify(CTRL::ENABLE_CH1::CLEAR);
@@ -333,7 +337,7 @@ impl<'a> PattGenHIL<'a> for PattGen<'a> {
                     predivider,
                 );
                 self.registers.ctrl.modify(CTRL::ENABLE_CH1::SET);
-            },
+            }
         };
 
         Ok(())
@@ -362,14 +366,13 @@ pub mod tests {
     use core::cell::Cell;
 
     /// Pattern length
-    const PATTERN_LENGTH: PatternLength =
-        match PatternLength::new(match NonZeroUsize::new(64) {
-            Some(pattern_length) => pattern_length,
-            None => unreachable!(),
-        }) {
-            Ok(pattern_length) => pattern_length,
-            Err(()) => unreachable!(),
-        };
+    const PATTERN_LENGTH: PatternLength = match PatternLength::new(match NonZeroUsize::new(64) {
+        Some(pattern_length) => pattern_length,
+        None => unreachable!(),
+    }) {
+        Ok(pattern_length) => pattern_length,
+        Err(()) => unreachable!(),
+    };
 
     /// Pattern repetition count
     const PATTERN_REPETITION_COUNT: PatternRepetitionCount =
@@ -416,39 +419,39 @@ pub mod tests {
         /// Returns the currently configured pattern for channel 0
         fn get_pattern_channel0(&self) -> [u32; 2] {
             // SAFETY: a u64 can be viewed as an array of two u32.
-            unsafe {
-                core::mem::transmute(self.pattern_channel0.get().to_le_bytes())
-            }
+            unsafe { core::mem::transmute(self.pattern_channel0.get().to_le_bytes()) }
         }
 
         /// Returns the currently configured pattern for channel 1
         fn get_pattern_channel1(&self) -> [u32; 2] {
             // SAFETY: a u64 can be viewed as an array of two u32.
-            unsafe {
-                core::mem::transmute(self.pattern_channel1.get().to_le_bytes())
-            }
+            unsafe { core::mem::transmute(self.pattern_channel1.get().to_le_bytes()) }
         }
 
         /// Start pattern on channel 0
         fn start_channel0(&self) {
-            self.pattgen.start(
-                &self.get_pattern_channel0(),
-                PATTERN_LENGTH,
-                PATTERN_REPETITION_COUNT,
-                PREDIVIDER,
-                Channel::Channel0
-            ).expect("Failed to start pattern generator for channel 0");
+            self.pattgen
+                .start(
+                    &self.get_pattern_channel0(),
+                    PATTERN_LENGTH,
+                    PATTERN_REPETITION_COUNT,
+                    PREDIVIDER,
+                    Channel::Channel0,
+                )
+                .expect("Failed to start pattern generator for channel 0");
         }
 
         /// Start pattern on channel 1
         fn start_channel1(&self) {
-            self.pattgen.start(
-                &self.get_pattern_channel1(),
-                PATTERN_LENGTH,
-                PATTERN_REPETITION_COUNT,
-                PREDIVIDER,
-                Channel::Channel1
-            ).expect("Failed to start pattern generator for channel 1")
+            self.pattgen
+                .start(
+                    &self.get_pattern_channel1(),
+                    PATTERN_LENGTH,
+                    PATTERN_REPETITION_COUNT,
+                    PREDIVIDER,
+                    Channel::Channel1,
+                )
+                .expect("Failed to start pattern generator for channel 1")
         }
 
         /// Generate the next pattern for channel 0

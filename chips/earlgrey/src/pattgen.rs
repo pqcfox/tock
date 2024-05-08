@@ -6,8 +6,8 @@
 // Copyright Tock Contributors 2022.
 
 use kernel::utilities::StaticRef;
-use lowrisc::registers::pattgen_regs::PattgenRegisters;
 pub use lowrisc::pattgen::PattGen;
+use lowrisc::registers::pattgen_regs::PattgenRegisters;
 
 use crate::registers::top_earlgrey::PATTGEN_BASE_ADDR;
 
