@@ -131,11 +131,13 @@ impl<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig> InterruptService
             interrupts::SPIHOST1_ERROR..=interrupts::SPIHOST1_SPIEVENT => {
                 self.spi_host1.handle_interrupt()
             }
-            interrupts::PATTGENDONECH0 => {
-                self.pattgen.handle_channel0_interrupt();
-            }
-            interrupts::PATTGENDONECH1 => {
-                self.pattgen.handle_channel1_interrupt();
+            raw_pattgen_interrupt @ interrupts::PATTGENDONECH0..=interrupts::PATTGENDONECH1 => {
+                // PANIC: raw_pattgen_interrupt is a valid interrupt because of the match arm
+                // CAST: u32 == usize on RV32I
+                let pattgen_interrupt =
+                    lowrisc::pattgen::PattgenInterrupt::try_from(raw_pattgen_interrupt as u32)
+                        .unwrap();
+                self.pattgen.handle_interrupt(pattgen_interrupt);
             }
             interrupts::AON_TIMER_AON_WKUP_TIMER_EXPIRED
                 ..=interrupts::AON_TIMER_AON_WDOG_TIMER_BARK => self.watchdog.handle_interrupt(),

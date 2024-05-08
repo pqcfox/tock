@@ -185,17 +185,43 @@ impl PattGen<'_> {
     }
 
     /// Channel 0 done interrupt handler
-    pub fn handle_channel0_interrupt(&self) {
+    fn handle_channel0_interrupt(&self) {
         self.clear_channel0_interrupt();
         self.client
             .map(|client| client.pattgen_done(Channel::Channel0));
     }
 
     /// Channel 1 done interrupt handler
-    pub fn handle_channel1_interrupt(&self) {
+    fn handle_channel1_interrupt(&self) {
         self.clear_channel1_interrupt();
         self.client
             .map(|client| client.pattgen_done(Channel::Channel1));
+    }
+
+    /// Pattgen interrupt handler
+    pub fn handle_interrupt(&self, pattgen_interrupt: PattgenInterrupt) {
+        match PattgenInterrupt {
+            PattgenInterrupt::Channel0Done => self.handle_channel0_interrupt(),
+            PattgenInterrupt::Channel1Done => self.handle_channel1_interrupt(),
+        }
+    }
+}
+
+/// List of all pattgen interrupts
+pub enum Pattgen {
+    Channel0Done = 122,
+    Channel1Done,
+}
+
+impl TryFrom<usize> for Pattgen {
+    type Error = ();
+
+    fn try_from(value: usize) -> Result<Self, Self::Error> {
+        match value {
+            122 => Ok(Pattgen::Channel0Done),
+            123 => Ok(Pattgen::Channel1Done),
+            _ => Err(()),
+        }
     }
 }
 
@@ -229,8 +255,8 @@ impl PatternLength {
     ///
     /// # Return value
     ///
-    /// + Ok(Self): `value` is valid
-    /// + Err(()): ̀`value` is invalid
+    /// + Ok(Self): `value` is valid (<= 64)
+    /// + Err(()): ̀`value` is invalid (> 64)
     const fn new(value: NonZeroUsize) -> Result<Self, ()> {
         let inner_value = value.get();
         if inner_value > 64 {
@@ -271,8 +297,8 @@ impl PatternRepetitionCount {
     ///
     /// # Return value
     ///
-    /// + Ok(Self): `value` is valid
-    /// + Err(()): ̀`value` is invalid
+    /// + Ok(Self): `value` is valid (<= 1024)
+    /// + Err(()): ̀`value` is invalid (> 1024)
     const fn new(value: NonZeroUsize) -> Result<Self, ()> {
         let inner_value = value.get();
         if inner_value > 1024 {
@@ -361,6 +387,17 @@ impl<'a> PattGenHIL<'a> for PattGen<'a> {
 }
 
 /// Tests for pattern generator
+///
+/// Usage
+/// -----
+///
+/// let pattgen_test = static_init!(
+///     lowrisc::pattgen::tests::PattGenTest,
+///     lowrisc::pattgen::tests::PattGenTest::new(&peripherals.pattgen),
+/// );
+///
+/// lowrisc::pattgen::tests::run_all(pattgen_test);
+#[cfg(feature = "tests")]
 pub mod tests {
     use super::*;
     use core::cell::Cell;
