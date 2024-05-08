@@ -5,12 +5,11 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // Copyright Tock Contributors 2022.
 
-#[macro_export]
-macro_rules! create_non_zero_usize {
-    ($value:expr) => {
-        match core::num::NonZeroUsize::new($value) {
-            Some(non_zero_usize) => non_zero_usize,
-            None => panic!("Attempted to create NonZeroUsize with 0 as value"),
-        }
-    };
+use core::num::NonZeroUsize;
+
+pub(crate) const fn create_non_zero_usize(value: usize) -> NonZeroUsize {
+    match NonZeroUsize::new(value) {
+        None => panic!("Attempted to create NonZeroUsize with 0 as value"),
+        Some(non_zero_value) => non_zero_value,
+    }
 }

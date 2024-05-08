@@ -5,7 +5,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // Copyright Tock Contributors 2022.
 
-use crate::create_non_zero_usize;
+use crate::utils::create_non_zero_usize;
 
 use crate::registers::otp_ctrl_regs::{
     OtpCtrlRegisters, CHECK_REGWEN, DIRECT_ACCESS_ADDRESS, DIRECT_ACCESS_CMD,
@@ -20,14 +20,15 @@ use kernel::ErrorCode;
 
 use core::num::NonZeroUsize;
 
+
 /// Number of possible errors
-const NUMBER_ERRORS: NonZeroUsize = create_non_zero_usize!(14);
+const NUMBER_ERRORS: NonZeroUsize = create_non_zero_usize(14);
 /// Mask for STATUS register to determine whether an error occurred
-const MASK_ERRORS: NonZeroUsize = create_non_zero_usize!((1 << NUMBER_ERRORS.get()) - 1);
+const MASK_ERRORS: NonZeroUsize = create_non_zero_usize((1 << NUMBER_ERRORS.get()) - 1);
 /// One past maximum OTP address
-const MAX_PAST_OTP_ADDRESS: NonZeroUsize = create_non_zero_usize!(2048);
+const MAX_PAST_OTP_ADDRESS: NonZeroUsize = create_non_zero_usize(2048);
 /// Size of u32
-const SIZE_U32: NonZeroUsize = create_non_zero_usize!(core::mem::size_of::<u32>());
+const SIZE_U32: NonZeroUsize = create_non_zero_usize(core::mem::size_of::<u32>());
 
 /// Address of a 32-bit word
 #[derive(Clone, Copy)]
@@ -51,6 +52,26 @@ impl OtpAddress32 {
             Err(())
         } else {
             Ok(Self(raw_address))
+        }
+    }
+
+    /// Create a new OTP address for a 32-bit word.
+    ///
+    /// # Parameters
+    ///
+    /// + `raw_address`: the value that should represent an OTP address
+    ///
+    /// # Return value
+    ///
+    /// The new OTP 32-bit word address
+    ///
+    /// # Panic
+    ///
+    /// Panics if `raw_address` is invalid. See [new] for more details.
+    const fn new_or_panic(raw_address: usize) -> Self {
+        match Self::new(raw_address) {
+            Err(()) => panic!("Attempted to create OtpAddress32 with invalid value"),
+            Ok(otp_address32) => otp_address32,
         }
     }
 
@@ -117,16 +138,6 @@ impl Iterator for OtpAddress32Range {
     }
 }
 
-// Helper macro to initialize a constant OtpAddress32
-macro_rules! const_new_otp_address32 {
-    ($raw_address:expr) => {{
-        match OtpAddress32::new($raw_address) {
-            Ok(otp_address32) => otp_address32,
-            Err(()) => panic!("Attempting to construct invalid 32-bit word OTP address"),
-        }
-    }};
-}
-
 /// Address of a 64-bit word
 pub struct OtpAddress64(usize);
 
@@ -151,6 +162,26 @@ impl OtpAddress64 {
         }
     }
 
+    /// Create a new OTP address for a 64-bit word.
+    ///
+    /// # Parameters
+    ///
+    /// + `raw_address`: the value that should represent an OTP address
+    ///
+    /// # Return value
+    ///
+    /// The new OTP 64-bit word address
+    ///
+    /// # Panic
+    ///
+    /// Panics if `raw_address` is invalid. See [new] for more details.
+    const fn new_or_panic(raw_address: usize) -> Self {
+        match Self::new(raw_address) {
+            Err(()) => panic!("Attempted to create OtpAddress64 with invalid value"),
+            Ok(otp_address64) => otp_address64,
+        }
+    }
+
     /// Convert the [OtpAddress64] to a 32-bit unsigned number
     ///
     /// # Return value
@@ -162,33 +193,23 @@ impl OtpAddress64 {
     }
 }
 
-// Helper macro to initialize a constant OtpAddress64
-macro_rules! const_new_otp_address64 {
-    ($raw_address:expr) => {{
-        match OtpAddress64::new($raw_address) {
-            Ok(otp_address64) => otp_address64,
-            Err(()) => panic!("Attempting to construct invalid 64-bit word OTP address"),
-        }
-    }};
-}
-
 /// The starting address of device ID
 const DEVICE_ID_FIELD_ADDRESS: OtpAddress32 =
-    const_new_otp_address32!(OTP_CTRL_PARAM_DEVICE_ID_OFFSET);
+    OtpAddress32::new_or_panic(OTP_CTRL_PARAM_DEVICE_ID_OFFSET);
 /// The size of the device ID field in bytes
 const DEVICE_ID_FIELD_SIZE: NonZeroUsize =
     // CAST: u32 == usize on RV32I
-    create_non_zero_usize!(OTP_CTRL_PARAM_DEVICE_ID_SIZE as usize);
+    create_non_zero_usize(OTP_CTRL_PARAM_DEVICE_ID_SIZE as usize);
 /// The starting address of MANUF_STATE field
 const MANUF_STATE_FIELD_ADDRESS: OtpAddress32 =
-    const_new_otp_address32!(OTP_CTRL_PARAM_MANUF_STATE_OFFSET);
+    OtpAddress32::new_or_panic(OTP_CTRL_PARAM_MANUF_STATE_OFFSET);
 /// The size of the MANUF_STATE field in bytes
 const MANUF_STATE_FIELD_SIZE: NonZeroUsize =
     // CAST: u32 == usize on RV32I
-    create_non_zero_usize!(OTP_CTRL_PARAM_MANUF_STATE_SIZE as usize);
+    create_non_zero_usize(OTP_CTRL_PARAM_MANUF_STATE_SIZE as usize);
 /// The starting address of EN_SRAM_IFETCH field
 const EN_SRAM_IFETCH_FIELD_ADDRESS: OtpAddress32 =
-    const_new_otp_address32!(OTP_CTRL_PARAM_EN_SRAM_IFETCH_OFFSET);
+    OtpAddress32::new_or_panic(OTP_CTRL_PARAM_EN_SRAM_IFETCH_OFFSET);
 /// The starting address of EN_CSRNG_SW_APP_READ field
 // EN_CSRNG_SW_APP_READ belongs to the same OTP word as EN_SRAM_IFETCH
 const EN_CSRNG_SW_APP_READ_FIELD_ADDRESS: OtpAddress32 = EN_SRAM_IFETCH_FIELD_ADDRESS;
@@ -200,7 +221,7 @@ const EN_ENTROPY_SRC_FW_READ_FIELD_ADDRESS: OtpAddress32 = EN_SRAM_IFETCH_FIELD_
 const EN_ENTROPY_SRC_FW_OVER_FIELD_ADDRESS: OtpAddress32 = EN_SRAM_IFETCH_FIELD_ADDRESS;
 /// The starting address of HW_CFG_DIGEST field
 const HW_CFG_DIGEST_FIELD_ADDRESS: OtpAddress64 =
-    const_new_otp_address64!(OTP_CTRL_PARAM_HW_CFG_DIGEST_OFFSET);
+    OtpAddress64::new_or_panic(OTP_CTRL_PARAM_HW_CFG_DIGEST_OFFSET);
 
 /// OTP peripheral driver
 pub struct Otp {
@@ -433,7 +454,7 @@ impl Otp {
     /// + Ok([u8; 32]): the field in big endian
     /// + Err(ErrorCode): an error occurred during reading
     fn read_field_32bytes(&self, starting_address: OtpAddress32) -> Result<[u8; 32], ErrorCode> {
-        const FIELD_SIZE_IN_WORDS: NonZeroUsize = create_non_zero_usize!(32 / SIZE_U32.get());
+        const FIELD_SIZE_IN_WORDS: NonZeroUsize = create_non_zero_usize(32 / SIZE_U32.get());
 
         let address_range = OtpAddress32Range::new(starting_address, FIELD_SIZE_IN_WORDS);
 
@@ -493,7 +514,7 @@ impl Otp {
     pub fn read_en_csrng_sw_app_read(&self) -> Result<u8, ErrorCode> {
         let word = self.read_word32(EN_CSRNG_SW_APP_READ_FIELD_ADDRESS)?;
         // The byte index within the 32-bit word representing EN_CSRNG_SW_APP_READ
-        const EN_CSRNG_SW_APP_READ_BYTE_INDEX: NonZeroUsize = create_non_zero_usize!(1);
+        const EN_CSRNG_SW_APP_READ_BYTE_INDEX: NonZeroUsize = create_non_zero_usize(1);
         Ok(word.to_ne_bytes()[EN_CSRNG_SW_APP_READ_BYTE_INDEX.get()])
     }
 
@@ -506,7 +527,7 @@ impl Otp {
     pub fn read_en_entropy_src_fw_read(&self) -> Result<u8, ErrorCode> {
         let word = self.read_word32(EN_ENTROPY_SRC_FW_READ_FIELD_ADDRESS)?;
         // The byte index within the 32-bit word representing EN_ENTROPY_SRC_FW_READ
-        const EN_ENTROPY_SRC_FW_READ_BYTE_INDEX: NonZeroUsize = create_non_zero_usize!(2);
+        const EN_ENTROPY_SRC_FW_READ_BYTE_INDEX: NonZeroUsize = create_non_zero_usize(2);
         Ok(word.to_ne_bytes()[EN_ENTROPY_SRC_FW_READ_BYTE_INDEX.get()])
     }
 
@@ -519,7 +540,7 @@ impl Otp {
     pub fn read_en_entropy_src_fw_over(&self) -> Result<u8, ErrorCode> {
         let word = self.read_word32(EN_ENTROPY_SRC_FW_OVER_FIELD_ADDRESS)?;
         // The byte index within the 32-bit word representing EN_ENTROPY_SRC_FW_OVER
-        const EN_ENTROPY_SRC_FW_OVER_BYTE_INDEX: NonZeroUsize = create_non_zero_usize!(3);
+        const EN_ENTROPY_SRC_FW_OVER_BYTE_INDEX: NonZeroUsize = create_non_zero_usize(3);
         Ok(word.to_ne_bytes()[EN_ENTROPY_SRC_FW_OVER_BYTE_INDEX.get()])
     }
 
