@@ -5,7 +5,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // Copyright Tock Contributors 2022.
 
-use crate::utils::create_non_zero_usize;
+use kernel::utilities::helpers::create_non_zero_usize;
 
 use crate::registers::otp_ctrl_regs::{
     OtpCtrlRegisters, CHECK_REGWEN, DIRECT_ACCESS_ADDRESS, DIRECT_ACCESS_CMD,
@@ -18,8 +18,7 @@ use kernel::utilities::registers::interfaces::{ReadWriteable, Readable, Writeabl
 use kernel::utilities::StaticRef;
 use kernel::ErrorCode;
 
-use core::num::NonZeroUsize;
-
+use core::num::{NonZeroUsize, NonZeroU32};
 
 /// Number of possible errors
 const NUMBER_ERRORS: NonZeroUsize = create_non_zero_usize(14);
@@ -277,8 +276,11 @@ impl Otp {
     /// # Parameters
     ///
     /// + `timeout`: timeout value in CPU cycles
-    fn set_check_timeout(&self, timeout: u32) {
-        self.registers.check_timeout.set(timeout);
+    fn set_check_timeout(&self, timeout: Option<NonZeroU32>) {
+        match timeout {
+            Some(timeout) => self.registers.check_timeout.set(timeout.get()),
+            None => self.registers.check_timeout.set(0),
+        }
     }
 
     /// Locks access to INTEGRITY_CHECK_PERIOD and CONSISTENCY_CHECK_PERIOD registers.
@@ -318,7 +320,7 @@ impl Otp {
         &self,
         integrity_check_period: u32,
         consistency_check_period: u32,
-        timeout: u32,
+        timeout: Option<NonZeroU32>,
     ) -> Result<(), ()> {
         if self.has_errors() {
             return Err(());
@@ -328,9 +330,8 @@ impl Otp {
             self.set_consistency_check_period(consistency_check_period);
             self.lock_check_registers();
         }
-        if self.is_timeout_disabled() {
-            self.set_check_timeout(timeout);
-        }
+        
+        self.set_check_timeout(timeout);
 
         Ok(())
     }
