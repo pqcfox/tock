@@ -53,7 +53,7 @@ pub enum MeasCtrlClk {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub enum RecovErrCode {
+pub enum RecovErr {
     UsbTimeoutErr,
     MainTimeoutErr,
     IoDiv4TimeoutErr,
@@ -68,7 +68,7 @@ pub enum RecovErrCode {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub enum FatalErrCode {
+pub enum FatalErr {
     ShadowStorageErr,
     IdleCnt,
     RegIntg,
@@ -223,7 +223,7 @@ impl Clkmgr {
         }
     }
 
-    // Returns true if the clock is enabled and false if the clock is not enabled.
+    /// Returns true if the clock is enabled and false if the clock is not enabled.
     pub fn is_clk_enabled(&self, clk: GateableClk) -> bool {
         match clk {
             GateableClk::UsbPeri
@@ -268,13 +268,14 @@ impl Clkmgr {
             false => MULTI_BIT_BOOL_4FALSE,
         };
 
-        let lo_req = if lo < 0x3FF {
+        // Check that the measurement control limits fit in the register boundries.
+        let lo_req = if lo < 0x400 {
             lo
         } else {
             return Err(ErrorCode::INVAL);
         };
 
-        let hi_req = if hi < 0x3FF {
+        let hi_req = if hi < 0x400 {
             hi
         } else {
             return Err(ErrorCode::INVAL);
@@ -427,98 +428,98 @@ impl Clkmgr {
         (en_sts, lo, hi)
     }
 
-    pub fn is_recov_err_code_present(&self, err: RecovErrCode) -> bool {
+    pub fn is_recov_err_code_present(&self, err: RecovErr) -> bool {
         match err {
-            RecovErrCode::UsbTimeoutErr => self
+            RecovErr::UsbTimeoutErr => self
                 .registers
                 .recov_err_code
                 .is_set(RECOV_ERR_CODE::USB_TIMEOUT_ERR),
-            RecovErrCode::MainTimeoutErr => self
+            RecovErr::MainTimeoutErr => self
                 .registers
                 .recov_err_code
                 .is_set(RECOV_ERR_CODE::MAIN_TIMEOUT_ERR),
-            RecovErrCode::IoDiv4TimeoutErr => self
+            RecovErr::IoDiv4TimeoutErr => self
                 .registers
                 .recov_err_code
                 .is_set(RECOV_ERR_CODE::IO_DIV4_TIMEOUT_ERR),
-            RecovErrCode::IoDiv2TimeoutErr => self
+            RecovErr::IoDiv2TimeoutErr => self
                 .registers
                 .recov_err_code
                 .is_set(RECOV_ERR_CODE::IO_DIV2_TIMEOUT_ERR),
-            RecovErrCode::IoTimeoutErr => self
+            RecovErr::IoTimeoutErr => self
                 .registers
                 .recov_err_code
                 .is_set(RECOV_ERR_CODE::IO_TIMEOUT_ERR),
-            RecovErrCode::UsbMeasureErr => self
+            RecovErr::UsbMeasureErr => self
                 .registers
                 .recov_err_code
                 .is_set(RECOV_ERR_CODE::USB_MEASURE_ERR),
-            RecovErrCode::MainMeasureErr => self
+            RecovErr::MainMeasureErr => self
                 .registers
                 .recov_err_code
                 .is_set(RECOV_ERR_CODE::MAIN_MEASURE_ERR),
-            RecovErrCode::IoDiv4MeasureErr => self
+            RecovErr::IoDiv4MeasureErr => self
                 .registers
                 .recov_err_code
                 .is_set(RECOV_ERR_CODE::IO_DIV4_MEASURE_ERR),
-            RecovErrCode::IoDiv2MeasureErr => self
+            RecovErr::IoDiv2MeasureErr => self
                 .registers
                 .recov_err_code
                 .is_set(RECOV_ERR_CODE::IO_DIV2_MEASURE_ERR),
-            RecovErrCode::IoMeasureErr => self
+            RecovErr::IoMeasureErr => self
                 .registers
                 .recov_err_code
                 .is_set(RECOV_ERR_CODE::IO_MEASURE_ERR),
-            RecovErrCode::ShadowUpdateErr => self
+            RecovErr::ShadowUpdateErr => self
                 .registers
                 .recov_err_code
                 .is_set(RECOV_ERR_CODE::SHADOW_UPDATE_ERR),
         }
     }
 
-    pub fn clear_recov_err_code(&self, err: RecovErrCode) {
+    pub fn clear_recov_err_code(&self, err: RecovErr) {
         match err {
-            RecovErrCode::UsbTimeoutErr => self
+            RecovErr::UsbTimeoutErr => self
                 .registers
                 .recov_err_code
                 .write(RECOV_ERR_CODE::USB_TIMEOUT_ERR::SET),
-            RecovErrCode::MainTimeoutErr => self
+            RecovErr::MainTimeoutErr => self
                 .registers
                 .recov_err_code
                 .write(RECOV_ERR_CODE::MAIN_TIMEOUT_ERR::SET),
-            RecovErrCode::IoDiv4TimeoutErr => self
+            RecovErr::IoDiv4TimeoutErr => self
                 .registers
                 .recov_err_code
                 .write(RECOV_ERR_CODE::IO_DIV4_TIMEOUT_ERR::SET),
-            RecovErrCode::IoDiv2TimeoutErr => self
+            RecovErr::IoDiv2TimeoutErr => self
                 .registers
                 .recov_err_code
                 .write(RECOV_ERR_CODE::IO_DIV2_TIMEOUT_ERR::SET),
-            RecovErrCode::IoTimeoutErr => self
+            RecovErr::IoTimeoutErr => self
                 .registers
                 .recov_err_code
                 .write(RECOV_ERR_CODE::IO_TIMEOUT_ERR::SET),
-            RecovErrCode::MainMeasureErr => self
+            RecovErr::MainMeasureErr => self
                 .registers
                 .recov_err_code
                 .write(RECOV_ERR_CODE::MAIN_MEASURE_ERR::SET),
-            RecovErrCode::UsbMeasureErr => self
+            RecovErr::UsbMeasureErr => self
                 .registers
                 .recov_err_code
                 .write(RECOV_ERR_CODE::USB_MEASURE_ERR::SET),
-            RecovErrCode::IoDiv4MeasureErr => self
+            RecovErr::IoDiv4MeasureErr => self
                 .registers
                 .recov_err_code
                 .write(RECOV_ERR_CODE::IO_DIV4_MEASURE_ERR::SET),
-            RecovErrCode::IoDiv2MeasureErr => self
+            RecovErr::IoDiv2MeasureErr => self
                 .registers
                 .recov_err_code
                 .write(RECOV_ERR_CODE::IO_DIV2_MEASURE_ERR::SET),
-            RecovErrCode::IoMeasureErr => self
+            RecovErr::IoMeasureErr => self
                 .registers
                 .recov_err_code
                 .write(RECOV_ERR_CODE::IO_MEASURE_ERR::SET),
-            RecovErrCode::ShadowUpdateErr => self
+            RecovErr::ShadowUpdateErr => self
                 .registers
                 .recov_err_code
                 .write(RECOV_ERR_CODE::SHADOW_UPDATE_ERR::SET),
@@ -529,17 +530,17 @@ impl Clkmgr {
         self.registers.recov_err_code.get()
     }
 
-    pub fn is_fatal_err_code_present(&self, err: FatalErrCode) -> bool {
+    pub fn is_fatal_err_code_present(&self, err: FatalErr) -> bool {
         match err {
-            FatalErrCode::ShadowStorageErr => self
+            FatalErr::ShadowStorageErr => self
                 .registers
                 .fatal_err_code
                 .is_set(FATAL_ERR_CODE::SHADOW_STORAGE_ERR),
-            FatalErrCode::IdleCnt => self
+            FatalErr::IdleCnt => self
                 .registers
                 .fatal_err_code
                 .is_set(FATAL_ERR_CODE::IDLE_CNT),
-            FatalErrCode::RegIntg => self
+            FatalErr::RegIntg => self
                 .registers
                 .fatal_err_code
                 .is_set(FATAL_ERR_CODE::REG_INTG),
@@ -626,16 +627,16 @@ impl Clkmgr {
 
         // Test the recoverable error reading before messing with the measurement control because that will induce errors.
         let cklist = [
-            (RecovErrCode::UsbTimeoutErr, false, 0x0),
-            (RecovErrCode::MainTimeoutErr, false, 0x0),
-            (RecovErrCode::IoDiv4TimeoutErr, false, 0x0),
-            (RecovErrCode::IoDiv2TimeoutErr, false, 0x0),
-            (RecovErrCode::IoTimeoutErr, false, 0x0),
-            (RecovErrCode::UsbMeasureErr, false, 0x0),
-            (RecovErrCode::IoDiv4MeasureErr, false, 0x0),
-            (RecovErrCode::IoDiv2MeasureErr, false, 0x0),
-            (RecovErrCode::IoMeasureErr, false, 0x0),
-            (RecovErrCode::ShadowUpdateErr, false, 0x0),
+            (RecovErr::UsbTimeoutErr, false, 0x0),
+            (RecovErr::MainTimeoutErr, false, 0x0),
+            (RecovErr::IoDiv4TimeoutErr, false, 0x0),
+            (RecovErr::IoDiv2TimeoutErr, false, 0x0),
+            (RecovErr::IoTimeoutErr, false, 0x0),
+            (RecovErr::UsbMeasureErr, false, 0x0),
+            (RecovErr::IoDiv4MeasureErr, false, 0x0),
+            (RecovErr::IoDiv2MeasureErr, false, 0x0),
+            (RecovErr::IoMeasureErr, false, 0x0),
+            (RecovErr::ShadowUpdateErr, false, 0x0),
         ];
         for (err, expected_ret, expected_reg) in cklist {
             test_helper(" Check Recoverable error reading ", || {
@@ -674,17 +675,17 @@ impl Clkmgr {
             }
         }
         let cklist = [
-            (RecovErrCode::UsbTimeoutErr, false, 0x3E),
-            (RecovErrCode::MainTimeoutErr, false, 0x3E),
-            (RecovErrCode::IoDiv4TimeoutErr, false, 0x3E),
-            (RecovErrCode::IoDiv2TimeoutErr, false, 0x3E),
-            (RecovErrCode::IoTimeoutErr, false, 0x3E),
-            (RecovErrCode::UsbMeasureErr, true, 0x3E),
-            (RecovErrCode::MainMeasureErr, true, 0x1E),
-            (RecovErrCode::IoDiv4MeasureErr, true, 0xE),
-            (RecovErrCode::IoDiv2MeasureErr, true, 0x6),
-            (RecovErrCode::IoMeasureErr, true, 0x2),
-            (RecovErrCode::ShadowUpdateErr, false, 0x0),
+            (RecovErr::UsbTimeoutErr, false, 0x3E),
+            (RecovErr::MainTimeoutErr, false, 0x3E),
+            (RecovErr::IoDiv4TimeoutErr, false, 0x3E),
+            (RecovErr::IoDiv2TimeoutErr, false, 0x3E),
+            (RecovErr::IoTimeoutErr, false, 0x3E),
+            (RecovErr::UsbMeasureErr, true, 0x3E),
+            (RecovErr::MainMeasureErr, true, 0x1E),
+            (RecovErr::IoDiv4MeasureErr, true, 0xE),
+            (RecovErr::IoDiv2MeasureErr, true, 0x6),
+            (RecovErr::IoMeasureErr, true, 0x2),
+            (RecovErr::ShadowUpdateErr, false, 0x0),
         ];
         for (err, expected_ret, expected_reg) in cklist {
             test_helper(" Check Recoverable error reading and clearing", || {
@@ -699,9 +700,9 @@ impl Clkmgr {
             }
         }
         let cklist = [
-            (FatalErrCode::ShadowStorageErr, false, 0x0),
-            (FatalErrCode::IdleCnt, false, 0x0),
-            (FatalErrCode::RegIntg, false, 0x0),
+            (FatalErr::ShadowStorageErr, false, 0x0),
+            (FatalErr::IdleCnt, false, 0x0),
+            (FatalErr::RegIntg, false, 0x0),
         ];
         for (err, expected_ret, expected_reg) in cklist {
             test_helper(" Check Non-recoverable error reading and clearing", || {
