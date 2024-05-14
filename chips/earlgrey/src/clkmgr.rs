@@ -157,7 +157,7 @@ impl Clkmgr {
             (MULTI_BIT_BOOL_4TRUE, MULTI_BIT_BOOL_4FALSE, MULTI_BIT_BOOL_4TRUE) => {
                 ExtClkState::ExtClkOnLowSpeed
             }
-            (MULTI_BIT_BOOL_4FALSE, _, MULTI_BIT_BOOL_4FALSE) => ExtClkState::ExtClkOff,
+            (MULTI_BIT_BOOL_4FALSE, _, _) => ExtClkState::ExtClkOff,
             (_, _, _) => ExtClkState::ExtClkError,
         }
     }
