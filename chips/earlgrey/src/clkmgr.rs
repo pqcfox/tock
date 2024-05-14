@@ -424,52 +424,53 @@ impl Clkmgr {
         (en_sts, lo, hi)
     }
 
-    pub fn is_recov_err_code_present(&self, err: RecovErr) -> bool {
+    pub fn is_recov_err_code_present(&self, err: Option<RecovErr>) -> bool {
         match err {
-            RecovErr::UsbTimeoutErr => self
+            Some(RecovErr::UsbTimeoutErr) => self
                 .registers
                 .recov_err_code
                 .is_set(RECOV_ERR_CODE::USB_TIMEOUT_ERR),
-            RecovErr::MainTimeoutErr => self
+            Some(RecovErr::MainTimeoutErr) => self
                 .registers
                 .recov_err_code
                 .is_set(RECOV_ERR_CODE::MAIN_TIMEOUT_ERR),
-            RecovErr::IoDiv4TimeoutErr => self
+            Some(RecovErr::IoDiv4TimeoutErr) => self
                 .registers
                 .recov_err_code
                 .is_set(RECOV_ERR_CODE::IO_DIV4_TIMEOUT_ERR),
-            RecovErr::IoDiv2TimeoutErr => self
+            Some(RecovErr::IoDiv2TimeoutErr) => self
                 .registers
                 .recov_err_code
                 .is_set(RECOV_ERR_CODE::IO_DIV2_TIMEOUT_ERR),
-            RecovErr::IoTimeoutErr => self
+            Some(RecovErr::IoTimeoutErr) => self
                 .registers
                 .recov_err_code
                 .is_set(RECOV_ERR_CODE::IO_TIMEOUT_ERR),
-            RecovErr::UsbMeasureErr => self
+            Some(RecovErr::UsbMeasureErr) => self
                 .registers
                 .recov_err_code
                 .is_set(RECOV_ERR_CODE::USB_MEASURE_ERR),
-            RecovErr::MainMeasureErr => self
+            Some(RecovErr::MainMeasureErr) => self
                 .registers
                 .recov_err_code
                 .is_set(RECOV_ERR_CODE::MAIN_MEASURE_ERR),
-            RecovErr::IoDiv4MeasureErr => self
+            Some(RecovErr::IoDiv4MeasureErr) => self
                 .registers
                 .recov_err_code
                 .is_set(RECOV_ERR_CODE::IO_DIV4_MEASURE_ERR),
-            RecovErr::IoDiv2MeasureErr => self
+            Some(RecovErr::IoDiv2MeasureErr) => self
                 .registers
                 .recov_err_code
                 .is_set(RECOV_ERR_CODE::IO_DIV2_MEASURE_ERR),
-            RecovErr::IoMeasureErr => self
+            Some(RecovErr::IoMeasureErr) => self
                 .registers
                 .recov_err_code
                 .is_set(RECOV_ERR_CODE::IO_MEASURE_ERR),
-            RecovErr::ShadowUpdateErr => self
+            Some(RecovErr::ShadowUpdateErr) => self
                 .registers
                 .recov_err_code
                 .is_set(RECOV_ERR_CODE::SHADOW_UPDATE_ERR),
+            None => self.registers.recov_err_code.get() == 0x0,
         }
     }
 
@@ -522,29 +523,22 @@ impl Clkmgr {
         };
     }
 
-    pub fn get_recov_err_codes(&self) -> u32 {
-        self.registers.recov_err_code.get()
-    }
-
-    pub fn is_fatal_err_code_present(&self, err: FatalErr) -> bool {
+    pub fn is_fatal_err_code_present(&self, err: Option<FatalErr>) -> bool {
         match err {
-            FatalErr::ShadowStorageErr => self
+            Some(FatalErr::ShadowStorageErr) => self
                 .registers
                 .fatal_err_code
                 .is_set(FATAL_ERR_CODE::SHADOW_STORAGE_ERR),
-            FatalErr::IdleCnt => self
+            Some(FatalErr::IdleCnt) => self
                 .registers
                 .fatal_err_code
                 .is_set(FATAL_ERR_CODE::IDLE_CNT),
-            FatalErr::RegIntg => self
+            Some(FatalErr::RegIntg) => self
                 .registers
                 .fatal_err_code
                 .is_set(FATAL_ERR_CODE::REG_INTG),
+            None => self.registers.fatal_err_code.get() == 0x0,
         }
-    }
-
-    pub fn get_fatal_err_codes(&self) -> u32 {
-        self.registers.fatal_err_code.get()
     }
 
     pub fn run_tests(&self) -> bool {
@@ -636,8 +630,7 @@ impl Clkmgr {
         ];
         for (err, expected_ret, expected_reg) in cklist {
             test_helper(" Check Recoverable error reading ", || {
-                self.is_recov_err_code_present(err) == expected_ret
-                    && (self.get_recov_err_codes() == expected_reg)
+                self.is_recov_err_code_present(Some(err)) == expected_ret
                     && (self.registers.recov_err_code.get() == expected_reg)
             });
         }
@@ -685,13 +678,13 @@ impl Clkmgr {
         ];
         for (err, expected_ret, expected_reg) in cklist {
             test_helper(" Check Recoverable error reading and clearing", || {
-                self.is_recov_err_code_present(err) == expected_ret
+                self.is_recov_err_code_present(Some(err)) == expected_ret
                     && (self.registers.recov_err_code.get() == expected_reg)
             });
             if expected_ret == true {
                 self.clear_recov_err_code(err);
                 test_helper(" Check Recoverable error clearing", || {
-                    self.is_recov_err_code_present(err) == false
+                    self.is_recov_err_code_present(Some(err)) == false
                 });
             }
         }
@@ -702,8 +695,7 @@ impl Clkmgr {
         ];
         for (err, expected_ret, expected_reg) in cklist {
             test_helper(" Check Non-recoverable error reading and clearing", || {
-                self.is_fatal_err_code_present(err) == expected_ret
-                    && (self.get_fatal_err_codes() == expected_reg)
+                self.is_fatal_err_code_present(Some(err)) == expected_ret
                     && (self.registers.fatal_err_code.get() == expected_reg)
             });
         }
