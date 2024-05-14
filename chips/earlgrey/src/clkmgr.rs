@@ -165,16 +165,12 @@ impl Clkmgr {
     pub fn set_clk_jitter(&self, jitter_enabled: bool) {
         self.registers.jitter_regwen.write(JITTER_REGWEN::EN::SET);
 
-        match jitter_enabled {
-            true => self
-                .registers
-                .jitter_enable
-                .write(JITTER_ENABLE::VAL.val(MULTI_BIT_BOOL_4TRUE)),
-            false => self
-                .registers
-                .jitter_enable
-                .write(JITTER_ENABLE::VAL.val(MULTI_BIT_BOOL_4FALSE)),
-        };
+        self.registers
+            .jitter_enable
+            .write(JITTER_ENABLE::VAL.val(match jitter_enabled {
+                true => MULTI_BIT_BOOL_4TRUE,
+                false => MULTI_BIT_BOOL_4FALSE,
+            }));
 
         self.registers.jitter_regwen.write(JITTER_REGWEN::EN::CLEAR);
     }
