@@ -134,12 +134,9 @@ enum TestState {
     TestDataEraseFault,
     TestDataWriteFault,
     TestDataReadFault,
-}
-
-#[derive(PartialEq, Eq, Debug)]
-enum SliceCompareResult {
-    Equal,
-    Different,
+    TestDataEraseBusy,
+    TestDataWriteBusy,
+    TestDataReadBusy,
 }
 
 fn check_page_content(page_content: &[u8; EARLGREY_PAGE_SIZE.get()], message: &str) {
@@ -586,6 +583,7 @@ fn convert_data_page_position_to_page_number(data_page_position: DataPagePositio
 pub struct TestClient<'a> {
     flash: &'a FlashCtrl<'a>,
     page: TakeCell<'static, FlashPage<'a>>,
+    placeholder_page: TakeCell<'static, FlashPage<'a>>,
     state: Cell<TestState>,
     page_position_range: RangeInclusive<DataPagePosition>,
     current_data_test_page_position: Cell<DataPagePosition>,
@@ -596,11 +594,13 @@ impl<'a> TestClient<'a> {
     pub fn new(
         flash: &'a FlashCtrl<'a>,
         flash_page: &'static mut FlashPage<'a>,
+        placeholder_flash_page: &'static mut FlashPage<'a>,
         page_position_range: RangeInclusive<DataPagePosition>,
     ) -> Self {
         Self {
             flash: flash,
             page: TakeCell::new(flash_page),
+            placeholder_page: TakeCell::new(placeholder_flash_page),
             state: Cell::new(TestState::InitialState),
             page_position_range,
             current_data_test_page_position: Cell::new(DataPagePosition::Bank0(
@@ -845,6 +845,47 @@ impl<'a> TestClient<'a> {
         );
     }
 
+    fn test_invalid_read(
+        &self,
+        page_number: usize,
+        page: &'static mut FlashPage<'static>,
+        expected_error_code: ErrorCode,
+    ) -> &'static mut FlashPage<'static> {
+        let result = self.raw_read_page(page_number, page);
+
+        let (error_code, page) = match result {
+            Ok(()) => panic!(
+                "Attempting to read the page number {:?} must fail",
+                page_number
+            ),
+            Err(result) => result,
+        };
+
+        assert_eq!(
+            expected_error_code, error_code,
+            "flash.read_page() must return {:?} as error code",
+            expected_error_code,
+        );
+
+        page
+    }
+
+    fn test_invalid_read_page_number(
+        &self,
+        page_number: usize,
+        page: &'static mut FlashPage<'static>,
+    ) -> &'static mut FlashPage<'static> {
+        self.test_invalid_read(page_number, page, ErrorCode::INVAL)
+    }
+
+    fn test_invalid_read_busy(
+        &self,
+        page_number: usize,
+        page: &'static mut FlashPage<'static>,
+    ) -> &'static mut FlashPage<'static> {
+        self.test_invalid_read(page_number, page, ErrorCode::BUSY)
+    }
+
     fn test_invalid_write(
         &self,
         page_number: usize,
@@ -878,6 +919,14 @@ impl<'a> TestClient<'a> {
         self.test_invalid_write(page_number, page, ErrorCode::INVAL)
     }
 
+    fn test_invalid_write_busy(
+        &self,
+        page_number: usize,
+        page: &'static mut FlashPage<'static>,
+    ) -> &'static mut FlashPage<'static> {
+        self.test_invalid_write(page_number, page, ErrorCode::BUSY)
+    }
+
     fn test_invalid_erase(&self, page_number: usize, expected_error_code: ErrorCode) {
         let result = self.raw_erase_data_page(page_number);
 
@@ -898,6 +947,12 @@ impl<'a> TestClient<'a> {
 
     fn test_invalid_erase_page_number(&self, page_number: usize) {
         self.test_invalid_erase(page_number, ErrorCode::INVAL);
+    }
+
+    fn test_invalid_erase_busy(&self, page_position: DataPagePosition) {
+        let page_number = convert_data_page_position_to_page_number(page_position);
+
+        self.test_invalid_erase(page_number, ErrorCode::BUSY);
     }
 
     fn set_current_data_test_page_position(&self, page_position: DataPagePosition) {
@@ -968,6 +1023,51 @@ impl<'a> TestClient<'a> {
                 page_number, error_code
             );
         }
+    }
+
+    fn test_erase_busy(&self, page_position: DataPagePosition) {
+        let page_number = convert_data_page_position_to_page_number(page_position);
+        self.set_current_data_test_page_position(page_position);
+        let result = self.raw_erase_data_page(page_number);
+        if let Err(error_code) = result {
+            panic!(
+                "Erasing page number {} must succeed, but instead failed with error {:?}",
+                page_number, error_code
+            );
+        }
+        self.test_invalid_erase_busy(page_position);
+    }
+
+    fn test_write_busy(&self, page_position: DataPagePosition) {
+        let page_number = convert_data_page_position_to_page_number(page_position);
+        self.set_current_data_test_page_position(page_position);
+        let page = self.take_page();
+        let result = self.raw_read_page(page_number, page);
+        if let Err((error_code, _page)) = result {
+            panic!(
+                "Writing page number {} must succeed, but instead failed with error {:?}",
+                page_number, error_code
+            );
+        }
+        let mut placeholder_page = self.take_placeholder_page();
+        placeholder_page = self.test_invalid_write_busy(page_number, placeholder_page);
+        self.set_placeholder_page(placeholder_page);
+    }
+
+    fn test_read_busy(&self, page_position: DataPagePosition) {
+        let page_number = convert_data_page_position_to_page_number(page_position);
+        self.set_current_data_test_page_position(page_position);
+        let page = self.take_page();
+        let result = self.raw_write_page(page_number, page);
+        if let Err((error_code, _page)) = result {
+            panic!(
+                "Reading page number {} must succeed, but instead failed with error {:?}",
+                page_number, error_code
+            );
+        }
+        let mut placeholder_page = self.take_placeholder_page();
+        placeholder_page = self.test_invalid_read_busy(page_number, placeholder_page);
+        self.set_placeholder_page(placeholder_page);
     }
 
     fn check_successful_data_write(
@@ -1057,6 +1157,14 @@ impl<'a> TestClient<'a> {
 
     fn take_page(&self) -> &'static mut FlashPage<'a> {
         self.page.take().unwrap()
+    }
+
+    fn set_placeholder_page(&self, placeholder_page: &'static mut FlashPage<'a>) {
+        self.placeholder_page.put(Some(placeholder_page));
+    }
+
+    fn take_placeholder_page(&self) -> &'static mut FlashPage<'a> {
+        self.placeholder_page.take().unwrap()
     }
 
     fn get_current_test_case(&self) -> TestState {
@@ -1372,6 +1480,24 @@ impl<'a> TestClient<'a> {
                 );
             }
             TestState::TestDataReadFault => {
+                print_test_header("page erase busy");
+                self.state.set(TestState::TestDataEraseBusy);
+                let page_position = *self.page_position_range.end();
+                self.test_erase_busy(page_position);
+            }
+            TestState::TestDataEraseBusy => {
+                print_test_header("page write busy");
+                self.state.set(TestState::TestDataWriteBusy);
+                let page_position = *self.page_position_range.end();
+                self.test_write_busy(page_position);
+            }
+            TestState::TestDataWriteBusy => {
+                print_test_header("page read busy");
+                self.state.set(TestState::TestDataReadBusy);
+                let page_position = *self.page_position_range.end();
+                self.test_read_busy(page_position);
+            }
+            TestState::TestDataReadBusy => {
                 println!("\r\nFinished all tests. Everything is alright!\r\n");
             }
         }
@@ -1412,6 +1538,12 @@ impl<'a> FlashClientTrait<FlashCtrl<'a>> for TestClient<'a> {
                 print_test_footer("fault page read");
                 self.execute_next_test();
             }
+            TestState::TestDataWriteBusy => {
+                // The result of read is not important, so it is ignored.
+                self.set_page(read_page);
+                print_test_footer("page write busy");
+                self.execute_next_test();
+            }
             state => panic!("read_complete must not be trigerred for state {:?}", state),
         }
     }
@@ -1446,6 +1578,12 @@ impl<'a> FlashClientTrait<FlashCtrl<'a>> for TestClient<'a> {
                 print_test_footer("fault page write");
                 self.execute_next_test();
             }
+            TestState::TestDataReadBusy => {
+                // The result of write is not important, so it is ignored.
+                self.set_page(write_page);
+                print_test_footer("page read busy");
+                self.execute_next_test();
+            }
             state => panic!(
                 "write_complete() must not be triggered for state {:?}",
                 state
@@ -1476,6 +1614,11 @@ impl<'a> FlashClientTrait<FlashCtrl<'a>> for TestClient<'a> {
                 const EXPECTED_ERROR: Error = Error::FlashMemoryProtectionError;
                 self.check_unsuccessful_erase(result, EXPECTED_ERROR);
                 print_test_footer("fault page erase");
+                self.execute_next_test();
+            }
+            TestState::TestDataEraseBusy => {
+                self.check_successful_data_erase(result);
+                print_test_footer("page erase busy");
                 self.execute_next_test();
             }
             state => panic!(
