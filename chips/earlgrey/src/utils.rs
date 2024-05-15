@@ -5,8 +5,8 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // Copyright Tock Contributors 2022.
 
-use core::num::NonZeroUsize;
 use core::num::NonZeroU8;
+use core::num::NonZeroUsize;
 
 pub(crate) const fn create_non_zero_usize(value: usize) -> NonZeroUsize {
     match NonZeroUsize::new(value) {
