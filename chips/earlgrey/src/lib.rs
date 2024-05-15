@@ -35,3 +35,4 @@ pub mod spi_host;
 pub mod timer;
 pub mod uart;
 pub mod usbdev;
+pub(crate) mod utils;
