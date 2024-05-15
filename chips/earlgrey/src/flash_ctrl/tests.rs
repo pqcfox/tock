@@ -45,6 +45,7 @@ use core::fmt::Write;
 use core::ops::RangeInclusive;
 
 const WRITE_MESSAGE: &str = "Tock is an awesome operating system!";
+const READ_MESSAGE: &str = "Rust is a modern, memory safe programming language used for systems programming, embedded systems, command line applications, web servers and everything you might imagine.";
 const WRITE_FILL_BYTE_VALUE: u8 = 0x00;
 const ERASE_BYTE_VALUE: u8 = 0xFF;
 // The position of an info2 page which has read, write and erase enabled.
@@ -129,6 +130,7 @@ enum TestState {
     InitialState,
     TestDataErase,
     TestDataWrite,
+    TestDataRead,
 }
 
 #[derive(PartialEq, Eq, Debug)]
@@ -623,6 +625,18 @@ impl<'a> TestClient<'a> {
         }
     }
 
+    fn raw_read_page(
+        &self,
+        page_number: usize,
+        page: &'static mut FlashPage<'a>,
+    ) -> FlashReturnType {
+        print_test_info!("Attempting to read page number {}", page_number);
+        let result = self.flash.read_page(page_number, page);
+        Self::print_info_result_read_write(&result);
+
+        result
+    }
+
     fn raw_write_page(
         &self,
         page_number: usize,
@@ -919,8 +933,26 @@ impl<'a> TestClient<'a> {
         self.current_test_message.take().unwrap()
     }
 
+    fn read_data_message(&self, page_position: DataPagePosition, message: &'a str) {
+        self.set_current_test_message(message);
+        let page_number = convert_data_page_position_to_page_number(page_position);
+        let page = self.take_page();
+        let result = self.raw_read_page(page_number, page);
+        if let Err((error_code, _page)) = result {
+            panic!(
+                "Reading page number {} must succeed, but instead failed with error {:?}",
+                page_number, error_code
+            );
+        }
+    }
+
     fn test_write_page(&self, page_position: DataPagePosition) {
         self.write_message(page_position, WRITE_MESSAGE);
+    }
+
+    fn test_read_page(&self, page_position: DataPagePosition) {
+        // First, a page needs to be erased before writing to it
+        self.test_erase_data_page(page_position);
     }
 
     fn test_erase_data_page(&self, page_position: DataPagePosition) {
@@ -1010,6 +1042,24 @@ impl<'a> TestClient<'a> {
 
     fn get_current_test_case(&self) -> TestState {
         self.state.get()
+    }
+
+    fn check_successful_read(
+        &self,
+        read_page: &'static mut FlashPage<'a>,
+        result: Result<(), Error>,
+    ) {
+        assert!(
+            result.is_ok(),
+            "Read must succeed for test case {:?}",
+            self.get_current_test_case()
+        );
+
+        let read_page_array: &[u8; EARLGREY_PAGE_SIZE.get()] = read_page.as_mut();
+        let written_message = self.take_current_test_message();
+        check_page_content(read_page_array, written_message);
+
+        self.set_page(read_page);
     }
 
     fn check_op_status_clean_value(&self) {
@@ -1242,6 +1292,13 @@ impl<'a> TestClient<'a> {
                 self.test_write_page(current_data_test_page_position);
             }
             TestState::TestDataWrite => {
+                print_test_header("valid page read");
+                self.state.set(TestState::TestDataRead);
+                // From the last test, current_data_test_page_position is END
+                let current_data_test_page_position = self.current_data_test_page_position.get();
+                self.test_read_page(current_data_test_page_position);
+            }
+            TestState::TestDataRead => {
                 println!("\r\nFinished all tests. Everything is alright!\r\n");
             }
         }
@@ -1262,7 +1319,21 @@ use kernel::hil::flash::Error;
 
 impl<'a> FlashClientTrait<FlashCtrl<'a>> for TestClient<'a> {
     fn read_complete(&self, read_page: &'static mut FlashPage<'a>, result: Result<(), Error>) {
-        unimplemented!();
+        self.check_clean_state();
+
+        match &result {
+            ok @ Ok(()) => print_test_info!("Read completed: {:?}", ok),
+            error => print_test_info!("Read completed: {:?}", error),
+        }
+
+        match self.get_current_test_case() {
+            TestState::TestDataRead => {
+                self.check_successful_read(read_page, result);
+                print_test_footer("valid page read");
+                self.execute_next_test();
+            }
+            state => panic!("read_complete must not be trigerred for state {:?}", state),
+        }
     }
 
     fn write_complete(&self, write_page: &'static mut FlashPage<'a>, result: Result<(), Error>) {
@@ -1278,6 +1349,15 @@ impl<'a> FlashClientTrait<FlashCtrl<'a>> for TestClient<'a> {
                 self.check_successful_data_write(write_page, result);
                 print_test_footer("valid page write");
                 self.execute_next_test();
+            }
+            TestState::TestDataRead => {
+                // Now that a message has been written, check if reading the same page returns the
+                // exact same message. Let's fill the page with ERASE_BYTE_VALUE. After the read,
+                // it shall contain the exact same content as before the fill.
+                let write_page_array: &mut [u8; EARLGREY_PAGE_SIZE.get()] = write_page.as_mut();
+                write_page_array.fill(ERASE_BYTE_VALUE);
+                self.set_page(write_page);
+                self.read_data_message(self.current_data_test_page_position.get(), READ_MESSAGE);
             }
             state => panic!(
                 "write_complete() must not be triggered for state {:?}",
@@ -1299,6 +1379,11 @@ impl<'a> FlashClientTrait<FlashCtrl<'a>> for TestClient<'a> {
                 self.check_successful_data_erase(result);
                 print_test_footer("valid page erase");
                 self.execute_next_test();
+            }
+            TestState::TestDataRead => {
+                // After the page has been erased, it will be written with a specific message
+                let current_data_test_page_position = self.current_data_test_page_position.get();
+                self.write_message(current_data_test_page_position, READ_MESSAGE);
             }
             state => panic!(
                 "info_erase_complete() must not be triggered for state {:?}",
