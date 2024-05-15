@@ -28,6 +28,7 @@ use kernel::capabilities;
 use kernel::component::Component;
 use kernel::hil;
 use kernel::hil::entropy::Entropy32;
+use kernel::hil::flash::Flash as FlashHIL;
 use kernel::hil::hasher::Hasher;
 use kernel::hil::i2c::I2CMaster;
 use kernel::hil::led::LedHigh;
@@ -390,14 +391,14 @@ fn get_flash_memory_protection_configuration() -> flash_ctrl::MemoryProtectionCo
             flash_ctrl::FlashAddress::new_from_host_address(unsafe { &_etext as *const u8 })
                 .unwrap();
 
+        // Setup flash memory protection for the kernel
+        // PANIC: the unwrap panics only if Flash(_stext) < FlashAddress(_etext), which occurs
+        // only due to a linker script bug.
         flash_ctrl::MemoryProtectionConfiguration::new(flash_default_memory_protection_region)
-            // Setup flash memory protection for the kernel
             .enable_and_configure_data_region_from_pointers(
                 flash_ctrl::DataMemoryProtectionRegionIndex::Index0,
                 starting_address,
                 ending_address,
-                // This can only panic if FlashAddress(_stext) < FlashAddress(_etext), which would
-                // occur only due to a linker script
             )
             .unwrap()
             .enable_read()
@@ -977,6 +978,36 @@ unsafe fn setup() -> (
     (board_kernel, earlgrey, chip, peripherals)
 }
 
+fn test_flash(
+    flash_ctrl: &'static earlgrey::flash_ctrl::FlashCtrl,
+    uart: &'static earlgrey::uart::Uart<'static>,
+) {
+    let flash_page = unsafe {
+        static_init!(
+            <earlgrey::flash_ctrl::FlashCtrl as FlashHIL>::Page,
+            <earlgrey::flash_ctrl::FlashCtrl as FlashHIL>::Page::default()
+        )
+    };
+
+    let page_index_range =
+        earlgrey::flash_ctrl::tests::convert_flash_slice_to_page_position_range(unsafe {
+            core::slice::from_raw_parts(
+                &_sapps as *const u8,
+                &_eapps as *const u8 as usize - &_sapps as *const u8 as usize,
+            )
+        })
+        .unwrap();
+
+    let test_client = unsafe {
+        static_init!(
+            earlgrey::flash_ctrl::tests::TestClient,
+            earlgrey::flash_ctrl::tests::TestClient::new(flash_ctrl, flash_page, page_index_range),
+        )
+    };
+
+    earlgrey::flash_ctrl::tests::run_all(flash_ctrl, test_client, uart);
+}
+
 /// Main function.
 ///
 /// This function is called from the arch crate after some very basic RISC-V
@@ -991,7 +1022,7 @@ pub unsafe fn main() {
         let (board_kernel, earlgrey, chip, peripherals) = setup();
 
         if FLASH_TESTS_ENABLED {
-            flash_ctrl::tests::run_all(&peripherals.uart0);
+            test_flash(&peripherals.flash_ctrl, &peripherals.uart0);
         }
 
         let main_loop_cap = create_capability!(capabilities::MainLoopCapability);

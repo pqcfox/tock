@@ -6,7 +6,7 @@
 // Copyright Tock Contributors 2022.
 
 use super::flash_address::{FlashAddress, InvalidHostAddressError};
-use super::flash_ctrl::{FlashCtrl, FLASH_HOST_STARTING_ADDRESS_OFFSET};
+use super::flash_ctrl::{BusyStatus, FlashCtrl, FLASH_HOST_STARTING_ADDRESS_OFFSET};
 use super::memory_protection::{
     DataMemoryProtectionRegion, DataMemoryProtectionRegionIndex, EraseEnabledStatus,
     HighEnduranceEnabledStatus, Info0MemoryProtectionRegionIndex, Info1MemoryProtectionRegionIndex,
@@ -27,20 +27,36 @@ use super::bank::Bank;
 
 use super::info_partition_type::InfoPartitionType;
 
+use crate::registers::flash_ctrl_regs::{
+    region_enable_magic_value, CONTROL, ERR_CODE, INFO_PAGE_CFG, INTR, MP_REGION_CFG, OP_STATUS,
+    STATUS,
+};
 use crate::uart::Uart;
 
-use kernel::utilities::cells::OptionalCell;
+use kernel::hil::flash::Client as FlashClientTrait;
+use kernel::hil::flash::Flash as FlashTrait;
+use kernel::hil::flash::HasClient;
+use kernel::utilities::cells::{OptionalCell, TakeCell};
 use kernel::utilities::registers::{interfaces::Readable, ReadWrite};
 use kernel::ErrorCode;
 
+use core::cell::Cell;
 use core::fmt::Write;
 use core::ops::RangeInclusive;
 
+const WRITE_FILL_BYTE_VALUE: u8 = 0x00;
+const ERASE_BYTE_VALUE: u8 = 0xFF;
 // The position of an info2 page which has read, write and erase enabled.
 const VALID_INFO2_PAGE_POSITION: Info2PagePosition =
     Info2PagePosition::new(Bank::Bank1, Info2PageIndex::Index1);
 pub const VALID_INFO2_MEMORY_PROTECTION_REGION_INDEX: Info2MemoryProtectionRegionIndex =
     VALID_INFO2_PAGE_POSITION;
+// The position of an info page which has read, write and erase enabled.
+const VALID_INFO_PAGE_POSITION: InfoPagePosition =
+    InfoPagePosition::Type2(VALID_INFO2_PAGE_POSITION);
+// The position of an info page which has read, write and erase disabled.
+const INVALID_INFO_PAGE_POSITION: InfoPagePosition =
+    InfoPagePosition::Type2(Info2PagePosition::new(Bank::Bank1, Info2PageIndex::Index0));
 
 struct TestWriter {
     uart: OptionalCell<&'static Uart<'static>>,
@@ -62,6 +78,15 @@ impl Write for TestWriter {
 static mut TEST_WRITER: TestWriter = TestWriter {
     uart: OptionalCell::empty(),
 };
+
+macro_rules! print_test_info {
+    ($msg:expr) => ({
+        println!("INFO: {}", $msg);
+    });
+    ($fmt:expr, $($arg:tt)+) => ({
+        println!("INFO: {}", format_args!($fmt, $($arg)+));
+    });
+}
 
 macro_rules! println {
     ($msg:expr) => ({
@@ -96,6 +121,1017 @@ pub(super) fn print_test_footer(message: &str) {
     println!("FINISHED TEST: {}", message);
 }
 
+type FlashPage<'a> = <FlashCtrl<'a> as FlashTrait>::Page;
+
+#[derive(Clone, Copy, Debug)]
+enum TestState {
+    InitialState,
+    TestDataErase,
+}
+
+// SAFETY: The caller must ensure that a previous mutable reference pointing to the same host page
+// does not already exist. This function returns the same mutable reference only for the same data
+// page position
+unsafe fn convert_data_page_position_to_host_array<'a>(
+    data_page_position: DataPagePosition,
+) -> &'a mut [u8; EARLGREY_PAGE_SIZE.get()] {
+    let page_number = convert_data_page_position_to_page_number(data_page_position);
+    let host_ptr = (FLASH_HOST_STARTING_ADDRESS_OFFSET.get()
+        + page_number * EARLGREY_PAGE_SIZE.get()) as *mut u8;
+
+    &mut *host_ptr.cast::<[u8; EARLGREY_PAGE_SIZE.get()]>()
+}
+
+#[derive(Clone, Copy, Debug)]
+enum InfoMemoryProtectionRegionIndex {
+    Type0(Info0MemoryProtectionRegionIndex),
+    Type1(Info1MemoryProtectionRegionIndex),
+    Type2(Info2MemoryProtectionRegionIndex),
+}
+
+impl FlashCtrl<'_> {
+    fn get_info0_memory_protection_region_register(
+        &self,
+        info0_memory_protection_region_index: Info0MemoryProtectionRegionIndex,
+    ) -> &ReadWrite<u32, INFO_PAGE_CFG::Register> {
+        let registers = self.get_registers();
+        match info0_memory_protection_region_index {
+            Info0MemoryProtectionRegionIndex::Bank0(info0_page_index) =>
+            // PANIC: Info0PageIndex guarantees safe access to bank0_info0_page_cfg
+            {
+                registers
+                    .bank0_info0_page_cfg
+                    .get(info0_page_index.to_usize())
+                    .unwrap()
+            }
+            Info0MemoryProtectionRegionIndex::Bank1(info0_page_index) =>
+            // PANIC: Info0PageIndex guarantees safe access to bank1_info0_page_cfg
+            {
+                registers
+                    .bank1_info0_page_cfg
+                    .get(info0_page_index.to_usize())
+                    .unwrap()
+            }
+        }
+    }
+
+    fn get_info1_memory_protection_region_register(
+        &self,
+        info1_memory_protection_region_index: Info1MemoryProtectionRegionIndex,
+    ) -> &ReadWrite<u32, INFO_PAGE_CFG::Register> {
+        let registers = self.get_registers();
+        match info1_memory_protection_region_index {
+            Info1MemoryProtectionRegionIndex::Bank0(info1_page_index) =>
+            // PANIC: Info1PageIndex guarantees safe access to bank0_info1_page_cfg
+            {
+                registers
+                    .bank0_info1_page_cfg
+                    .get(info1_page_index.to_usize())
+                    .unwrap()
+            }
+            Info1MemoryProtectionRegionIndex::Bank1(info1_page_index) =>
+            // PANIC: Info1PageIndex guarantees safe access to bank1_info1_page_cfg
+            {
+                registers
+                    .bank1_info1_page_cfg
+                    .get(info1_page_index.to_usize())
+                    .unwrap()
+            }
+        }
+    }
+
+    fn get_info2_memory_protection_region_register(
+        &self,
+        info2_memory_protection_region_index: Info2MemoryProtectionRegionIndex,
+    ) -> &ReadWrite<u32, INFO_PAGE_CFG::Register> {
+        let registers = self.get_registers();
+        match info2_memory_protection_region_index {
+            Info2MemoryProtectionRegionIndex::Bank0(info2_page_index) =>
+            // PANIC: Info2PageIndex guarantees safe access to bank0_info2_page_cfg
+            {
+                registers
+                    .bank0_info2_page_cfg
+                    .get(info2_page_index.to_usize())
+                    .unwrap()
+            }
+            Info2MemoryProtectionRegionIndex::Bank1(info2_page_index) =>
+            // PANIC: Info2PageIndex guarantees safe access to bank1_info2_page_cfg
+            {
+                registers
+                    .bank1_info2_page_cfg
+                    .get(info2_page_index.to_usize())
+                    .unwrap()
+            }
+        }
+    }
+
+    fn get_info_memory_protection_region_register(
+        &self,
+        info_memory_protection_region_index: InfoMemoryProtectionRegionIndex,
+    ) -> &ReadWrite<u32, INFO_PAGE_CFG::Register> {
+        match info_memory_protection_region_index {
+            InfoMemoryProtectionRegionIndex::Type0(info0_memory_protection_region_index) => self
+                .get_info0_memory_protection_region_register(info0_memory_protection_region_index),
+            InfoMemoryProtectionRegionIndex::Type1(info1_memory_protection_region_index) => self
+                .get_info1_memory_protection_region_register(info1_memory_protection_region_index),
+            InfoMemoryProtectionRegionIndex::Type2(info2_memory_protection_region_index) => self
+                .get_info2_memory_protection_region_register(info2_memory_protection_region_index),
+        }
+    }
+
+    fn configure_info_memory_protection_region(
+        &self,
+        info_memory_protection_region_index: InfoMemoryProtectionRegionIndex,
+        info_memory_protection_region: &InfoMemoryProtectionRegion,
+    ) {
+        match info_memory_protection_region_index {
+            InfoMemoryProtectionRegionIndex::Type0(info0_memory_protection_region_index) => self
+                .configure_info0_memory_protection_region(
+                    info0_memory_protection_region_index,
+                    info_memory_protection_region,
+                ),
+            InfoMemoryProtectionRegionIndex::Type1(info1_memory_protection_region_index) => self
+                .configure_info1_memory_protection_region(
+                    info1_memory_protection_region_index,
+                    info_memory_protection_region,
+                ),
+            InfoMemoryProtectionRegionIndex::Type2(info2_memory_protection_region_index) => self
+                .configure_info2_memory_protection_region(
+                    info2_memory_protection_region_index,
+                    info_memory_protection_region,
+                ),
+        }
+    }
+
+    /* CONTROL */
+    fn is_control_start_set(&self) -> bool {
+        self.get_registers().control.is_set(CONTROL::START)
+    }
+
+    /* MEMORY PROTECTION */
+    fn is_data_region_read_enabled(
+        &self,
+        memory_protection_region_index: DataMemoryProtectionRegionIndex,
+    ) -> bool {
+        let registers = self.get_registers();
+        // PANIC: DataMemoryProtectionRegionIndex is a type that guarantees safe accesses to all
+        // memory protection region arrays
+        let memory_protection_region_register = registers
+            .mp_region_cfg
+            .get(memory_protection_region_index.inner())
+            .unwrap();
+        memory_protection_region_register.read(MP_REGION_CFG::RD_EN) == region_enable_magic_value!()
+    }
+
+    fn is_data_region_write_enabled(
+        &self,
+        memory_protection_region_index: DataMemoryProtectionRegionIndex,
+    ) -> bool {
+        let registers = self.get_registers();
+        // PANIC: DataMemoryProtectionRegionIndex is a type that guarantees safe accesses to all
+        // memory protection region arrays
+        let memory_protection_region_register = registers
+            .mp_region_cfg
+            .get(memory_protection_region_index.inner())
+            .unwrap();
+        memory_protection_region_register.read(MP_REGION_CFG::PROG_EN)
+            == region_enable_magic_value!()
+    }
+
+    fn is_data_region_erase_enabled(
+        &self,
+        memory_protection_region_index: DataMemoryProtectionRegionIndex,
+    ) -> bool {
+        let registers = self.get_registers();
+        // PANIC: DataMemoryProtectionRegionIndex is a type that guarantees safe accesses to all
+        // memory protection region arrays
+        let memory_protection_region_register = registers
+            .mp_region_cfg
+            .get(memory_protection_region_index.inner())
+            .unwrap();
+        memory_protection_region_register.read(MP_REGION_CFG::ERASE_EN)
+            == region_enable_magic_value!()
+    }
+
+    fn is_data_region_scramble_enabled(
+        &self,
+        memory_protection_region_index: DataMemoryProtectionRegionIndex,
+    ) -> bool {
+        let registers = self.get_registers();
+        // SAFETY: DataMemoryProtectionRegionIndex is a type that guarantees safe accesses to all
+        // memory protection region arrays
+        let memory_protection_region_register = registers
+            .mp_region_cfg
+            .get(memory_protection_region_index.inner())
+            .unwrap();
+        memory_protection_region_register.read(MP_REGION_CFG::SCRAMBLE_EN)
+            == region_enable_magic_value!()
+    }
+
+    fn is_data_region_ecc_enabled(
+        &self,
+        memory_protection_region_index: DataMemoryProtectionRegionIndex,
+    ) -> bool {
+        let registers = self.get_registers();
+        // SAFETY: DataMemoryProtectionRegionIndex is a type that guarantees safe accesses to all
+        // memory protection region arrays
+        let memory_protection_region_register = registers
+            .mp_region_cfg
+            .get(memory_protection_region_index.inner())
+            .unwrap();
+        memory_protection_region_register.read(MP_REGION_CFG::ECC_EN)
+            == region_enable_magic_value!()
+    }
+
+    fn is_data_region_high_endurance_enabled(
+        &self,
+        memory_protection_region_index: DataMemoryProtectionRegionIndex,
+    ) -> bool {
+        let registers = self.get_registers();
+        // SAFETY: DataMemoryProtectionRegionIndex is a type that guarantees safe accesses to all
+        // memory protection region arrays
+        let memory_protection_region_register = registers
+            .mp_region_cfg
+            .get(memory_protection_region_index.inner())
+            .unwrap();
+        memory_protection_region_register.read(MP_REGION_CFG::HE_EN) == region_enable_magic_value!()
+    }
+
+    fn is_info_region_read_enabled(
+        &self,
+        memory_protection_region_index: InfoMemoryProtectionRegionIndex,
+    ) -> bool {
+        let info_memory_protection_region_register =
+            self.get_info_memory_protection_region_register(memory_protection_region_index);
+        info_memory_protection_region_register.read(INFO_PAGE_CFG::RD_EN)
+            == region_enable_magic_value!()
+    }
+
+    fn is_info_region_write_enabled(
+        &self,
+        memory_protection_region_index: InfoMemoryProtectionRegionIndex,
+    ) -> bool {
+        let info_memory_protection_region_register =
+            self.get_info_memory_protection_region_register(memory_protection_region_index);
+        info_memory_protection_region_register.read(INFO_PAGE_CFG::PROG_EN)
+            == region_enable_magic_value!()
+    }
+
+    fn is_info_region_erase_enabled(
+        &self,
+        memory_protection_region_index: InfoMemoryProtectionRegionIndex,
+    ) -> bool {
+        let info_memory_protection_region_register =
+            self.get_info_memory_protection_region_register(memory_protection_region_index);
+        info_memory_protection_region_register.read(INFO_PAGE_CFG::ERASE_EN)
+            == region_enable_magic_value!()
+    }
+
+    fn _is_info_region_scramble_enabled(
+        &self,
+        memory_protection_region_index: InfoMemoryProtectionRegionIndex,
+    ) -> bool {
+        let info_memory_protection_region_register =
+            self.get_info_memory_protection_region_register(memory_protection_region_index);
+        info_memory_protection_region_register.read(INFO_PAGE_CFG::SCRAMBLE_EN)
+            == region_enable_magic_value!()
+    }
+
+    fn _is_info_region_ecc_enabled(
+        &self,
+        memory_protection_region_index: InfoMemoryProtectionRegionIndex,
+    ) -> bool {
+        let info_memory_protection_region_register =
+            self.get_info_memory_protection_region_register(memory_protection_region_index);
+        info_memory_protection_region_register.read(INFO_PAGE_CFG::ECC_EN)
+            == region_enable_magic_value!()
+    }
+
+    fn is_info_region_high_endurance_enabled(
+        &self,
+        memory_protection_region_index: InfoMemoryProtectionRegionIndex,
+    ) -> bool {
+        let info_memory_protection_region_register =
+            self.get_info_memory_protection_region_register(memory_protection_region_index);
+        info_memory_protection_region_register.read(INFO_PAGE_CFG::HE_EN)
+            == region_enable_magic_value!()
+    }
+
+    /* OP_STATUS */
+    fn is_op_status_done_set(&self) -> bool {
+        self.get_registers().op_status.is_set(OP_STATUS::DONE)
+    }
+
+    fn is_op_status_err_set(&self) -> bool {
+        self.get_registers().op_status.is_set(OP_STATUS::ERR)
+    }
+
+    /* ERR_CODE */
+    fn is_op_err_set(&self) -> bool {
+        self.get_registers().err_code.is_set(ERR_CODE::OP_ERR)
+    }
+
+    fn is_mp_err_set(&self) -> bool {
+        self.get_registers().err_code.is_set(ERR_CODE::MP_ERR)
+    }
+
+    fn is_rd_err_set(&self) -> bool {
+        self.get_registers().err_code.is_set(ERR_CODE::RD_ERR)
+    }
+
+    fn is_prog_err_set(&self) -> bool {
+        self.get_registers().err_code.is_set(ERR_CODE::PROG_ERR)
+    }
+
+    fn is_prog_win_err_set(&self) -> bool {
+        self.get_registers().err_code.is_set(ERR_CODE::PROG_WIN_ERR)
+    }
+
+    fn is_prog_type_err_set(&self) -> bool {
+        self.get_registers()
+            .err_code
+            .is_set(ERR_CODE::PROG_TYPE_ERR)
+    }
+
+    fn is_update_err_set(&self) -> bool {
+        self.get_registers().err_code.is_set(ERR_CODE::UPDATE_ERR)
+    }
+
+    fn is_macro_err_set(&self) -> bool {
+        self.get_registers().err_code.is_set(ERR_CODE::MACRO_ERR)
+    }
+
+    /* STATUS */
+    fn is_status_rd_full_set(&self) -> bool {
+        self.get_registers().status.is_set(STATUS::RD_FULL)
+    }
+
+    fn is_status_prog_full_set(&self) -> bool {
+        self.get_registers().status.is_set(STATUS::PROG_FULL)
+    }
+
+    fn is_status_prog_empty_set(&self) -> bool {
+        self.get_registers().status.is_set(STATUS::PROG_EMPTY)
+    }
+
+    fn is_status_init_wip_set(&self) -> bool {
+        self.get_registers().status.is_set(STATUS::INIT_WIP)
+    }
+
+    fn is_status_initialized_set(&self) -> bool {
+        self.get_registers().status.is_set(STATUS::INITIALIZED)
+    }
+
+    /* INTR_STATE */
+    fn is_interrupt_corr_err_set(&self) -> bool {
+        self.get_registers().intr_state.is_set(INTR::CORR_ERR)
+    }
+
+    fn is_interrupt_op_done_set(&self) -> bool {
+        self.get_registers().intr_state.is_set(INTR::OP_DONE)
+    }
+
+    fn is_interrupt_rd_lvl_set(&self) -> bool {
+        self.get_registers().intr_state.is_set(INTR::RD_LVL)
+    }
+
+    fn is_interrupt_rd_full_set(&self) -> bool {
+        self.get_registers().intr_state.is_set(INTR::RD_FULL)
+    }
+
+    fn is_interrupt_prog_lvl_set(&self) -> bool {
+        self.get_registers().intr_state.is_set(INTR::PROG_LVL)
+    }
+
+    fn is_interrupt_prog_empty_set(&self) -> bool {
+        self.get_registers().intr_state.is_set(INTR::PROG_EMPTY)
+    }
+
+    /* INTR_ENABLE */
+    fn is_interrupt_corr_err_enabled(&self) -> bool {
+        self.get_registers().intr_enable.is_set(INTR::CORR_ERR)
+    }
+
+    fn is_interrupt_op_done_enabled(&self) -> bool {
+        self.get_registers().intr_enable.is_set(INTR::OP_DONE)
+    }
+
+    fn is_interrupt_rd_lvl_enabled(&self) -> bool {
+        self.get_registers().intr_enable.is_set(INTR::RD_LVL)
+    }
+
+    fn is_interrupt_rd_full_enabled(&self) -> bool {
+        self.get_registers().intr_enable.is_set(INTR::RD_FULL)
+    }
+
+    fn is_interrupt_prog_lvl_enabled(&self) -> bool {
+        self.get_registers().intr_enable.is_set(INTR::PROG_LVL)
+    }
+
+    fn is_interrupt_prog_empty_enabled(&self) -> bool {
+        self.get_registers().intr_enable.is_set(INTR::PROG_EMPTY)
+    }
+}
+
+fn convert_data_page_position_to_page_number(data_page_position: DataPagePosition) -> usize {
+    match data_page_position {
+        DataPagePosition::Bank0(page_index) => page_index.to_usize(),
+        // Bank1 starts one past MAX_DATA_PAGE_INDEX
+        DataPagePosition::Bank1(page_index) => {
+            MAX_DATA_PAGE_INDEX.get() as usize + 1 + page_index.to_usize()
+        }
+    }
+}
+
+pub struct TestClient<'a> {
+    flash: &'a FlashCtrl<'a>,
+    page: TakeCell<'static, FlashPage<'a>>,
+    state: Cell<TestState>,
+    page_position_range: RangeInclusive<DataPagePosition>,
+    current_data_test_page_position: Cell<DataPagePosition>,
+}
+
+impl<'a> TestClient<'a> {
+    pub fn new(
+        flash: &'a FlashCtrl<'a>,
+        flash_page: &'static mut FlashPage<'a>,
+        page_position_range: RangeInclusive<DataPagePosition>,
+    ) -> Self {
+        Self {
+            flash: flash,
+            page: TakeCell::new(flash_page),
+            state: Cell::new(TestState::InitialState),
+            page_position_range,
+            current_data_test_page_position: Cell::new(DataPagePosition::Bank0(
+                DataPageIndex::new(0),
+            )),
+        }
+    }
+}
+
+type FlashReturnType<'a> = Result<(), (ErrorCode, &'static mut FlashPage<'a>)>;
+
+impl<'a> TestClient<'a> {
+    fn print_info_result_erase(result: &Result<(), ErrorCode>) {
+        match result {
+            Ok(()) => print_test_info!("Peripheral returned OK"),
+            Err(error_code) => print_test_info!("Peripheral returned {:?}", error_code),
+        }
+    }
+
+    fn raw_erase_data_page(&self, page_number: usize) -> Result<(), ErrorCode> {
+        print_test_info!("Attempting to erase page number {}", page_number);
+        let result = self.flash.erase_page(page_number);
+        Self::print_info_result_erase(&result);
+
+        result
+    }
+
+    fn get_configured_data_memory_protection_region(
+        &self,
+        data_memory_protection_region_index: DataMemoryProtectionRegionIndex,
+    ) -> DataMemoryProtectionRegion {
+        // TODO: Add base and size
+        let mut data_memory_protection_region = DataMemoryProtectionRegion::new();
+
+        if self
+            .flash
+            .is_data_region_read_enabled(data_memory_protection_region_index)
+        {
+            data_memory_protection_region.enable_read();
+        }
+
+        if self
+            .flash
+            .is_data_region_write_enabled(data_memory_protection_region_index)
+        {
+            data_memory_protection_region.enable_write();
+        }
+
+        if self
+            .flash
+            .is_data_region_erase_enabled(data_memory_protection_region_index)
+        {
+            data_memory_protection_region.enable_erase();
+        }
+
+        if self
+            .flash
+            .is_data_region_high_endurance_enabled(data_memory_protection_region_index)
+        {
+            data_memory_protection_region.enable_high_endurance();
+        }
+
+        data_memory_protection_region
+    }
+
+    fn get_data_memory_protection_region_complement(
+        &self,
+        data_memory_protection_region: &DataMemoryProtectionRegion,
+    ) -> DataMemoryProtectionRegion {
+        let mut data_memory_protection_region_complement = DataMemoryProtectionRegion::new();
+
+        if ReadEnabledStatus::Disabled == data_memory_protection_region.is_read_enabled() {
+            data_memory_protection_region_complement.enable_read();
+        }
+
+        if WriteEnabledStatus::Disabled == data_memory_protection_region.is_write_enabled() {
+            data_memory_protection_region_complement.enable_write();
+        }
+
+        if EraseEnabledStatus::Disabled == data_memory_protection_region.is_erase_enabled() {
+            data_memory_protection_region_complement.enable_erase();
+        }
+
+        if HighEnduranceEnabledStatus::Disabled
+            == data_memory_protection_region.is_high_endurance_enabled()
+        {
+            data_memory_protection_region_complement.enable_high_endurance();
+        }
+
+        data_memory_protection_region_complement
+    }
+
+    fn test_data_memory_protection_lock(
+        &self,
+        data_memory_protection_region_index: DataMemoryProtectionRegionIndex,
+    ) {
+        // Read the existing configuration
+        let data_memory_protection_region =
+            self.get_configured_data_memory_protection_region(data_memory_protection_region_index);
+        // Get the complement of the existing configuration
+        let data_memory_protection_region_complement =
+            self.get_data_memory_protection_region_complement(&data_memory_protection_region);
+
+        // Try to configure the data memory protection region
+        self.flash.configure_data_memory_protection_region(
+            data_memory_protection_region_index,
+            &data_memory_protection_region_complement,
+        );
+
+        let new_data_memory_protection_region =
+            self.get_configured_data_memory_protection_region(data_memory_protection_region_index);
+
+        assert_eq!(
+            data_memory_protection_region,
+            new_data_memory_protection_region,
+            "The data memory protection configuration for region {:?} must not be mutable after memory protection locking.",
+            data_memory_protection_region_index
+        );
+    }
+
+    fn get_configured_info_memory_protection_region(
+        &self,
+        info_memory_protection_region_index: InfoMemoryProtectionRegionIndex,
+    ) -> InfoMemoryProtectionRegion {
+        let mut info_memory_protection_region = InfoMemoryProtectionRegion::new();
+
+        if self
+            .flash
+            .is_info_region_read_enabled(info_memory_protection_region_index)
+        {
+            info_memory_protection_region.enable_read();
+        }
+
+        if self
+            .flash
+            .is_info_region_write_enabled(info_memory_protection_region_index)
+        {
+            info_memory_protection_region.enable_write();
+        }
+
+        if self
+            .flash
+            .is_info_region_erase_enabled(info_memory_protection_region_index)
+        {
+            info_memory_protection_region.enable_erase();
+        }
+
+        if self
+            .flash
+            .is_info_region_high_endurance_enabled(info_memory_protection_region_index)
+        {
+            info_memory_protection_region.enable_high_endurance();
+        }
+
+        info_memory_protection_region
+    }
+
+    fn get_info_memory_protection_region_complement(
+        &self,
+        info_memory_protection_region: &InfoMemoryProtectionRegion,
+    ) -> InfoMemoryProtectionRegion {
+        let mut info_memory_protection_region_complement = InfoMemoryProtectionRegion::new();
+
+        if ReadEnabledStatus::Disabled == info_memory_protection_region.is_read_enabled() {
+            info_memory_protection_region_complement.enable_read();
+        }
+
+        if WriteEnabledStatus::Disabled == info_memory_protection_region.is_write_enabled() {
+            info_memory_protection_region_complement.enable_write();
+        }
+
+        if EraseEnabledStatus::Disabled == info_memory_protection_region.is_erase_enabled() {
+            info_memory_protection_region_complement.enable_erase();
+        }
+
+        if HighEnduranceEnabledStatus::Disabled
+            == info_memory_protection_region.is_high_endurance_enabled()
+        {
+            info_memory_protection_region_complement.enable_high_endurance();
+        }
+
+        info_memory_protection_region_complement
+    }
+
+    fn test_info_memory_protection_lock(
+        &self,
+        info_memory_protection_region_index: InfoMemoryProtectionRegionIndex,
+    ) {
+        // Read the existing configuration
+        let info_memory_protection_region =
+            self.get_configured_info_memory_protection_region(info_memory_protection_region_index);
+        // Get the complement of the existing configuration
+        let info_memory_protection_region_complement =
+            self.get_info_memory_protection_region_complement(&info_memory_protection_region);
+
+        // Try to configure the data memory protection region
+        self.flash.configure_info_memory_protection_region(
+            info_memory_protection_region_index,
+            &info_memory_protection_region_complement,
+        );
+
+        let new_info_memory_protection_region =
+            self.get_configured_info_memory_protection_region(info_memory_protection_region_index);
+
+        assert_eq!(
+            info_memory_protection_region,
+            new_info_memory_protection_region,
+            "The data memory protection configuration for region {:?} must not be mutable after memory protection locking.",
+            info_memory_protection_region_index
+        );
+    }
+
+    fn test_invalid_erase(&self, page_number: usize, expected_error_code: ErrorCode) {
+        let result = self.raw_erase_data_page(page_number);
+
+        let error_code = match result {
+            Ok(()) => panic!(
+                "Attempting to erase the page number {:?} must fail",
+                page_number
+            ),
+            Err(error_code) => error_code,
+        };
+
+        assert_eq!(
+            expected_error_code, error_code,
+            "flash.erase_page() must return {:?} as error code",
+            expected_error_code
+        );
+    }
+
+    fn test_invalid_erase_page_number(&self, page_number: usize) {
+        self.test_invalid_erase(page_number, ErrorCode::INVAL);
+    }
+
+    fn set_current_data_test_page_position(&self, page_position: DataPagePosition) {
+        self.current_data_test_page_position.set(page_position);
+    }
+
+    fn get_current_data_test_page_position(&self) -> DataPagePosition {
+        self.current_data_test_page_position.get()
+    }
+
+    fn test_erase_data_page(&self, page_position: DataPagePosition) {
+        let page_number = convert_data_page_position_to_page_number(page_position);
+        self.set_current_data_test_page_position(page_position);
+        let result = self.raw_erase_data_page(page_number);
+        if let Err(error_code) = result {
+            panic!(
+                "Erasing page number {} must succeed, but instead failed with error {:?}",
+                page_number, error_code
+            );
+        }
+    }
+
+    fn check_successful_data_erase(&self, result: Result<(), Error>) {
+        assert!(
+            result.is_ok(),
+            "Erase failed with error {:?} for case {:?} when it was expected to succeed",
+            // PANIC: result is an Err variant because of the assert condition
+            result.unwrap_err(),
+            self.get_current_test_case()
+        );
+
+        let current_data_test_page_position = self.current_data_test_page_position.get();
+
+        // SAFETY: The reference goes out of scope by the end of the current function and since
+        // check_successful_data_erase() cannot be called twice at the same time because the flash
+        // controller does not support concurrent operations, the call to
+        // convert_data_page_position_to_host_array() is safe.
+        let host_array =
+            unsafe { convert_data_page_position_to_host_array(current_data_test_page_position) };
+
+        assert!(
+            is_slice_filled_with(host_array, ERASE_BYTE_VALUE),
+            "Erase must fill all bytes with {:#x}",
+            ERASE_BYTE_VALUE
+        );
+    }
+
+    fn check_unsuccessful_erase(&self, result: Result<(), Error>, expected_error: Error) {
+        let actual_error = match result {
+            Ok(()) => panic!(
+                "Erase succeeded when it was expected to fail with error {:?}",
+                expected_error,
+            ),
+            Err(error) => error,
+        };
+
+        assert_eq!(
+            expected_error, actual_error,
+            "Expected error {:?}, got {:?}",
+            expected_error, actual_error
+        );
+    }
+
+    fn set_page(&self, page: &'static mut FlashPage<'a>) {
+        self.page.put(Some(page));
+    }
+
+    fn take_page(&self) -> &'static mut FlashPage<'a> {
+        self.page.take().unwrap()
+    }
+
+    fn get_current_test_case(&self) -> TestState {
+        self.state.get()
+    }
+
+    fn check_op_status_clean_value(&self) {
+        assert!(
+            !self.flash.is_op_status_done_set(),
+            "Bitfield DONE in register OP_STATUS must not be set upon operation completion",
+        );
+
+        assert!(
+            !self.flash.is_op_status_err_set(),
+            "Bitfield ERR in register OP_STATUS must not be set upon operation completion",
+        );
+    }
+
+    fn check_err_code_clean_value(&self) {
+        assert!(
+            !self.flash.is_op_err_set(),
+            "Bitfield OP_ERR in register ERR_CODE must not be set after operation completion",
+        );
+
+        assert!(
+            !self.flash.is_mp_err_set(),
+            "Bitfield MP_ERR in register ERR_CODE must not be set after operation completion",
+        );
+
+        assert!(
+            !self.flash.is_rd_err_set(),
+            "Bitfield RD_ERR in register ERR_CODE must not be set after operation completion",
+        );
+
+        assert!(
+            !self.flash.is_prog_err_set(),
+            "Bitfield PROG_ERR in register ERR_CODE must not be set after operation completion",
+        );
+
+        assert!(
+            !self.flash.is_prog_win_err_set(),
+            "Bitfield PROG_WIN_ERR in register ERR_CODE must not be set after operation completion",
+        );
+
+        assert!(
+            !self.flash.is_prog_type_err_set(),
+            "Bitfield PROG_TYPE_ERR in register ERR_CODE must not be set after operation completion",
+        );
+
+        assert!(
+            !self.flash.is_update_err_set(),
+            "Bitfield UPDATE_ERR in register ERR_CODE must not be set after operation completion",
+        );
+
+        assert!(
+            !self.flash.is_macro_err_set(),
+            "Bitfield MACRO_ERR in register ERR_CODE must not be set after operation completion",
+        );
+    }
+
+    fn check_status_clean_value(&self) {
+        assert!(
+            !self.flash.is_status_rd_full_set(),
+            "Bitfield RD_FULL in register STATUS must not be set after operation completion",
+        );
+
+        assert!(
+            self.flash.is_status_rd_empty_set(),
+            "Bitfield RD_FULL in register STATUS must not be set after operation completion",
+        );
+
+        assert!(
+            !self.flash.is_status_prog_full_set(),
+            "Bitfield PROG_FULL in register STATUS must not be set after operation completion",
+        );
+
+        assert!(
+            self.flash.is_status_prog_empty_set(),
+            "Bitfield PROG_EMPTY in register STATUS must not be set after operation completion",
+        );
+
+        assert!(
+            !self.flash.is_status_init_wip_set(),
+            "Bitfield INIT_WIP in register STATUS must not be set after operation completion",
+        );
+
+        assert!(
+            self.flash.is_status_initialized_set(),
+            "Bitfield INITIALIZED in register STATUS must be set after operation completion",
+        );
+    }
+
+    fn check_control_clean_value(&self) {
+        assert!(
+            !self.flash.is_control_start_set(),
+            "Bitfield START in register CONTROL must be cleared after operation completion",
+        );
+    }
+
+    fn check_interrupt_state_clean_value(&self) {
+        assert!(
+            !self.flash.is_interrupt_corr_err_set(),
+            "Bitfield CORR_ERR in register INTR_STATE must be cleared after operation completion",
+        );
+
+        assert!(
+            !self.flash.is_interrupt_op_done_set(),
+            "Bitfield OP_DONE in register INTR_STATE must be cleared after operation completion",
+        );
+
+        assert!(
+            !self.flash.is_interrupt_rd_lvl_set(),
+            "Bitfield RD_LVL in register INTR_STATE must be cleared after operation completion",
+        );
+
+        assert!(
+            !self.flash.is_interrupt_rd_full_set(),
+            "Bitfield RD_FULL in register INTR_STATE must be cleared after operation completion",
+        );
+
+        assert!(
+            !self.flash.is_interrupt_prog_lvl_set(),
+            "Bitfield PROG_LVL in register INTR_STATE must be cleared after operation completion",
+        );
+
+        assert!(
+            !self.flash.is_interrupt_prog_empty_set(),
+            "Bitfield PROG_EMPTY in register INTR_STATE must be cleared after operation completion",
+        );
+    }
+
+    fn check_interrupt_enable_clean_value(&self) {
+        assert!(
+            self.flash.is_interrupt_corr_err_enabled(),
+            "Bitfield CORR_ERR in register INTR_ENABLE must be set after operation completion",
+        );
+
+        assert!(
+            self.flash.is_interrupt_op_done_enabled(),
+            "Bitfield OP_DONE in register INTR_ENABLE must be set after operation completion",
+        );
+
+        assert!(
+            !self.flash.is_interrupt_rd_lvl_enabled(),
+            "Bitfield RD_LVL in register INTR_ENABLE must be cleared after operation completion",
+        );
+
+        assert!(
+            !self.flash.is_interrupt_rd_full_enabled(),
+            "Bitfield RD_FULL in register INTR_ENABLE must be cleared after operation completion",
+        );
+
+        assert!(
+            !self.flash.is_interrupt_prog_lvl_enabled(),
+            "Bitfield PROG_LVL in register INTR_ENABLE must be cleared after operation completion",
+        );
+
+        assert!(
+            !self.flash.is_interrupt_prog_empty_enabled(),
+            "Bitfield PROG_EMPTY in register INTR_ENABLE must be cleared after operation completion",
+        );
+    }
+
+    fn check_interrupt_clean_value(&self) {
+        self.check_interrupt_state_clean_value();
+        self.check_interrupt_enable_clean_value();
+    }
+
+    fn check_registers_clean_value(&self) {
+        self.check_op_status_clean_value();
+        self.check_err_code_clean_value();
+        self.check_status_clean_value();
+        self.check_control_clean_value();
+        self.check_interrupt_clean_value();
+    }
+
+    fn check_clean_state(&self) {
+        self.check_registers_clean_value();
+
+        assert_eq!(
+            BusyStatus::NotBusy,
+            self.flash.is_busy(),
+            "The flash peripheral must not be busy after operation completion"
+        );
+    }
+
+    pub(self) fn execute_next_test(&self) {
+        match self.get_current_test_case() {
+            TestState::InitialState => {
+                print_test_header("data memory protection lock");
+                self.test_data_memory_protection_lock(DataMemoryProtectionRegionIndex::Index0);
+                print_test_footer("data memory protection lock");
+
+                print_test_header("info0 memory protection lock");
+                self.test_info_memory_protection_lock(InfoMemoryProtectionRegionIndex::Type0(
+                    Info0MemoryProtectionRegionIndex::Bank1(Info0PageIndex::Index9),
+                ));
+                print_test_footer("info0 memory protection lock");
+
+                print_test_header("info1 memory protection lock");
+                self.test_info_memory_protection_lock(InfoMemoryProtectionRegionIndex::Type1(
+                    Info1MemoryProtectionRegionIndex::Bank0(Info1PageIndex::Index0),
+                ));
+                print_test_footer("info1 memory protection lock");
+
+                print_test_header("info2 memory protection lock");
+                self.test_info_memory_protection_lock(InfoMemoryProtectionRegionIndex::Type2(
+                    Info2MemoryProtectionRegionIndex::Bank1(Info2PageIndex::Index1),
+                ));
+                print_test_footer("info2 memory protection lock");
+
+                let page_number = MAX_DATA_PAGE_INDEX.get() as usize * 3;
+                print_test_header("page erase with invalid page number");
+                self.test_invalid_erase_page_number(page_number);
+                print_test_footer("page erase with invalid page number");
+
+                print_test_header("valid page erase");
+                self.state.set(TestState::TestDataErase);
+                let last_page_position = *self.page_position_range.end();
+                self.test_erase_data_page(last_page_position);
+            }
+            TestState::TestDataErase => {
+                println!("\r\nFinished all tests. Everything is alright!\r\n");
+            }
+        }
+    }
+}
+
+fn is_slice_filled_with(slice: &[u8], filling_byte: u8) -> bool {
+    for &byte in slice {
+        if byte != filling_byte {
+            return false;
+        }
+    }
+
+    true
+}
+
+use kernel::hil::flash::Error;
+
+impl<'a> FlashClientTrait<FlashCtrl<'a>> for TestClient<'a> {
+    fn read_complete(&self, read_page: &'static mut FlashPage<'a>, result: Result<(), Error>) {
+        unimplemented!();
+    }
+
+    fn write_complete(&self, write_page: &'static mut FlashPage<'a>, result: Result<(), Error>) {
+        unimplemented!();
+    }
+
+    fn erase_complete(&self, result: Result<(), Error>) {
+        self.check_clean_state();
+
+        match &result {
+            ok @ Ok(()) => print_test_info!("Erase completed: {:?}", ok),
+            error => print_test_info!("Erase completed: {:?}", error),
+        }
+
+        match self.get_current_test_case() {
+            TestState::TestDataErase => {
+                self.check_successful_data_erase(result);
+                print_test_footer("valid page erase");
+                self.execute_next_test();
+            }
+            state => panic!(
+                "info_erase_complete() must not be triggered for state {:?}",
+                state
+            ),
+        }
+    }
+}
+
 fn convert_address_to_page_position(
     host_address: *const u8,
 ) -> Result<DataPagePosition, InvalidHostAddressError> {
@@ -116,7 +1152,50 @@ pub fn convert_flash_slice_to_page_position_range(
     Ok(RangeInclusive::new(start_page_number, end_page_number))
 }
 
-pub fn run_all(uart: &'static Uart<'static>) {
+fn test_memory_protection_region0(
+    flash: &FlashCtrl<'_>,
+    memory_protection_region_index: DataMemoryProtectionRegionIndex,
+) {
+    print_test_header("Memory protection region 0 configuration");
+
+    assert!(
+        flash.is_data_region_read_enabled(memory_protection_region_index),
+        "Memory protection region 0 must have read enabled. This can be either an implementation bug or wrong memory protection configuration in board file."
+    );
+
+    assert!(
+        flash.is_data_region_write_enabled(memory_protection_region_index),
+        "Memory protection region 0 must have write enabled. This can be either an implementation bug or wrong memory protection configuration in board file."
+    );
+
+    assert!(
+        flash.is_data_region_erase_enabled(memory_protection_region_index),
+        "Memory protection region 0 must have erase enabled. This can be either an implementation bug or wrong memory protection configuration in board file."
+    );
+
+    assert!(
+        !flash.is_data_region_scramble_enabled(memory_protection_region_index),
+        "Memory protection region 0 must have scramble disabled. This can be either an implementation bug or wrong memory protection configuration in board file."
+    );
+
+    assert!(
+        !flash.is_data_region_ecc_enabled(memory_protection_region_index),
+        "Memory protection region 0 must have ecc disabled. This can be either an implementation bug or wrong memory protection configuration in board file."
+    );
+
+    assert!(
+        flash.is_data_region_high_endurance_enabled(memory_protection_region_index),
+        "Memory protection region 0 must have high_endurance enabled. This can be either an implementation bug or wrong memory protection configuration in board file."
+    );
+
+    print_test_footer("Memory protection region 0 configuration");
+}
+
+pub fn run_all(
+    flash: &'static FlashCtrl<'static>,
+    test_client: &'static TestClient<'static>,
+    uart: &'static Uart<'static>,
+) {
     // SAFETY: Tock is mono threaded, so mutating a static variable is safe.
     unsafe { TEST_WRITER.set_uart(uart) };
 
@@ -126,4 +1205,8 @@ pub fn run_all(uart: &'static Uart<'static>) {
     super::memory_protection::tests::run_all();
     super::flash_address::tests::run_all();
     super::chunk::tests::run_all();
+
+    test_memory_protection_region0(flash, DataMemoryProtectionRegionIndex::Index0);
+    flash.set_client(test_client);
+    test_client.execute_next_test();
 }
