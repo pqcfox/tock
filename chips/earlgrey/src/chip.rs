@@ -47,7 +47,7 @@ pub struct EarlGreyDefaultPeripherals<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyP
     pub i2c0: lowrisc::i2c::I2c<'a>,
     pub spi_host0: lowrisc::spi_host::SpiHost<'a>,
     pub spi_host1: lowrisc::spi_host::SpiHost<'a>,
-    //pub flash_ctrl: lowrisc::flash_ctrl::FlashCtrl<'a>,
+    pub flash_ctrl: crate::flash_ctrl::FlashCtrl,
     pub rng: lowrisc::csrng::CsRng<'a>,
     pub watchdog: lowrisc::aon_timer::AonTimer,
     _cfg: PhantomData<CFG>,
@@ -57,7 +57,9 @@ pub struct EarlGreyDefaultPeripherals<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyP
 impl<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig>
     EarlGreyDefaultPeripherals<'a, CFG, PINMUX>
 {
-    pub fn new() -> Self {
+    pub fn new(
+        flash_memory_protection_configuration: crate::flash_ctrl::MemoryProtectionConfiguration,
+    ) -> Self {
         Self {
             aes: crate::aes::Aes::new(),
             hmac: lowrisc::hmac::Hmac::new(crate::hmac::HMAC0_BASE),
@@ -74,12 +76,7 @@ impl<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig>
                 crate::spi_host::SPIHOST1_BASE,
                 CFG::CPU_FREQ,
             ),
-            /*
-            flash_ctrl: lowrisc::flash_ctrl::FlashCtrl::new(
-                crate::flash_ctrl::FLASH_CTRL_BASE,
-                lowrisc::flash_ctrl::FlashRegion::REGION0,
-            ),
-            */
+            flash_ctrl: crate::flash_ctrl::FlashCtrl::new(flash_memory_protection_configuration),
             rng: lowrisc::csrng::CsRng::new(crate::csrng::CSRNG_BASE),
             watchdog: lowrisc::aon_timer::AonTimer::new(
                 crate::aon_timer::AON_TIMER_BASE,

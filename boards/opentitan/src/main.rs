@@ -22,6 +22,7 @@ use capsules_core::virtualizers::virtual_aes_ccm;
 use capsules_core::virtualizers::virtual_alarm::{MuxAlarm, VirtualMuxAlarm};
 use earlgrey::chip::EarlGreyDefaultPeripherals;
 use earlgrey::chip_config::EarlGreyConfig;
+use earlgrey::flash_ctrl;
 use earlgrey::pinmux_config::EarlGreyPinmuxConfig;
 use kernel::capabilities;
 use kernel::component::Component;
@@ -39,6 +40,7 @@ use kernel::utilities::registers::interfaces::ReadWriteable;
 use kernel::{create_capability, debug, static_init};
 use lowrisc::flash_ctrl::FlashMPConfig;
 use rv32i::csr;
+use core::num::NonZeroU16;
 
 pub mod io;
 mod otbn;
@@ -296,38 +298,126 @@ impl KernelResources<EarlGreyChip> for EarlGrey {
     }
 }
 
+// These symbols are defined in the linker script.
+extern "C" {
+    /// Beginning of the ROM region containing app images.
+    static _sapps: u8;
+    /// End of the ROM region containing app images.
+    static _eapps: u8;
+    /// Beginning of the RAM region for app memory.
+    static mut _sappmem: u8;
+    /// End of the RAM region for app memory.
+    static _eappmem: u8;
+    /// The start of the kernel text (Included only for kernel PMP)
+    static _stext: u8;
+    /// The end of the kernel text (Included only for kernel PMP)
+    static _etext: u8;
+    /// The start of the kernel / app / storage flash (Included only for kernel PMP)
+    static _sflash: u8;
+    /// The end of the kernel / app / storage flash (Included only for kernel PMP)
+    static _eflash: u8;
+    /// The start of the kernel / app RAM (Included only for kernel PMP)
+    static _ssram: u8;
+    /// The end of the kernel / app RAM (Included only for kernel PMP)
+    static _esram: u8;
+    /// The start of the OpenTitan manifest
+    static _manifest: u8;
+}
+
+// Set this variable to true if tests are needed to be run
+const FLASH_TESTS_ENABLED: bool = false;
+
+fn get_flash_default_memory_protection_region() -> flash_ctrl::DefaultMemoryProtectionRegion {
+    flash_ctrl::DefaultMemoryProtectionRegion::new()
+}
+
+fn get_flash_memory_protection_configuration() -> flash_ctrl::MemoryProtectionConfiguration {
+    let flash_default_memory_protection_region = get_flash_default_memory_protection_region();
+
+    if FLASH_TESTS_ENABLED {
+        let page_index_range =
+            earlgrey::flash_ctrl::tests::convert_flash_slice_to_page_position_range(unsafe {
+                core::slice::from_raw_parts(
+                    &_sapps as *const u8,
+                    &_eapps as *const u8 as usize - &_sapps as *const u8 as usize,
+                )
+            })
+            .unwrap();
+
+        use earlgrey::flash_ctrl::DataMemoryProtectionRegionBase;
+        use earlgrey::flash_ctrl::DataMemoryProtectionRegionSize;
+
+        let memory_protection_page0_base =
+            DataMemoryProtectionRegionBase::new(*page_index_range.end());
+
+        const RAW_MEMORY_PROTECTION_PAGE0_SIZE: NonZeroU16 = match NonZeroU16::new(1) {
+            Some(non_zero_u16) => non_zero_u16,
+            None => unreachable!(),
+        };
+
+        const MEMORY_PROTECTION_PAGE0_SIZE: DataMemoryProtectionRegionSize =
+            match DataMemoryProtectionRegionSize::new(RAW_MEMORY_PROTECTION_PAGE0_SIZE) {
+                Ok(memory_protection_page0_size) => memory_protection_page0_size,
+                Err(()) => unreachable!(),
+            };
+
+        flash_ctrl::MemoryProtectionConfiguration::new(flash_default_memory_protection_region)
+            .enable_and_configure_data_region(
+                flash_ctrl::DataMemoryProtectionRegionIndex::Index0,
+                memory_protection_page0_base,
+                MEMORY_PROTECTION_PAGE0_SIZE,
+            )
+            .enable_erase()
+            .enable_write()
+            .enable_read()
+            .enable_high_endurance()
+            .finalize_region()
+            .enable_and_configure_info2_region(
+                flash_ctrl::tests::VALID_INFO2_MEMORY_PROTECTION_REGION_INDEX,
+            )
+            .enable_erase()
+            .enable_write()
+            .enable_read()
+            .enable_high_endurance()
+            .finalize_region()
+    } else {
+        // SAFETY: &_stext represents a valid flash address in the host address space.
+        let starting_address =
+            flash_ctrl::FlashAddress::new_from_host_address(unsafe { &_stext as *const u8 })
+                .unwrap();
+        // SAFETY: &_etext represents a valid flash address in the host address space.
+        let ending_address =
+            flash_ctrl::FlashAddress::new_from_host_address(unsafe { &_etext as *const u8 })
+                .unwrap();
+
+        flash_ctrl::MemoryProtectionConfiguration::new(flash_default_memory_protection_region)
+            // Setup flash memory protection for the kernel
+            .enable_and_configure_data_region_from_pointers(
+                flash_ctrl::DataMemoryProtectionRegionIndex::Index0,
+                starting_address,
+                ending_address,
+                // This can only panic if FlashAddress(_stext) < FlashAddress(_etext), which would
+                // occur only due to a linker script
+            )
+            .unwrap()
+            .enable_read()
+            .finalize_region()
+            .enable_and_configure_info2_region(flash_ctrl::Info2MemoryProtectionRegionIndex::Bank1(
+                flash_ctrl::Info2PageIndex::Index1,
+            ))
+            .enable_read()
+            .enable_write()
+            .enable_erase()
+            .finalize_region()
+    }
+}
+
 unsafe fn setup() -> (
     &'static kernel::Kernel,
     &'static EarlGrey,
     &'static EarlGreyChip,
     &'static EarlGreyDefaultPeripherals<'static, ChipConfig, BoardPinmuxLayout>,
 ) {
-    // These symbols are defined in the linker script.
-    extern "C" {
-        /// Beginning of the ROM region containing app images.
-        static _sapps: u8;
-        /// End of the ROM region containing app images.
-        static _eapps: u8;
-        /// Beginning of the RAM region for app memory.
-        static mut _sappmem: u8;
-        /// End of the RAM region for app memory.
-        static _eappmem: u8;
-        /// The start of the kernel text (Included only for kernel PMP)
-        static _stext: u8;
-        /// The end of the kernel text (Included only for kernel PMP)
-        static _etext: u8;
-        /// The start of the kernel / app / storage flash (Included only for kernel PMP)
-        static _sflash: u8;
-        /// The end of the kernel / app / storage flash (Included only for kernel PMP)
-        static _eflash: u8;
-        /// The start of the kernel / app RAM (Included only for kernel PMP)
-        static _ssram: u8;
-        /// The end of the kernel / app RAM (Included only for kernel PMP)
-        static _esram: u8;
-        /// The start of the OpenTitan manifest
-        static _manifest: u8;
-    }
-
     // Ibex-specific handler
     earlgrey::chip::configure_trap_handler();
 
@@ -386,9 +476,11 @@ unsafe fn setup() -> (
 
     let board_kernel = static_init!(kernel::Kernel, kernel::Kernel::new(&PROCESSES));
 
+    let flash_memory_protection_configuration = get_flash_memory_protection_configuration();
+
     let peripherals = static_init!(
         EarlGreyDefaultPeripherals<ChipConfig, BoardPinmuxLayout>,
-        EarlGreyDefaultPeripherals::new()
+        EarlGreyDefaultPeripherals::new(flash_memory_protection_configuration)
     );
     peripherals.init();
 
@@ -896,7 +988,11 @@ pub unsafe fn main() {
 
     #[cfg(not(test))]
     {
-        let (board_kernel, earlgrey, chip, _peripherals) = setup();
+        let (board_kernel, earlgrey, chip, peripherals) = setup();
+
+        if FLASH_TESTS_ENABLED {
+            flash_ctrl::tests::run_all(&peripherals.uart0);
+        }
 
         let main_loop_cap = create_capability!(capabilities::MainLoopCapability);
 

@@ -19,6 +19,7 @@ pub mod tests;
 
 pub use bank::{Bank, DATA_PAGES_PER_BANK};
 pub use flash_address::FlashAddress;
+pub use flash_ctrl::FlashCtrl;
 pub use memory_protection::{
     DataMemoryProtectionRegionBase, DataMemoryProtectionRegionIndex,
     DataMemoryProtectionRegionSize, DefaultMemoryProtectionRegion,

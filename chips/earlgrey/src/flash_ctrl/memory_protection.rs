@@ -330,7 +330,7 @@ impl DataMemoryProtectionRegionBase {
 pub struct DataMemoryProtectionRegionSize(NonZeroU16);
 
 impl DataMemoryProtectionRegionSize {
-    pub(super) const fn new(value: NonZeroU16) -> Result<Self, ()> {
+    pub const fn new(value: NonZeroU16) -> Result<Self, ()> {
         if value.get() > 512 {
             Err(())
         } else {
