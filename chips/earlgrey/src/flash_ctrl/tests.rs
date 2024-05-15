@@ -44,6 +44,7 @@ use core::cell::Cell;
 use core::fmt::Write;
 use core::ops::RangeInclusive;
 
+const WRITE_MESSAGE: &str = "Tock is an awesome operating system!";
 const WRITE_FILL_BYTE_VALUE: u8 = 0x00;
 const ERASE_BYTE_VALUE: u8 = 0xFF;
 // The position of an info2 page which has read, write and erase enabled.
@@ -127,6 +128,33 @@ type FlashPage<'a> = <FlashCtrl<'a> as FlashTrait>::Page;
 enum TestState {
     InitialState,
     TestDataErase,
+    TestDataWrite,
+}
+
+#[derive(PartialEq, Eq, Debug)]
+enum SliceCompareResult {
+    Equal,
+    Different,
+}
+
+fn check_page_content(page_content: &[u8; EARLGREY_PAGE_SIZE.get()], message: &str) {
+    let message_length = message.len();
+    // split_at() can panic only for large messages, which is not the case for these test cases
+    let (page_content_message_slice, page_content_fill_slice) =
+        page_content.split_at(message_length);
+    assert_eq!(
+        true,
+        page_content_message_slice == message.as_bytes(),
+        "Expected message {:?}, found {:?}",
+        message.as_bytes(),
+        page_content_message_slice
+    );
+
+    assert!(
+        is_slice_filled_with(page_content_fill_slice, WRITE_FILL_BYTE_VALUE),
+        "Page read should read all bytes past the message as {:#x}",
+        ERASE_BYTE_VALUE
+    );
 }
 
 // SAFETY: The caller must ensure that a previous mutable reference pointing to the same host page
@@ -140,6 +168,13 @@ unsafe fn convert_data_page_position_to_host_array<'a>(
         + page_number * EARLGREY_PAGE_SIZE.get()) as *mut u8;
 
     &mut *host_ptr.cast::<[u8; EARLGREY_PAGE_SIZE.get()]>()
+}
+
+fn copy_message_and_fill_to_page<'a>(page: &'a mut FlashPage<'a>, message: &str) {
+    // copy_from_slice cannot panic since the subslice has the length message.len()
+    let page_array: &mut [u8; EARLGREY_PAGE_SIZE.get()] = page.as_mut();
+    page_array[..message.len()].copy_from_slice(message.as_bytes());
+    page_array[message.len()..].fill(WRITE_FILL_BYTE_VALUE);
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -549,6 +584,7 @@ pub struct TestClient<'a> {
     state: Cell<TestState>,
     page_position_range: RangeInclusive<DataPagePosition>,
     current_data_test_page_position: Cell<DataPagePosition>,
+    current_test_message: OptionalCell<&'a str>,
 }
 
 impl<'a> TestClient<'a> {
@@ -565,6 +601,7 @@ impl<'a> TestClient<'a> {
             current_data_test_page_position: Cell::new(DataPagePosition::Bank0(
                 DataPageIndex::new(0),
             )),
+            current_test_message: OptionalCell::empty(),
         }
     }
 }
@@ -572,11 +609,30 @@ impl<'a> TestClient<'a> {
 type FlashReturnType<'a> = Result<(), (ErrorCode, &'static mut FlashPage<'a>)>;
 
 impl<'a> TestClient<'a> {
+    fn print_info_result_read_write(result: &FlashReturnType<'a>) {
+        match result {
+            Ok(()) => print_test_info!("Peripheral returned OK"),
+            Err((error_code, _page)) => print_test_info!("Peripheral returned {:?}", error_code),
+        }
+    }
+
     fn print_info_result_erase(result: &Result<(), ErrorCode>) {
         match result {
             Ok(()) => print_test_info!("Peripheral returned OK"),
             Err(error_code) => print_test_info!("Peripheral returned {:?}", error_code),
         }
+    }
+
+    fn raw_write_page(
+        &self,
+        page_number: usize,
+        page: &'static mut FlashPage<'a>,
+    ) -> FlashReturnType {
+        print_test_info!("Attempting to write page number {}", page_number);
+        let result = self.flash.write_page(page_number, page);
+        Self::print_info_result_read_write(&result);
+
+        result
     }
 
     fn raw_erase_data_page(&self, page_number: usize) -> Result<(), ErrorCode> {
@@ -772,6 +828,39 @@ impl<'a> TestClient<'a> {
         );
     }
 
+    fn test_invalid_write(
+        &self,
+        page_number: usize,
+        page: &'static mut FlashPage<'static>,
+        expected_error_code: ErrorCode,
+    ) -> &'static mut FlashPage<'static> {
+        let result = self.raw_write_page(page_number, page);
+
+        let (error_code, page) = match result {
+            Ok(()) => panic!(
+                "Attempting to write the page number {:?} must fail",
+                page_number
+            ),
+            Err(result) => result,
+        };
+
+        assert_eq!(
+            expected_error_code, error_code,
+            "flash.write_page() must return {:?} as error code",
+            expected_error_code,
+        );
+
+        page
+    }
+
+    fn test_invalid_write_page_number(
+        &self,
+        page_number: usize,
+        page: &'static mut FlashPage<'static>,
+    ) -> &'static mut FlashPage<'static> {
+        self.test_invalid_write(page_number, page, ErrorCode::INVAL)
+    }
+
     fn test_invalid_erase(&self, page_number: usize, expected_error_code: ErrorCode) {
         let result = self.raw_erase_data_page(page_number);
 
@@ -802,6 +891,38 @@ impl<'a> TestClient<'a> {
         self.current_data_test_page_position.get()
     }
 
+    fn write_message(&self, page_position: DataPagePosition, message: &'a str) {
+        print_test_info!(
+            "writing page with index {:?} and message \"{}\"",
+            page_position,
+            message
+        );
+
+        self.set_current_test_message(message);
+        let page_number = convert_data_page_position_to_page_number(page_position);
+        let page = self.take_page();
+        copy_message_and_fill_to_page(page, message);
+        let result = self.raw_write_page(page_number, page);
+        if let Err((error_code, _page)) = result {
+            panic!(
+                "Writing page number {} must succeed, but instead failed with error {:?}",
+                page_number, error_code
+            );
+        }
+    }
+
+    fn set_current_test_message(&self, message: &'a str) {
+        self.current_test_message.set(message);
+    }
+
+    fn take_current_test_message(&self) -> &'a str {
+        self.current_test_message.take().unwrap()
+    }
+
+    fn test_write_page(&self, page_position: DataPagePosition) {
+        self.write_message(page_position, WRITE_MESSAGE);
+    }
+
     fn test_erase_data_page(&self, page_position: DataPagePosition) {
         let page_number = convert_data_page_position_to_page_number(page_position);
         self.set_current_data_test_page_position(page_position);
@@ -812,6 +933,30 @@ impl<'a> TestClient<'a> {
                 page_number, error_code
             );
         }
+    }
+
+    fn check_successful_data_write(
+        &self,
+        write_page: &'static mut FlashPage<'a>,
+        result: Result<(), Error>,
+    ) {
+        assert!(
+            result.is_ok(),
+            "Write must succeed for test case {:?}",
+            self.get_current_test_case()
+        );
+
+        let current_data_test_page_position = self.get_current_data_test_page_position();
+        // SAFETY: The reference goes out of scope by the end of the current function and since
+        // check_successful_data_erase() cannot be called twice at the same time because the flash
+        // controller does not support concurrent operations, the call to
+        // convert_data_page_position_to_host_array() is safe.
+        let host_array =
+            unsafe { convert_data_page_position_to_host_array(current_data_test_page_position) };
+        let written_message = self.take_current_test_message();
+        check_page_content(host_array, written_message);
+
+        self.set_page(write_page);
     }
 
     fn check_successful_data_erase(&self, result: Result<(), Error>) {
@@ -1073,6 +1218,12 @@ impl<'a> TestClient<'a> {
                 print_test_footer("info2 memory protection lock");
 
                 let page_number = MAX_DATA_PAGE_INDEX.get() as usize * 3;
+                let mut page = self.take_page();
+                print_test_header("page write with invalid page number");
+                page = self.test_invalid_write_page_number(page_number, page);
+                print_test_footer("page write with invalid page number");
+                self.set_page(page);
+
                 print_test_header("page erase with invalid page number");
                 self.test_invalid_erase_page_number(page_number);
                 print_test_footer("page erase with invalid page number");
@@ -1083,6 +1234,14 @@ impl<'a> TestClient<'a> {
                 self.test_erase_data_page(last_page_position);
             }
             TestState::TestDataErase => {
+                print_test_header("valid page write");
+
+                self.state.set(TestState::TestDataWrite);
+                // From the last test, current_data_test_page_position is END
+                let current_data_test_page_position = self.current_data_test_page_position.get();
+                self.test_write_page(current_data_test_page_position);
+            }
+            TestState::TestDataWrite => {
                 println!("\r\nFinished all tests. Everything is alright!\r\n");
             }
         }
@@ -1107,7 +1266,24 @@ impl<'a> FlashClientTrait<FlashCtrl<'a>> for TestClient<'a> {
     }
 
     fn write_complete(&self, write_page: &'static mut FlashPage<'a>, result: Result<(), Error>) {
-        unimplemented!();
+        self.check_clean_state();
+
+        match &result {
+            ok @ Ok(()) => print_test_info!("Write completed: {:?}", ok),
+            error => print_test_info!("Write completed: {:?}", error),
+        }
+
+        match self.get_current_test_case() {
+            TestState::TestDataWrite => {
+                self.check_successful_data_write(write_page, result);
+                print_test_footer("valid page write");
+                self.execute_next_test();
+            }
+            state => panic!(
+                "write_complete() must not be triggered for state {:?}",
+                state
+            ),
+        }
     }
 
     fn erase_complete(&self, result: Result<(), Error>) {
