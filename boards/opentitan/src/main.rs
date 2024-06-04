@@ -22,22 +22,28 @@ use capsules_core::virtualizers::virtual_aes_ccm;
 use capsules_core::virtualizers::virtual_alarm::{MuxAlarm, VirtualMuxAlarm};
 use earlgrey::chip::EarlGreyDefaultPeripherals;
 use earlgrey::chip_config::EarlGreyConfig;
+use earlgrey::pinmux::{Pad, SelectInput, SelectOutput};
 use earlgrey::pinmux_config::EarlGreyPinmuxConfig;
+use earlgrey::registers::top_earlgrey::{MuxedPads, PinmuxInsel, PinmuxOutsel, PinmuxPeripheralIn};
 use kernel::capabilities;
 use kernel::component::Component;
 use kernel::hil;
 use kernel::hil::entropy::Entropy32;
+use kernel::hil::gpio::Configure;
+use kernel::hil::gpio::FloatingState;
 use kernel::hil::hasher::Hasher;
 use kernel::hil::i2c::I2CMaster;
 use kernel::hil::led::LedHigh;
 use kernel::hil::rng::Rng;
 use kernel::hil::symmetric_encryption::AES128;
+use kernel::hil::time::{Ticks, Time};
 use kernel::platform::scheduler_timer::VirtualSchedulerTimer;
 use kernel::platform::{KernelResources, SyscallDriverLookup, TbfHeaderFilterDefaultAllow};
 use kernel::scheduler::priority::PrioritySched;
 use kernel::utilities::registers::interfaces::ReadWriteable;
 use kernel::{create_capability, debug, static_init};
 use lowrisc::flash_ctrl::FlashMPConfig;
+use lowrisc::sysrst_ctrl::{SRCKeyInterruptConfig, SRCWakeupConfig};
 use rv32i::csr;
 
 pub mod io;
@@ -540,6 +546,8 @@ unsafe fn setup() -> (
 
     peripherals.i2c0.set_master_client(i2c_master);
 
+    let a = hardware_alarm.now();
+
     //SPI
     let mux_spi = components::spi::SpiMuxComponent::new(&peripherals.spi_host0).finalize(
         components::spi_mux_component_static!(lowrisc::spi_host::SpiHost),
@@ -833,6 +841,108 @@ unsafe fn setup() -> (
     let scheduler = components::sched::priority::PriorityComponent::new(board_kernel)
         .finalize(components::priority_component_static!());
     let watchdog = &peripherals.watchdog;
+
+    let key0_pad = MuxedPads::Ioa2;
+    let pwrb_pad = MuxedPads::Ioa5;
+    let key0_force = MuxedPads::Ioa6;
+    let pwrb_force = MuxedPads::Ioc12;
+
+    peripherals
+        .sysreset
+        .configure_keyinterrupt(SRCKeyInterruptConfig {
+            debounce_timer_us: 1000,
+            pwrb_H2L: false,
+            pwrb_L2H: false,
+            key0_H2L: true,
+            key0_L2H: true,
+            key1_H2L: false,
+            key1_L2H: false,
+            key2_H2L: false,
+            key2_L2H: false,
+            ac_present_H2L: false,
+            ac_present_L2H: false,
+            ec_reset_H2L: false,
+            ec_reset_L2H: false,
+            flash_wp_H2L: false,
+            flash_wp_L2H: false,
+        });
+
+    kernel::debug!(
+        "INIT K{} P{}",
+        peripherals
+            .sysreset
+            .get_input_pin_state(&lowrisc::sysrst_ctrl::SRCInputPin::Key0),
+        peripherals
+            .sysreset
+            .get_input_pin_state(&lowrisc::sysrst_ctrl::SRCInputPin::Pwrb),
+    );
+
+    kernel::debug!(
+        "in{} out {} ",
+        peripherals.sysreset.get_all_input_pins_state(),
+        peripherals.sysreset.get_all_output_pins_state(),
+    );
+
+    // check that the pins have been correctly routed
+    assert_eq!(key0_force.get_selector(), PinmuxOutsel::GpioGpio2);
+    assert_eq!(pwrb_force.get_selector(), PinmuxOutsel::GpioGpio20);
+    assert_eq!(key0_pad.get_selector(), PinmuxOutsel::ConstantHighZ);
+    assert_eq!(pwrb_pad.get_selector(), PinmuxOutsel::ConstantHighZ);
+
+    assert_eq!(
+        PinmuxPeripheralIn::SysrstCtrlAonKey0In.get_selector(),
+        key0_pad.into()
+    );
+    assert_eq!(
+        PinmuxPeripheralIn::SysrstCtrlAonPwrbIn.get_selector(),
+        pwrb_pad.into()
+    );
+
+    key0_force.connect_low();
+    pwrb_force.connect_low();
+
+    kernel::debug!(
+        "LOW K{} P{}",
+        peripherals
+            .sysreset
+            .get_input_pin_state(&lowrisc::sysrst_ctrl::SRCInputPin::Key0),
+        peripherals
+            .sysreset
+            .get_input_pin_state(&lowrisc::sysrst_ctrl::SRCInputPin::Pwrb),
+    );
+    kernel::debug!(
+        "in{} out {} ",
+        peripherals.sysreset.get_all_input_pins_state(),
+        peripherals.sysreset.get_all_output_pins_state(),
+    );
+
+    key0_force.connect_high();
+    pwrb_force.connect_high();
+
+    for index in 0..10 {
+        kernel::debug!(
+            "HIGH K{} P{}",
+            peripherals
+                .sysreset
+                .get_input_pin_state(&lowrisc::sysrst_ctrl::SRCInputPin::Key0),
+            peripherals
+                .sysreset
+                .get_input_pin_state(&lowrisc::sysrst_ctrl::SRCInputPin::Pwrb),
+        );
+
+        kernel::debug!(
+            "in{} out {} intr{}",
+            peripherals.sysreset.get_all_input_pins_state(),
+            peripherals.sysreset.get_all_output_pins_state(),
+            peripherals.sysreset.key_interrupt_status(),
+        );
+    }
+
+    for index in (0..0xAC).step_by(4) {
+        let p = (0x40430000 + index) as *const u32;
+        let value = core::ptr::read(p);
+        kernel::debug!("{:x}: {:x} {:b}", index, value, value);
+    }
 
     let earlgrey = static_init!(
         EarlGrey,

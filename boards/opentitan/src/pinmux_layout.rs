@@ -21,7 +21,7 @@ impl EarlGreyPinmuxConfig for BoardPinmuxLayout {
     /// Array of input selector initial configurations
     #[rustfmt::skip]
     const INPUT: &'static [PinmuxInsel; INPUT_NUM] = &[
-        In::Ioa2,         // GpioGpio0
+        In::ConstantZero,         // GpioGpio0
         In::Ioa3,         // GpioGpio1
         In::Ioa6,         // GpioGpio2
         In::Iob0,         // GpioGpio3
@@ -41,7 +41,7 @@ impl EarlGreyPinmuxConfig for BoardPinmuxLayout {
         In::Ioc9,         // GpioGpio17
         In::Ioc10,        // GpioGpio18
         In::Ioc11,        // GpioGpio19
-        In::Ioc12,        // GpioGpio20
+        In::ConstantZero, // GpioGpio20
         In::Ior0,         // GpioGpio21
         In::Ior1,         // GpioGpio22
         In::Ior2,         // GpioGpio23
@@ -55,7 +55,7 @@ impl EarlGreyPinmuxConfig for BoardPinmuxLayout {
         In::Ior12,        // GpioGpio31
         In::Ioa7,         // I2c0Sda
         In::Ioa8,         // I2c0Scl
-        In::Iob10,        // I2c1Sda
+        In::Ior6,        // I2c1Sda
         In::Iob9,         // I2c1Scl
         In::Iob11,        // I2c2Sda
         In::Iob12,        // I2c2Scl
@@ -64,7 +64,7 @@ impl EarlGreyPinmuxConfig for BoardPinmuxLayout {
         In::ConstantZero, // SpiHost1Sd2
         In::ConstantZero, // SpiHost1Sd3
         In::Ioa0,         // Uart0Rx
-        In::Ioa4,         // Uart1Rx
+        In::ConstantZero,         // Uart1Rx
         In::Iob4,         // Uart2Rx
         In::Ioc3,         // Uart3Rx
         In::ConstantZero, // SpiDeviceTpmCsb
@@ -72,10 +72,10 @@ impl EarlGreyPinmuxConfig for BoardPinmuxLayout {
         In::ConstantZero, // FlashCtrlTms
         In::ConstantZero, // FlashCtrlTdi
         In::ConstantZero, // SysrstCtrlAonAcPresent
-        In::ConstantZero, // SysrstCtrlAonKey0In
+        In::Ioa2,         // SysrstCtrlAonKey0In
         In::ConstantZero, // SysrstCtrlAonKey1In
         In::ConstantZero, // SysrstCtrlAonKey2In
-        In::ConstantZero, // SysrstCtrlAonPwrbIn
+        In::Ioa5,         // SysrstCtrlAonPwrbIn
         In::ConstantZero, // SysrstCtrlAonLidOpen
         In::ConstantZero, // UsbdevSense
     ];
@@ -86,10 +86,10 @@ impl EarlGreyPinmuxConfig for BoardPinmuxLayout {
         // __________  BANK IOA __________
         Out::ConstantHighZ, // Ioa0 (CW310Hyp Uart_RX / CW310 SAM3X)
         Out::Uart3Tx,       // Ioa1 (CW310Hyp Uart_Tx / CW310 SAM3x)
-        Out::GpioGpio0,     // Ioa2
+        Out::ConstantHighZ, // Ioa2
         Out::GpioGpio1,     // Ioa3
-        Out::ConstantHighZ, // Ioa4
-        Out::Uart1Tx,       // Ioa5
+        Out::SysrstCtrlAonKey0Out, // Ioa4
+        Out::ConstantHighZ, // Ioa5
         Out::GpioGpio2,     // Ioa6
         Out::I2c0Sda,       // Ioa7 I2C0_TPM_SDA
         Out::I2c0Scl,       // Ioa8 I2C0_TPM_SCL
@@ -104,7 +104,7 @@ impl EarlGreyPinmuxConfig for BoardPinmuxLayout {
         Out::GpioGpio8,     // Iob7
         Out::GpioGpio9,     // Iob8
         Out::I2c1Scl,       // Iob9  I2C1_SCL
-        Out::I2c1Sda,       // Iob10 I2C1_SDA
+        Out::ConstantHighZ, // Iob10 I2C1_SDA
         Out::I2c2Sda,       // Iob11 I2C2_SDA
         Out::I2c2Scl,       // Iob12 I2C2_SCL
         // __________ BANK IOC __________
@@ -117,7 +117,7 @@ impl EarlGreyPinmuxConfig for BoardPinmuxLayout {
         Out::GpioGpio14,    // Ioc6
         Out::GpioGpio15,    // Ioc7
         Out::ConstantHighZ, // Ioc8 (TAP STRAP 0)
-        Out::GpioGpio17,    // Ioc9
+        Out::ConstantHighZ, // Ioc9
         Out::GpioGpio18,    // Ioc10
         Out::GpioGpio19,    // Ioc11
         Out::GpioGpio20,    // Ioc12

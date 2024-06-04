@@ -7,7 +7,7 @@
 use crate::chip_config::EarlGreyConfig;
 use crate::registers::top_earlgrey::RV_TIMER_BASE_ADDR;
 use core::marker::PhantomData;
-use kernel::hil::time::{self, Ticks64};
+use kernel::hil::time::{self, Freq10MHz, Freq1MHz, Ticks64};
 use kernel::utilities::cells::OptionalCell;
 use kernel::utilities::registers::interfaces::{Readable, Writeable};
 use kernel::utilities::registers::{register_bitfields, register_structs, ReadWrite, WriteOnly};
@@ -79,7 +79,7 @@ impl<'a, CFG: EarlGreyConfig> RvTimer<'a, CFG> {
     }
 
     pub fn setup(&self) {
-        let prescale: u16 = ((CFG::CPU_FREQ / 10_000) - 1) as u16; // 10Khz
+        let prescale: u16 = ((CFG::CPU_FREQ / 10_000_000) - 1) as u16; // 10Khz
 
         let regs = self.registers;
         // Set proper prescaler and the like
@@ -102,7 +102,7 @@ impl<'a, CFG: EarlGreyConfig> RvTimer<'a, CFG> {
 }
 
 impl<CFG: EarlGreyConfig> time::Time for RvTimer<'_, CFG> {
-    type Frequency = Freq10KHz;
+    type Frequency = Freq10MHz;
     type Ticks = Ticks64;
 
     fn now(&self) -> Ticks64 {

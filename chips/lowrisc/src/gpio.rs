@@ -79,7 +79,7 @@ pub type GpioBitfield = Field<u32, pins::Register>;
 
 pub struct GpioPin<'a, PAD> {
     gpio_registers: StaticRef<GpioRegisters>,
-    padctl: PAD,
+    pub padctl: PAD,
     pin: Field<u32, pins::Register>,
     client: OptionalCell<&'a dyn gpio::Client>,
 }

@@ -50,6 +50,7 @@ pub struct EarlGreyDefaultPeripherals<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyP
     pub flash_ctrl: lowrisc::flash_ctrl::FlashCtrl<'a>,
     pub rng: lowrisc::csrng::CsRng<'a>,
     pub watchdog: lowrisc::aon_timer::AonTimer,
+    pub sysreset: lowrisc::sysrst_ctrl::SysRstCtrl,
     _cfg: PhantomData<CFG>,
     _pinmux: PhantomData<PINMUX>,
 }
@@ -84,6 +85,7 @@ impl<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig>
                 crate::aon_timer::AON_TIMER_BASE,
                 CFG::CPU_FREQ,
             ),
+            sysreset: lowrisc::sysrst_ctrl::SysRstCtrl::new(),
             _cfg: PhantomData,
             _pinmux: PhantomData,
         }

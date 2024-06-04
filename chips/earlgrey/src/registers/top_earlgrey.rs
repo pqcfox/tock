@@ -2272,7 +2272,7 @@ pub const PINMUX_MIO_PERIPH_INSEL_IDX_OFFSET: usize = 2;
 pub const PINMUX_PERIPH_OUTSEL_IDX_OFFSET: usize = 3;
 
 /// Pinmux Peripheral Input.
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
 #[repr(u32)]
 pub enum PinmuxPeripheralIn {
     /// Peripheral Input 0
@@ -2458,7 +2458,7 @@ impl TryFrom<u32> for PinmuxPeripheralIn {
 }
 
 /// Pinmux MIO Input Selector.
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
 #[repr(u32)]
 pub enum PinmuxInsel {
     /// Tie constantly to zero
@@ -2776,7 +2776,7 @@ impl TryFrom<u32> for PinmuxMioOut {
 }
 
 /// Pinmux Peripheral Output Selector.
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
 #[repr(u32)]
 pub enum PinmuxOutsel {
     /// Tie constantly to zero
@@ -3072,7 +3072,7 @@ impl TryFrom<u32> for DirectPads {
 }
 
 /// Muxed Pad Selects
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
 #[repr(u32)]
 pub enum MuxedPads {
     Ioa0 = 0,

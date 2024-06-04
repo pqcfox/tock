@@ -55,7 +55,7 @@ pub enum Pad {
 
 impl Pad {
     /// Extract value of attributes using common layout
-    fn pad_attr(&self) -> PadAttribute {
+    pub fn pad_attr(&self) -> PadAttribute {
         PadAttribute::new(match *self {
             Self::Mio(mio) => PINMUX_BASE.mio_pad_attr[mio as usize].get(),
             Self::Dio(dio) => PINMUX_BASE.dio_pad_attr[dio as usize].get(),
@@ -242,7 +242,7 @@ impl SelectInput for PinmuxPeripheralIn {
 // input selector - PinmuxInsel::ConstantZero
 // <https://opentitan.org/book/hw/ip/pinmux/doc/registers.html#mio_outsel>
 // <https://opentitan.org/book/hw/ip/pinmux/doc/registers.html#mio_periph_insel>
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum PadConfig {
     // Internal Output and input not conected to any pad
     Unconnected,
