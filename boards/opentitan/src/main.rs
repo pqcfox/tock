@@ -32,6 +32,7 @@ use kernel::hil::i2c::I2CMaster;
 use kernel::hil::led::LedHigh;
 use kernel::hil::rng::Rng;
 use kernel::hil::symmetric_encryption::AES128;
+use kernel::hil::usb::Client;
 use kernel::platform::scheduler_timer::VirtualSchedulerTimer;
 use kernel::platform::{KernelResources, SyscallDriverLookup, TbfHeaderFilterDefaultAllow};
 use kernel::scheduler::priority::PrioritySched;
@@ -567,6 +568,33 @@ unsafe fn setup() -> (
     //     &peripherals.usb,
     // )
     // .finalize(components::usb_component_static!(earlgrey::usbdev::Usb));
+
+    // CDC
+    let strings = static_init!(
+        [&str; 3],
+        [
+            "NewAE Technology",             // Manufacturer
+            "ChipWhisperer CW310 - TockOS", // Product
+            "00000000000000000",            // Serial number
+        ]
+    );
+
+    let cdc = components::cdc::CdcAcmComponent::new(
+        &peripherals.usb,
+        capsules_extra::usb::cdc::MAX_CTRL_PACKET_SIZE_EARLGREY,
+        0,
+        0,
+        strings,
+        mux_alarm,
+        None,
+    )
+    .finalize(components::cdc_acm_component_static!(
+        lowrisc::usb::Usb,
+        earlgrey::timer::RvTimer<ChipConfig>,
+    ));
+
+    cdc.enable();
+    cdc.attach();
 
     // Kernel storage region, allocated with the storage_volume!
     // macro in common/utils.rs

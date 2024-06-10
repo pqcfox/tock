@@ -31,9 +31,9 @@ register_structs! {
         /// USB Control
         (0x0010 => pub(crate) usbctrl: ReadWrite<u32, USBCTRL::Register>),
         /// Enable an endpoint to respond to transactions in the downstream direction.
-        (0x0014 => pub(crate) ep_out_enable: [ReadWrite<u32, EP_OUT_ENABLE::Register>; 1]),
+        (0x0014 => pub(crate) ep_out_enable: ReadWrite<u32, EP_OUT_ENABLE::Register>),
         /// Enable an endpoint to respond to transactions in the upstream direction.
-        (0x0018 => pub(crate) ep_in_enable: [ReadWrite<u32, EP_IN_ENABLE::Register>; 1]),
+        (0x0018 => pub(crate) ep_in_enable: ReadWrite<u32, EP_IN_ENABLE::Register>),
         /// USB Status
         (0x001c => pub(crate) usbstat: ReadWrite<u32, USBSTAT::Register>),
         /// Available Buffer FIFO
@@ -41,9 +41,9 @@ register_structs! {
         /// Received Buffer FIFO
         (0x0024 => pub(crate) rxfifo: ReadWrite<u32, RXFIFO::Register>),
         /// Receive SETUP transaction enable
-        (0x0028 => pub(crate) rxenable_setup: [ReadWrite<u32, RXENABLE_SETUP::Register>; 1]),
+        (0x0028 => pub(crate) rxenable_setup: ReadWrite<u32, RXENABLE_SETUP::Register>),
         /// Receive OUT transaction enable
-        (0x002c => pub(crate) rxenable_out: [ReadWrite<u32, RXENABLE_OUT::Register>; 1]),
+        (0x002c => pub(crate) rxenable_out: ReadWrite<u32, RXENABLE_OUT::Register>),
         /// Set NAK after OUT transactions
         (0x0030 => pub(crate) set_nak_out: [ReadWrite<u32, SET_NAK_OUT::Register>; 1]),
         /// IN Transaction Sent
