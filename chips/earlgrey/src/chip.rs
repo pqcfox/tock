@@ -50,6 +50,7 @@ pub struct EarlGreyDefaultPeripherals<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyP
     pub flash_ctrl: lowrisc::flash_ctrl::FlashCtrl<'a>,
     pub rng: lowrisc::csrng::CsRng<'a>,
     pub watchdog: lowrisc::aon_timer::AonTimer,
+    pub pattgen: lowrisc::pattgen::PattGen<'a>,
     _cfg: PhantomData<CFG>,
     _pinmux: PhantomData<PINMUX>,
 }
@@ -84,6 +85,7 @@ impl<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig>
                 crate::aon_timer::AON_TIMER_BASE,
                 CFG::CPU_FREQ,
             ),
+            pattgen: lowrisc::pattgen::PattGen::new(crate::pattgen::PATTGEN_BASE),
             _cfg: PhantomData,
             _pinmux: PhantomData,
         }
@@ -128,6 +130,14 @@ impl<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig> InterruptService
             }
             interrupts::SPIHOST1_ERROR..=interrupts::SPIHOST1_SPIEVENT => {
                 self.spi_host1.handle_interrupt()
+            }
+            raw_pattgen_interrupt @ interrupts::PATTGENDONECH0..=interrupts::PATTGENDONECH1 => {
+                // PANIC: raw_pattgen_interrupt is a valid interrupt because of the match arm
+                // CAST: u32 == usize on RV32I
+                let pattgen_interrupt =
+                    lowrisc::pattgen::PattgenInterrupt::try_from(raw_pattgen_interrupt as u32)
+                        .unwrap();
+                self.pattgen.handle_interrupt(pattgen_interrupt);
             }
             interrupts::AON_TIMER_AON_WKUP_TIMER_EXPIRED
                 ..=interrupts::AON_TIMER_AON_WDOG_TIMER_BARK => self.watchdog.handle_interrupt(),
