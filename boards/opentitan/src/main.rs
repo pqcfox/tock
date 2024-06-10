@@ -209,6 +209,7 @@ struct EarlGrey {
             virtual_aes_ccm::VirtualAES128CCM<'static, earlgrey::aes::Aes<'static>>,
         >,
     >,
+    /*
     kv_driver: &'static capsules_extra::kv_driver::KVStoreDriver<
         'static,
         capsules_extra::virtual_kv::VirtualKVPermissions<
@@ -231,6 +232,7 @@ struct EarlGrey {
             >,
         >,
     >,
+    */
     syscall_filter: &'static TbfHeaderFilterDefaultAllow,
     scheduler: &'static PrioritySched,
     scheduler_timer: &'static VirtualSchedulerTimer<
@@ -256,7 +258,7 @@ impl SyscallDriverLookup for EarlGrey {
             capsules_core::spi_controller::DRIVER_NUM => f(Some(self.spi_controller)),
             capsules_core::rng::DRIVER_NUM => f(Some(self.rng)),
             capsules_extra::symmetric_encryption::aes::DRIVER_NUM => f(Some(self.aes)),
-            capsules_extra::kv_driver::DRIVER_NUM => f(Some(self.kv_driver)),
+            //capsules_extra::kv_driver::DRIVER_NUM => f(Some(self.kv_driver)),
             _ => f(None),
         }
     }
@@ -578,6 +580,7 @@ unsafe fn setup() -> (
         static _estorage: u8;
     }
 
+    /*
     // Flash setup memory protection for the ROM/Kernel
     // Only allow reads for this region, any other ops will cause an MP fault
     let mp_cfg = FlashMPConfig {
@@ -603,7 +606,9 @@ unsafe fn setup() -> (
             debug!("Failed to lock memory protection config: {:?}", e);
         }
     }
+    */
 
+    /*
     // Flash
     let flash_ctrl_read_buf = static_init!(
         [u8; lowrisc::flash_ctrl::PAGE_SIZE],
@@ -728,6 +733,7 @@ unsafe fn setup() -> (
             >,
         >
     ));
+    */
 
     let mux_otbn = crate::otbn::AccelMuxComponent::new(&peripherals.otbn)
         .finalize(otbn_mux_component_static!());
@@ -852,7 +858,7 @@ unsafe fn setup() -> (
             i2c_master,
             spi_controller,
             aes,
-            kv_driver,
+            //kv_driver,
             syscall_filter,
             scheduler,
             scheduler_timer,
