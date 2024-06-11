@@ -164,6 +164,8 @@ macro_rules! region_disable_magic_value {
     };
 }
 
+pub(crate) use region_enable_magic_value;
+
 register_bitfields![u32,
     /// Common Interrupt Offsets
     pub(crate) INTR [
@@ -208,7 +210,10 @@ register_bitfields![u32,
             PAGE_ERASE = 0,
             BANK_ERASE = 1,
         ],
-        PARTITION_SEL OFFSET(8) NUMBITS(1) [],
+        PARTITION_SEL OFFSET(8) NUMBITS(1) [
+            DATA = 0,
+            INFO = 1,
+        ],
         INFO_SEL OFFSET(9) NUMBITS(2) [],
         NUM OFFSET(16) NUMBITS(12) [],
     ],

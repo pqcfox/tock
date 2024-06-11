@@ -5,8 +5,10 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // Copyright Tock Contributors 2022.
 
-use super::bank::{BANK_SIZE, DATA_PAGES_PER_BANK, NUMBER_OF_BANKS};
+use super::bank::{Bank, BANK_SIZE, DATA_PAGES_PER_BANK, NUMBER_OF_BANKS};
+use super::chunk::WORDS_PER_CHUNK;
 use super::fifo_level::FifoLevel;
+use super::flash_address::FlashAddress;
 use super::info_partition_type::InfoPartitionType;
 use super::memory_protection::{
     DataMemoryProtectionRegion, DataMemoryProtectionRegionBase, DataMemoryProtectionRegionIndex,
@@ -17,6 +19,7 @@ use super::memory_protection::{
     MemoryProtectionConfiguration, MemoryProtectionRegionStatus, ReadEnabledStatus,
     WriteEnabledStatus,
 };
+use super::page::{DataFlashCtrlPage, FlashCtrlPage, InfoFlashCtrlPage, RawFlashCtrlPage};
 use super::page_index::{DataPageIndex, Info0PageIndex, Info1PageIndex, Info2PageIndex};
 use super::page_position::{
     DataPagePosition, Info0PagePosition, Info1PagePosition, Info2PagePosition, InfoPagePosition,
@@ -29,11 +32,15 @@ use crate::registers::flash_ctrl_regs::{
 use crate::registers::top_earlgrey::{FLASH_CTRL_CORE_BASE_ADDR, FLASH_CTRL_MEM_BASE_ADDR};
 use crate::utils;
 
-use kernel::utilities::registers::interfaces::ReadWriteable;
+use kernel::hil::flash as flash_hil;
+use kernel::utilities::cells::OptionalCell;
+use kernel::utilities::registers::interfaces::{ReadWriteable, Readable};
 use kernel::utilities::registers::FieldValue;
 use kernel::utilities::registers::ReadWrite;
 use kernel::utilities::StaticRef;
+use kernel::ErrorCode;
 
+use core::cell::Cell;
 use core::num::NonZeroUsize;
 
 /// The base of flash registers
@@ -49,11 +56,85 @@ pub(super) const FLASH_SIZE: NonZeroUsize = match BANK_SIZE.checked_mul(NUMBER_O
     None => unreachable!(),
 };
 
-pub struct FlashCtrl {
-    registers: StaticRef<FlashCtrlRegisters>,
+/// Flash busy status
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(super) enum BusyStatus {
+    /// The peripheral is busy
+    Busy,
+    /// The peripheral is not busy
+    NotBusy,
 }
 
-impl FlashCtrl {
+/// Possible flash operations
+#[derive(PartialEq, Eq, Clone, Copy)]
+enum FlashOperationType {
+    /// Read a page
+    Read,
+    /// Write a page
+    Write,
+    /// Erase a page
+    Erase,
+}
+
+impl Into<FieldValue<u32, CONTROL::Register>> for FlashOperationType {
+    fn into(self) -> FieldValue<u32, CONTROL::Register> {
+        match self {
+            FlashOperationType::Read => CONTROL::OP::READ,
+            FlashOperationType::Write => CONTROL::OP::PROG,
+            FlashOperationType::Erase => CONTROL::OP::ERASE,
+        }
+    }
+}
+
+/// Partition types
+enum PartitionType {
+    /// Data partition
+    Data,
+    /// Info partition
+    Info,
+}
+
+/// Erase types
+enum EraseType {
+    /// Erase of a page
+    PageErase,
+    /// Erase of a bank
+    // This is not currently used.
+    #[allow(unused)]
+    BankErase,
+}
+
+/// Flash error codes.
+#[derive(Clone, Copy, Debug)]
+enum FlashErrorCode {
+    /// Undefined operation supplied
+    Operation,
+    /// Flash access has encountered an access permission error
+    MemoryProtection,
+    /// Flash read error. Possible reasons:
+    ///
+    /// + Reliability ECC
+    /// + Storage integrity errors.
+    Read,
+    /// Flash program (write) error. This could be a program integrity error.
+    Program,
+    /// Flash program window resolution error.
+    ProgramResolution,
+    /// Flash program selected unavailable type.
+    ProgramType,
+    /// A shadow register encountered an update error.
+    Update,
+    /// A recoverable error has been encourented in the flash macro.
+    Macro,
+}
+
+pub struct FlashCtrl<'a> {
+    registers: StaticRef<FlashCtrlRegisters>,
+    data_client: OptionalCell<&'a dyn flash_hil::Client<FlashCtrl<'a>>>,
+    is_busy: Cell<BusyStatus>,
+}
+
+impl FlashCtrl<'_> {
     /// [FlashCtrl] constructor
     ///
     /// # Parameters
@@ -67,6 +148,8 @@ impl FlashCtrl {
     pub fn new(memory_protection_configuration: MemoryProtectionConfiguration) -> Self {
         let flash_ctrl = Self {
             registers: FLASH_CTRL_BASE,
+            data_client: OptionalCell::empty(),
+            is_busy: Cell::new(BusyStatus::NotBusy),
         };
         flash_ctrl.init(memory_protection_configuration);
         flash_ctrl
@@ -860,5 +943,434 @@ impl FlashCtrl {
         self.configure_info2_memory_protection_regions(
             memory_protection_configuration.get_info2_memory_protection_regions(),
         );
+    }
+
+    /// Check if the flash peripheral is busy
+    ///
+    /// # Return value
+    ///
+    /// [BusyStatus] indicating if the flash peripheral is busy
+    pub(super) fn is_busy(&self) -> BusyStatus {
+        self.is_busy.get()
+    }
+
+    /// Convert erase type to register value
+    ///
+    /// Converts [EraseType] to a value suitable to be written to a register
+    ///
+    /// # Parameters
+    ///
+    /// + `erase_type`: [EraseType] to be converted
+    ///
+    /// # Return value
+    ///
+    /// The corresponding register value
+    const fn convert_erase_type_to_register_value(
+        erase_type: EraseType,
+    ) -> FieldValue<u32, CONTROL::Register> {
+        match erase_type {
+            EraseType::PageErase => CONTROL::ERASE_SEL::PAGE_ERASE,
+            EraseType::BankErase => CONTROL::ERASE_SEL::BANK_ERASE,
+        }
+    }
+
+    /// Convert partition type to register value
+    ///
+    /// Converts [PartitionType] to a value suitable to be written to a register
+    ///
+    /// # Parameters
+    ///
+    /// + `partition_type`: [PartitionType] to be converted
+    ///
+    /// # Return value
+    ///
+    /// The corresponding register value
+    const fn convert_partition_type_to_register_value(
+        partition_type: PartitionType,
+    ) -> FieldValue<u32, CONTROL::Register> {
+        match partition_type {
+            PartitionType::Data => CONTROL::PARTITION_SEL::DATA,
+            PartitionType::Info => CONTROL::PARTITION_SEL::INFO,
+        }
+    }
+
+    /// Converts a raw page number to data page index and bank.
+    ///
+    /// A raw page number is a page number provided by a capsule. This method attempts to map the
+    /// given raw page number to a data page index and bank.
+    ///
+    /// # Parameters:
+    ///
+    /// + `page_number`: the given raw page number
+    ///
+    /// # Return value
+    ///
+    /// + Ok((data_page_index, bank)): if the raw page number is valid
+    /// + Err(()): if the raw page number is invalid
+    const fn convert_raw_page_number_to_data_page_index_and_bank(
+        page_number: usize,
+    ) -> Result<(DataPageIndex, Bank), ()> {
+        if page_number < DATA_PAGES_PER_BANK.get() {
+            // CAST: Because of the if condition, page_number < 256, so the cast is safe.
+            let data_page_index = DataPageIndex::new(page_number as u8);
+            Ok((data_page_index, Bank::Bank0))
+        } else if page_number < 2 * DATA_PAGES_PER_BANK.get() {
+            // CAST: Because of the if condition, page_number - DATA_PAGES_PER_BANK < 256, so the cast is safe.
+            let data_page_index =
+                DataPageIndex::new((page_number - DATA_PAGES_PER_BANK.get()) as u8);
+            Ok((data_page_index, Bank::Bank1))
+        } else {
+            Err(())
+        }
+    }
+
+    /// Configure the control register for read/write data partition
+    ///
+    /// Configures the control register for reading/writing data from data partitions.
+    ///
+    /// # Parameters
+    ///
+    /// + `number_bus_words`: the number of bus words to be read/written by the next operation
+    /// + `flash_operation_type`: the desired flash operation type
+    // TODO: Add a new type to represent a read/write operation only
+    fn configure_control_register_for_read_write_data_partition(
+        &self,
+        number_bus_words: NonZeroUsize,
+        flash_operation_type: FlashOperationType,
+    ) {
+        // The NUM field value must be configured to the number of bus words to be written minus 1
+        let number_bus_words = CONTROL::NUM.val((number_bus_words.get() - 1) as u32);
+
+        let partition_type_select =
+            Self::convert_partition_type_to_register_value(PartitionType::Data);
+
+        let operation_type = flash_operation_type.into();
+
+        self.registers.control.modify(
+            number_bus_words
+                + partition_type_select
+                + CONTROL::PROG_SEL::NORMAL_PROGRAM
+                + operation_type
+                + CONTROL::START::CLEAR,
+        );
+    }
+
+    /// Configure the control register for erase data partition
+    ///
+    /// Configures the control register for erasing data from data partitions.
+    ///
+    /// # Parameters
+    ///
+    /// + `erase_type`: the type of the desired erase
+    fn configure_control_register_for_erase_data_partition(&self, erase_type: EraseType) {
+        let partition_type_select =
+            Self::convert_partition_type_to_register_value(PartitionType::Data);
+
+        let erase_type_select = Self::convert_erase_type_to_register_value(erase_type);
+
+        let operation_type = CONTROL::OP::ERASE;
+
+        self.registers.control.modify(
+            partition_type_select + erase_type_select + operation_type + CONTROL::START::CLEAR,
+        );
+    }
+
+    /// Configure the control register for the next operation to be carried on data partitions.
+    ///
+    /// + For read/write, configure the peripheral for reading/writing a [Chunk].
+    /// + For erase, configure the peripheral for erasing a page.
+    ///
+    /// # Parameters:
+    ///
+    /// + `flash_operation_type`: indicates the desired flash operation
+    fn configure_control_register_for_page_operation_data_partition(
+        &self,
+        flash_operation_type: FlashOperationType,
+    ) {
+        match flash_operation_type {
+            FlashOperationType::Erase => {
+                self.configure_control_register_for_erase_data_partition(EraseType::PageErase)
+            }
+            FlashOperationType::Read | FlashOperationType::Write => self
+                .configure_control_register_for_read_write_data_partition(
+                    WORDS_PER_CHUNK,
+                    flash_operation_type,
+                ),
+        }
+    }
+
+    /// Configures the address register
+    ///
+    /// # Parameters
+    ///
+    /// + `flash_address`: the starting address for the next flash operation
+    fn configure_address_register(&self, flash_address: FlashAddress) {
+        self.registers
+            .addr
+            .modify(ADDR::START.val(flash_address.to_usize() as u32));
+    }
+
+    /// Configure control and address registers for the given flash operation on data partition
+    ///
+    /// # Parameters
+    ///
+    /// + `data_page_position`: the desired data flash page to be impacted by the next flash
+    /// operation
+    /// + `flash_operation_type`: the desired flash operation
+    fn prepare_page_operation_data_partition(
+        &self,
+        data_page_position: DataPagePosition,
+        flash_operation_type: FlashOperationType,
+    ) {
+        self.configure_control_register_for_page_operation_data_partition(flash_operation_type);
+        self.configure_address_register(data_page_position.to_flash_ptr());
+    }
+
+    /// Determine whether the read FIFO is empty
+    ///
+    /// # Return value
+    ///
+    /// + false: the read FIFO is not empty
+    /// + true: the read FIFO is empty
+    pub(super) fn is_status_rd_empty_set(&self) -> bool {
+        self.registers.status.is_set(STATUS::RD_EMPTY)
+    }
+
+    /// Start flash operation
+    ///
+    /// The control and address registers must be configured by a
+    /// [prepare_page_operation_data_partition] or [prepare_page_operation_info_partition] call.
+    fn start_flash_operation(&self) {
+        self.registers.control.modify(CONTROL::START::SET);
+        self.is_busy.set(BusyStatus::Busy);
+    }
+
+    /// Stop flash operation
+    fn stop_flash_operation(&self) {
+        self.registers.control.modify(CONTROL::START::CLEAR);
+        self.is_busy.set(BusyStatus::NotBusy);
+    }
+
+    /// Erase a data page
+    ///
+    /// As all internal methods, it assumes valid parameters through the type system.
+    ///
+    /// # Parameters
+    ///
+    /// + `data_page_position`: indicates what page to be erased
+    fn internal_erase_data_page(
+        &self,
+        data_page_position: DataPagePosition,
+    ) -> Result<(), ErrorCode> {
+        if self.is_busy() == BusyStatus::Busy {
+            return Err(ErrorCode::BUSY);
+        }
+
+        self.prepare_page_operation_data_partition(data_page_position, FlashOperationType::Erase);
+        self.start_flash_operation();
+
+        Ok(())
+    }
+
+    /// Read the configured partition type from the control register
+    ///
+    /// # Return value
+    ///
+    /// The configured [PartitionType]
+    fn read_partition_type(&self) -> PartitionType {
+        match self.registers.control.read(CONTROL::PARTITION_SEL) {
+            0b0 => PartitionType::Data,
+            // The only other available value is 0b1
+            _ => PartitionType::Info,
+        }
+    }
+
+    /// Read the control register to determine the flash operation that just finished
+    ///
+    /// # Return value
+    ///
+    /// [FlashOperationType] indicating the finished operation
+    fn get_finished_operation_type(&self) -> FlashOperationType {
+        match self.registers.control.read(CONTROL::OP) {
+            0b00 => FlashOperationType::Read,
+            0b01 => FlashOperationType::Write,
+            // The only other available value is 0b10
+            _ => FlashOperationType::Erase,
+        }
+    }
+
+    /// Clear operation done interrupt
+    fn clear_operation_done_interrupt(&self) {
+        self.registers.intr_state.modify(INTR::OP_DONE::SET);
+    }
+
+    /// Clear operation done status
+    fn clear_operation_done_status(&self) {
+        self.registers.op_status.modify(OP_STATUS::DONE::CLEAR);
+    }
+
+    /// Get the error code of the flash operation
+    ///
+    /// # Return value
+    ///
+    /// + Some(flash_error_code): an error occurred during the last flash operation
+    /// + None: no error occurred during the last flash operation
+    fn get_error_code(&self) -> Option<FlashErrorCode> {
+        const OP_ERR_VALUE: u32 = ERR_CODE::OP_ERR::SET.value;
+        const MP_ERR_VALUE: u32 = ERR_CODE::MP_ERR::SET.value;
+        const RD_ERR_VALUE: u32 = ERR_CODE::RD_ERR::SET.value;
+        const PROG_ERR_VALUE: u32 = ERR_CODE::PROG_ERR::SET.value;
+        const PROG_WIN_ERR_VALUE: u32 = ERR_CODE::PROG_WIN_ERR::SET.value;
+        const PROG_TYPE_ERR_VALUE: u32 = ERR_CODE::PROG_TYPE_ERR::SET.value;
+        const UPDATE_ERR_VALUE: u32 = ERR_CODE::UPDATE_ERR::SET.value;
+        const MACRO_ERR_VALUE: u32 = ERR_CODE::MACRO_ERR::SET.value;
+
+        match self.registers.err_code.get() {
+            OP_ERR_VALUE => Some(FlashErrorCode::Operation),
+            MP_ERR_VALUE => Some(FlashErrorCode::MemoryProtection),
+            RD_ERR_VALUE => Some(FlashErrorCode::Read),
+            PROG_ERR_VALUE => Some(FlashErrorCode::Program),
+            PROG_WIN_ERR_VALUE => Some(FlashErrorCode::ProgramResolution),
+            PROG_TYPE_ERR_VALUE => Some(FlashErrorCode::ProgramType),
+            UPDATE_ERR_VALUE => Some(FlashErrorCode::Update),
+            MACRO_ERR_VALUE => Some(FlashErrorCode::Macro),
+            _ => None,
+        }
+    }
+
+    /// Convert the specific hardware error code to the HIL error understood by capsules.
+    ///
+    /// # Parameters
+    ///
+    /// + `error_code`: the hardware error to be converted
+    ///
+    /// # Return value
+    ///
+    /// [flash_hil::Error] indicating the flash error occurred as described by the flash HIL
+    fn convert_error_code_to_flash_error(error_code: FlashErrorCode) -> flash_hil::Error {
+        match error_code {
+            FlashErrorCode::Read | FlashErrorCode::Program => flash_hil::Error::FlashError,
+            FlashErrorCode::MemoryProtection => flash_hil::Error::FlashMemoryProtectionError,
+            error_code @ (FlashErrorCode::Operation
+            | FlashErrorCode::Update
+            | FlashErrorCode::Macro
+            | FlashErrorCode::ProgramResolution
+            | FlashErrorCode::ProgramType) => {
+                // This part of code is reached only if the driver malfunctions
+                panic!(
+                    "Error code {:?} occurred. This means that the driver contains a bug",
+                    error_code
+                );
+            }
+        }
+    }
+
+    /// Clear the given error code
+    ///
+    /// # Parameters
+    ///
+    /// + `flash_error_code`: the flash error code to be cleared
+    fn clear_error_code(&self, flash_error_code: FlashErrorCode) {
+        let clear_value = match flash_error_code {
+            FlashErrorCode::Operation => ERR_CODE::OP_ERR::SET,
+            FlashErrorCode::MemoryProtection => ERR_CODE::MP_ERR::SET,
+            FlashErrorCode::Read => ERR_CODE::RD_ERR::SET,
+            FlashErrorCode::Program => ERR_CODE::PROG_ERR::SET,
+            FlashErrorCode::ProgramResolution => ERR_CODE::PROG_WIN_ERR::SET,
+            FlashErrorCode::ProgramType => ERR_CODE::PROG_TYPE_ERR::SET,
+            FlashErrorCode::Update => ERR_CODE::UPDATE_ERR::SET,
+            FlashErrorCode::Macro => ERR_CODE::MACRO_ERR::SET,
+        };
+
+        self.registers.err_code.modify(clear_value);
+        self.registers.op_status.modify(OP_STATUS::ERR::CLEAR);
+    }
+
+    fn erase_complete(&self, result: Result<(), flash_hil::Error>) {
+        match self.read_partition_type() {
+            PartitionType::Data => self
+                .data_client
+                .map(|data_client| data_client.erase_complete(result)),
+            PartitionType::Info => unimplemented!(),
+        };
+    }
+
+    /// Handler for operation done interrupt
+    pub(crate) fn handle_operation_done(&self) {
+        self.clear_operation_done_interrupt();
+        self.clear_operation_done_status();
+        self.stop_flash_operation();
+        let finished_operation = self.get_finished_operation_type();
+
+        if let Some(error_code) = self.get_error_code() {
+            self.clear_error_code(error_code);
+            let error = Self::convert_error_code_to_flash_error(error_code);
+            match finished_operation {
+                FlashOperationType::Read => {
+                    unimplemented!()
+                }
+                FlashOperationType::Write => {
+                    unimplemented!()
+                }
+                FlashOperationType::Erase => self.erase_complete(Err(error)),
+            }
+
+            return;
+        }
+
+        match finished_operation {
+            FlashOperationType::Read => {
+                unimplemented!()
+            }
+            FlashOperationType::Write => {
+                unimplemented!()
+            }
+            FlashOperationType::Erase => self.erase_complete(Ok(())),
+        }
+    }
+
+    // This method is only used for tests
+    pub(super) fn get_registers(&self) -> &StaticRef<FlashCtrlRegisters> {
+        &self.registers
+    }
+}
+
+impl<'a, Client: flash_hil::Client<FlashCtrl<'a>>> flash_hil::HasClient<'a, Client>
+    for FlashCtrl<'a>
+{
+    fn set_client(&'a self, data_client: &'a Client) {
+        self.data_client.set(data_client);
+    }
+}
+
+impl flash_hil::Flash for FlashCtrl<'_> {
+    type Page = RawFlashCtrlPage;
+
+    fn read_page(
+        &self,
+        page_number: usize,
+        raw_page: &'static mut Self::Page,
+    ) -> Result<(), (ErrorCode, &'static mut Self::Page)> {
+        unimplemented!()
+    }
+
+    fn write_page(
+        &self,
+        page_number: usize,
+        raw_page: &'static mut Self::Page,
+    ) -> Result<(), (ErrorCode, &'static mut Self::Page)> {
+        unimplemented!()
+    }
+
+    fn erase_page(&self, page_number: usize) -> Result<(), ErrorCode> {
+        let (data_page_index, bank) =
+            match Self::convert_raw_page_number_to_data_page_index_and_bank(page_number) {
+                Ok(tuple) => tuple,
+                Err(()) => return Err(ErrorCode::INVAL),
+            };
+
+        let data_page_position = DataPagePosition::new(bank, data_page_index);
+
+        self.internal_erase_data_page(data_page_position)
     }
 }
