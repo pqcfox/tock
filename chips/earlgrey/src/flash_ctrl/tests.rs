@@ -74,6 +74,7 @@ pub fn run_all(uart: &'static Uart<'static>) {
     super::page_index::tests::run_all();
     super::page_position::tests::run_all();
     super::page::tests::run_all();
+    super::memory_protection::tests::run_all();
     super::flash_address::tests::run_all();
     super::chunk::tests::run_all();
 }

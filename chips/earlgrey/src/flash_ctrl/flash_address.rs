@@ -76,7 +76,8 @@ impl FlashAddress {
         if (host_address as usize) < FLASH_HOST_STARTING_ADDRESS_OFFSET.get() {
             Err(InvalidHostAddressError::TooLow)
         } else {
-            let translated_flash_address = host_address as usize - FLASH_HOST_STARTING_ADDRESS_OFFSET.get();
+            let translated_flash_address =
+                host_address as usize - FLASH_HOST_STARTING_ADDRESS_OFFSET.get();
 
             Self::new(translated_flash_address).map_err(|_| InvalidHostAddressError::TooHigh)
         }
@@ -202,7 +203,7 @@ pub(super) mod tests {
                     $difference, $old_address
                 ),
             }
-        }}
+        }};
     }
 
     macro_rules! check_invalid_flash_address_add {
@@ -213,7 +214,7 @@ pub(super) mod tests {
                     $difference, $flash_address
                 );
             }
-        }}
+        }};
     }
 
     fn test_valid_flash_address_add() {
@@ -261,9 +262,11 @@ pub(super) mod tests {
                 $flash_address1.subtract($flash_address2),
                 $expected_difference,
                 "Expected the difference {:?} - {:?} to be {}",
-                $flash_address2, $flash_address1, $expected_difference
+                $flash_address2,
+                $flash_address1,
+                $expected_difference
             );
-        }}
+        }};
     }
 
     #[cfg_attr(test, test)]
