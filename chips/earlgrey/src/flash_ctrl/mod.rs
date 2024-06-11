@@ -6,6 +6,7 @@
 // Copyright Tock Contributors 2022.
 
 mod bank;
+mod chunk;
 mod fifo_level;
 mod flash_address;
 mod flash_ctrl;
