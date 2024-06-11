@@ -5,6 +5,28 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // Copyright Tock Contributors 2022.
 
+use super::flash_address::{FlashAddress, InvalidHostAddressError};
+use super::flash_ctrl::{FlashCtrl, FLASH_HOST_STARTING_ADDRESS_OFFSET};
+use super::memory_protection::{
+    DataMemoryProtectionRegion, DataMemoryProtectionRegionIndex, EraseEnabledStatus,
+    HighEnduranceEnabledStatus, Info0MemoryProtectionRegionIndex, Info1MemoryProtectionRegionIndex,
+    Info2MemoryProtectionRegionIndex, InfoMemoryProtectionRegion, ReadEnabledStatus,
+    WriteEnabledStatus,
+};
+use super::page_position::{
+    DataPagePosition, Info0PagePosition, Info1PagePosition, Info2PagePosition, InfoPagePosition,
+};
+
+use super::page::EARLGREY_PAGE_SIZE;
+
+use super::page_index::{
+    DataPageIndex, Info0PageIndex, Info1PageIndex, Info2PageIndex, MAX_DATA_PAGE_INDEX,
+};
+
+use super::bank::Bank;
+
+use super::info_partition_type::InfoPartitionType;
+
 use crate::uart::Uart;
 
 use kernel::utilities::cells::OptionalCell;
@@ -12,6 +34,13 @@ use kernel::utilities::registers::{interfaces::Readable, ReadWrite};
 use kernel::ErrorCode;
 
 use core::fmt::Write;
+use core::ops::RangeInclusive;
+
+// The position of an info2 page which has read, write and erase enabled.
+const VALID_INFO2_PAGE_POSITION: Info2PagePosition =
+    Info2PagePosition::new(Bank::Bank1, Info2PageIndex::Index1);
+pub const VALID_INFO2_MEMORY_PROTECTION_REGION_INDEX: Info2MemoryProtectionRegionIndex =
+    VALID_INFO2_PAGE_POSITION;
 
 struct TestWriter {
     uart: OptionalCell<&'static Uart<'static>>,
@@ -65,6 +94,26 @@ pub(super) fn print_test_header(message: &str) {
 
 pub(super) fn print_test_footer(message: &str) {
     println!("FINISHED TEST: {}", message);
+}
+
+fn convert_address_to_page_position(
+    host_address: *const u8,
+) -> Result<DataPagePosition, InvalidHostAddressError> {
+    let flash_address = FlashAddress::new_from_host_address(host_address)?;
+
+    Ok(DataPagePosition::new_from_flash_address(flash_address))
+}
+
+pub fn convert_flash_slice_to_page_position_range(
+    flash_test_memory: &[u8],
+) -> Result<RangeInclusive<DataPagePosition>, InvalidHostAddressError> {
+    let address_range = flash_test_memory.as_ptr_range();
+    let (start_address, end_address) = (address_range.start, address_range.end);
+
+    let start_page_number = convert_address_to_page_position(start_address)?;
+    let end_page_number = convert_address_to_page_position(end_address)?;
+
+    Ok(RangeInclusive::new(start_page_number, end_page_number))
 }
 
 pub fn run_all(uart: &'static Uart<'static>) {
