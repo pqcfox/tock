@@ -200,7 +200,7 @@ impl PattGen<'_> {
 
     /// Pattgen interrupt handler
     pub fn handle_interrupt(&self, pattgen_interrupt: PattgenInterrupt) {
-        match PattgenInterrupt {
+        match pattgen_interrupt {
             PattgenInterrupt::Channel0Done => self.handle_channel0_interrupt(),
             PattgenInterrupt::Channel1Done => self.handle_channel1_interrupt(),
         }
@@ -208,18 +208,18 @@ impl PattGen<'_> {
 }
 
 /// List of all pattgen interrupts
-pub enum Pattgen {
+pub enum PattgenInterrupt {
     Channel0Done = 122,
     Channel1Done,
 }
 
-impl TryFrom<usize> for Pattgen {
+impl TryFrom<usize> for PattgenInterrupt {
     type Error = ();
 
     fn try_from(value: usize) -> Result<Self, Self::Error> {
         match value {
-            122 => Ok(Pattgen::Channel0Done),
-            123 => Ok(Pattgen::Channel1Done),
+            122 => Ok(PattgenInterrupt::Channel0Done),
+            123 => Ok(PattgenInterrupt::Channel1Done),
             _ => Err(()),
         }
     }
@@ -391,12 +391,17 @@ impl<'a> PattGenHIL<'a> for PattGen<'a> {
 /// Usage
 /// -----
 ///
+/// First, enable "tests" feature for `lowrisc` dependency. Then, inside the main function of the
+/// board crate, add the following lines:
+///
+/// ```rust,ignore
 /// let pattgen_test = static_init!(
 ///     lowrisc::pattgen::tests::PattGenTest,
 ///     lowrisc::pattgen::tests::PattGenTest::new(&peripherals.pattgen),
 /// );
 ///
 /// lowrisc::pattgen::tests::run_all(pattgen_test);
+/// ```
 #[cfg(feature = "tests")]
 pub mod tests {
     use super::*;

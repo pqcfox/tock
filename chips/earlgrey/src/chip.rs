@@ -138,7 +138,7 @@ impl<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig> InterruptService
                 // PANIC: raw_pattgen_interrupt is a valid interrupt because of the match arm
                 // CAST: u32 == usize on RV32I
                 let pattgen_interrupt =
-                    lowrisc::pattgen::PattgenInterrupt::try_from(raw_pattgen_interrupt as u32)
+                    lowrisc::pattgen::PattgenInterrupt::try_from(raw_pattgen_interrupt as usize)
                         .unwrap();
                 self.pattgen.handle_interrupt(pattgen_interrupt);
             }
