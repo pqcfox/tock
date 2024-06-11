@@ -17,6 +17,7 @@ pub mod i2c;
 pub mod otbn;
 pub mod otp;
 pub mod padctrl;
+pub mod pattgen;
 pub mod pwrmgr;
 pub mod registers;
 pub mod rsa;

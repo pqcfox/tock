@@ -7,7 +7,7 @@
 use core::fmt::{Display, Write};
 use core::marker::PhantomData;
 use core::num::NonZeroU32;
-use kernel;
+use core::ptr::addr_of;
 use kernel::platform::chip::{Chip, InterruptService};
 use kernel::utilities::registers::interfaces::{ReadWriteable, Readable, Writeable};
 use kernel::utilities::helpers::create_non_zero_u32;
@@ -50,9 +50,10 @@ pub struct EarlGreyDefaultPeripherals<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyP
     pub i2c0: lowrisc::i2c::I2c<'a>,
     pub spi_host0: lowrisc::spi_host::SpiHost<'a>,
     pub spi_host1: lowrisc::spi_host::SpiHost<'a>,
-    pub flash_ctrl: lowrisc::flash_ctrl::FlashCtrl<'a>,
+    //pub flash_ctrl: lowrisc::flash_ctrl::FlashCtrl<'a>,
     pub rng: lowrisc::csrng::CsRng<'a>,
     pub watchdog: lowrisc::aon_timer::AonTimer,
+    pub pattgen: lowrisc::pattgen::PattGen<'a>,
     _cfg: PhantomData<CFG>,
     _pinmux: PhantomData<PINMUX>,
 }
@@ -78,16 +79,18 @@ impl<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig>
                 crate::spi_host::SPIHOST1_BASE,
                 CFG::CPU_FREQ,
             ),
+            /*
             flash_ctrl: lowrisc::flash_ctrl::FlashCtrl::new(
                 crate::flash_ctrl::FLASH_CTRL_BASE,
                 lowrisc::flash_ctrl::FlashRegion::REGION0,
             ),
-
+            */
             rng: lowrisc::csrng::CsRng::new(crate::csrng::CSRNG_BASE),
             watchdog: lowrisc::aon_timer::AonTimer::new(
                 crate::aon_timer::AON_TIMER_BASE,
                 CFG::CPU_FREQ,
             ),
+            pattgen: lowrisc::pattgen::PattGen::new(crate::pattgen::PATTGEN_BASE),
             _cfg: PhantomData,
             _pinmux: PhantomData,
         }
@@ -130,9 +133,11 @@ impl<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig> InterruptService
             interrupts::USBDEV_PKTRECEIVED..=interrupts::USBDEV_LINKOUTERR => {
                 self.usb.handle_interrupt();
             }
+            /*
             interrupts::FLASHCTRL_PROGEMPTY..=interrupts::FLASHCTRL_OPDONE => {
                 self.flash_ctrl.handle_interrupt()
             }
+            */
             interrupts::I2C0_FMTWATERMARK..=interrupts::I2C0_HOSTTIMEOUT => {
                 self.i2c0.handle_interrupt()
             }
@@ -145,6 +150,14 @@ impl<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig> InterruptService
             }
             interrupts::SPIHOST1_ERROR..=interrupts::SPIHOST1_SPIEVENT => {
                 self.spi_host1.handle_interrupt()
+            }
+            raw_pattgen_interrupt @ interrupts::PATTGENDONECH0..=interrupts::PATTGENDONECH1 => {
+                // PANIC: raw_pattgen_interrupt is a valid interrupt because of the match arm
+                // CAST: u32 == usize on RV32I
+                let pattgen_interrupt =
+                    lowrisc::pattgen::PattgenInterrupt::try_from(raw_pattgen_interrupt as usize)
+                        .unwrap();
+                self.pattgen.handle_interrupt(pattgen_interrupt);
             }
             interrupts::AON_TIMER_AON_WKUP_TIMER_EXPIRED
                 ..=interrupts::AON_TIMER_AON_WDOG_TIMER_BARK => self.watchdog.handle_interrupt(),
@@ -171,7 +184,7 @@ impl<
         Self {
             userspace_kernel_boundary: SysCall::new(),
             mpu: PMPUserMPU::new(pmp),
-            plic: &PLIC,
+            plic: &*addr_of!(PLIC),
             pwrmgr: lowrisc::pwrmgr::PwrMgr::new(crate::pwrmgr::PWRMGR_BASE),
             timer,
             plic_interrupt_service,
@@ -453,7 +466,7 @@ pub unsafe fn configure_trap_handler() {
 // Mock implementation for crate tests that does not include the section
 // specifier, as the test will not use our linker script, and the host
 // compilation environment may not allow the section name.
-#[cfg(not(any(target_arch = "riscv32", target_os = "none")))]
+#[cfg(not(all(target_arch = "riscv32", target_os = "none")))]
 pub extern "C" fn _start_trap_vectored() {
     use core::hint::unreachable_unchecked;
     unsafe {
@@ -462,55 +475,55 @@ pub extern "C" fn _start_trap_vectored() {
 }
 
 #[cfg(all(target_arch = "riscv32", target_os = "none"))]
-#[link_section = ".riscv.trap_vectored"]
-#[export_name = "_start_trap_vectored"]
-#[naked]
-pub extern "C" fn _start_trap_vectored() -> ! {
-    use core::arch::asm;
-    unsafe {
-        // According to the Ibex user manual:
-        // [NMI] has interrupt ID 31, i.e., it has the highest priority of all
-        // interrupts and the core jumps to the trap-handler base address (in
-        // mtvec) plus 0x7C to handle the NMI.
-        //
-        // Below are 32 (non-compressed) jumps to cover the entire possible
-        // range of vectored traps.
-        asm!(
-            "
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-        ",
-            options(noreturn)
-        );
-    }
+extern "C" {
+    pub fn _start_trap_vectored();
 }
+
+#[cfg(all(target_arch = "riscv32", target_os = "none"))]
+// According to the Ibex user manual:
+// [NMI] has interrupt ID 31, i.e., it has the highest priority of all
+// interrupts and the core jumps to the trap-handler base address (in
+// mtvec) plus 0x7C to handle the NMI.
+//
+// Below are 32 (non-compressed) jumps to cover the entire possible
+// range of vectored traps.
+core::arch::global_asm!(
+    "
+            .section .riscv.trap_vectored, \"ax\"
+            .globl _start_trap_vectored
+          _start_trap_vectored:
+
+            j _start_trap
+            j _start_trap
+            j _start_trap
+            j _start_trap
+            j _start_trap
+            j _start_trap
+            j _start_trap
+            j _start_trap
+            j _start_trap
+            j _start_trap
+            j _start_trap
+            j _start_trap
+            j _start_trap
+            j _start_trap
+            j _start_trap
+            j _start_trap
+            j _start_trap
+            j _start_trap
+            j _start_trap
+            j _start_trap
+            j _start_trap
+            j _start_trap
+            j _start_trap
+            j _start_trap
+            j _start_trap
+            j _start_trap
+            j _start_trap
+            j _start_trap
+            j _start_trap
+            j _start_trap
+            j _start_trap
+            j _start_trap
+        "
+);

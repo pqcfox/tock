@@ -11,9 +11,8 @@
 // https://github.com/rust-lang/rust/issues/62184.
 #![cfg_attr(not(doc), no_main)]
 #![deny(missing_docs)]
-#![feature(naked_functions)]
 
-use core::arch::asm;
+use core::ptr::{addr_of, addr_of_mut};
 
 use capsules_core::virtualizers::virtual_alarm::VirtualMuxAlarm;
 use components::gpio::GpioComponent;
@@ -56,7 +55,8 @@ static FLASH_BOOTLOADER: [u8; 256] = flash_bootloader::FLASH_BOOTLOADER;
 
 // State for loading and holding applications.
 // How should the kernel respond when a process faults.
-const FAULT_RESPONSE: kernel::process::PanicFaultPolicy = kernel::process::PanicFaultPolicy {};
+const FAULT_RESPONSE: capsules_system::process_policies::PanicFaultPolicy =
+    capsules_system::process_policies::PanicFaultPolicy {};
 
 // Number of concurrent processes this platform supports.
 const NUM_PROCS: usize = 4;
@@ -65,7 +65,8 @@ static mut PROCESSES: [Option<&'static dyn kernel::process::Process>; NUM_PROCS]
     [None; NUM_PROCS];
 
 static mut CHIP: Option<&'static Rp2040<Rp2040DefaultPeripherals>> = None;
-static mut PROCESS_PRINTER: Option<&'static kernel::process::ProcessPrinterText> = None;
+static mut PROCESS_PRINTER: Option<&'static capsules_system::process_printer::ProcessPrinterText> =
+    None;
 
 type TemperatureRp2040Sensor = components::temperature_rp2040::TemperatureRp2040ComponentType<
     capsules_core::virtualizers::virtual_adc::AdcDevice<'static, rp2040::adc::Adc<'static>>,
@@ -130,7 +131,6 @@ impl KernelResources<Rp2040<'static, Rp2040DefaultPeripherals<'static>>> for Pic
     type SyscallDriverLookup = Self;
     type SyscallFilter = ();
     type ProcessFault = ();
-    type CredentialsCheckingPolicy = ();
     type Scheduler = RoundRobinSched<'static>;
     type SchedulerTimer = cortexm0p::systick::SysTick;
     type WatchDog = ();
@@ -143,9 +143,6 @@ impl KernelResources<Rp2040<'static, Rp2040DefaultPeripherals<'static>>> for Pic
         &()
     }
     fn process_fault(&self) -> &Self::ProcessFault {
-        &()
-    }
-    fn credentials_checking_policy(&self) -> &'static Self::CredentialsCheckingPolicy {
         &()
     }
     fn scheduler(&self) -> &Self::Scheduler {
@@ -162,31 +159,36 @@ impl KernelResources<Rp2040<'static, Rp2040DefaultPeripherals<'static>>> for Pic
     }
 }
 
-/// Entry point used for debuger
-///
-/// When loaded using gdb, the Raspberry Pi Pico is not reset
-/// by default. Without this function, gdb sets the PC to the
-/// beginning of the flash. This is not correct, as the RP2040
-/// has a more complex boot process.
-///
-/// This function is set to be the entry point for gdb and is used
-/// to send the RP2040 back in the bootloader so that all the boot
-/// sqeuence is performed.
-#[no_mangle]
-#[naked]
-pub unsafe extern "C" fn jump_to_bootloader() {
-    asm!(
-        "
+#[allow(dead_code)]
+extern "C" {
+    /// Entry point used for debugger
+    ///
+    /// When loaded using gdb, the Raspberry Pi Pico is not reset
+    /// by default. Without this function, gdb sets the PC to the
+    /// beginning of the flash. This is not correct, as the RP2040
+    /// has a more complex boot process.
+    ///
+    /// This function is set to be the entry point for gdb and is used
+    /// to send the RP2040 back in the bootloader so that all the boot
+    /// sequence is performed.
+    fn jump_to_bootloader();
+}
+
+#[cfg(all(target_arch = "arm", target_os = "none"))]
+core::arch::global_asm!(
+    "
+    .section .jump_to_bootloader, \"ax\"
+    .global jump_to_bootloader
+    .thumb_func
+  jump_to_bootloader:
     movs r0, #0
     ldr r1, =(0xe0000000 + 0x0000ed08)
     str r0, [r1]
     ldmia r0!, {{r1, r2}}
     msr msp, r1
     bx r2
-    ",
-        options(noreturn)
-    );
-}
+    "
+);
 
 fn init_clocks(peripherals: &Rp2040DefaultPeripherals) {
     // Start tick in watchdog
@@ -261,17 +263,15 @@ fn init_clocks(peripherals: &Rp2040DefaultPeripherals) {
 /// removed when this function returns. Otherwise, the stack space used for
 /// these static_inits is wasted.
 #[inline(never)]
-unsafe fn create_peripherals() -> &'static mut Rp2040DefaultPeripherals<'static> {
-    static_init!(Rp2040DefaultPeripherals, Rp2040DefaultPeripherals::new())
-}
-
-/// Main function called after RAM initialized.
-#[no_mangle]
-pub unsafe fn main() {
+pub unsafe fn start() -> (
+    &'static kernel::Kernel,
+    PicoExplorerBase,
+    &'static rp2040::chip::Rp2040<'static, Rp2040DefaultPeripherals<'static>>,
+) {
     // Loads relocations and clears BSS
     rp2040::init();
 
-    let peripherals = create_peripherals();
+    let peripherals = static_init!(Rp2040DefaultPeripherals, Rp2040DefaultPeripherals::new());
     peripherals.resolve_dependencies();
 
     // Reset all peripherals except QSPI (we might be booting from Flash), PLL USB and PLL SYS
@@ -329,11 +329,10 @@ pub unsafe fn main() {
 
     CHIP = Some(chip);
 
-    let board_kernel = static_init!(Kernel, Kernel::new(&PROCESSES));
+    let board_kernel = static_init!(Kernel, Kernel::new(&*addr_of!(PROCESSES)));
 
     let process_management_capability =
         create_capability!(capabilities::ProcessManagementCapability);
-    let main_loop_capability = create_capability!(capabilities::MainLoopCapability);
     let memory_allocation_capability = create_capability!(capabilities::MemoryAllocationCapability);
 
     let mux_alarm = components::alarm::AlarmMuxComponent::new(&peripherals.timer)
@@ -564,7 +563,7 @@ pub unsafe fn main() {
     .finalize(components::process_console_component_static!(RPTimer));
     let _ = process_console.start();
 
-    let scheduler = components::sched::round_robin::RoundRobinComponent::new(&PROCESSES)
+    let scheduler = components::sched::round_robin::RoundRobinComponent::new(&*addr_of!(PROCESSES))
         .finalize(components::round_robin_component_static!(NUM_PROCS));
 
     //--------------------------------------------------------------------------
@@ -679,14 +678,14 @@ pub unsafe fn main() {
         board_kernel,
         chip,
         core::slice::from_raw_parts(
-            &_sapps as *const u8,
-            &_eapps as *const u8 as usize - &_sapps as *const u8 as usize,
+            core::ptr::addr_of!(_sapps),
+            core::ptr::addr_of!(_eapps) as usize - core::ptr::addr_of!(_sapps) as usize,
         ),
         core::slice::from_raw_parts_mut(
-            &mut _sappmem as *mut u8,
-            &_eappmem as *const u8 as usize - &_sappmem as *const u8 as usize,
+            core::ptr::addr_of_mut!(_sappmem),
+            core::ptr::addr_of!(_eappmem) as usize - core::ptr::addr_of!(_sappmem) as usize,
         ),
-        &mut PROCESSES,
+        &mut *addr_of_mut!(PROCESSES),
         &FAULT_RESPONSE,
         &process_management_capability,
     )
@@ -695,10 +694,14 @@ pub unsafe fn main() {
         debug!("{:?}", err);
     });
 
-    board_kernel.kernel_loop(
-        &pico_explorer_base,
-        chip,
-        Some(&pico_explorer_base.ipc),
-        &main_loop_capability,
-    );
+    (board_kernel, pico_explorer_base, chip)
+}
+
+/// Main function called after RAM initialized.
+#[no_mangle]
+pub unsafe fn main() {
+    let main_loop_capability = create_capability!(capabilities::MainLoopCapability);
+
+    let (board_kernel, platform, chip) = start();
+    board_kernel.kernel_loop(&platform, chip, Some(&platform.ipc), &main_loop_capability);
 }

@@ -9,13 +9,12 @@
 //!
 //! You need a screen that provides the `hil::screen::Screen` trait.
 //!
-//! ```rust
+//! ```rust,ignore
 //! let screen =
 //!     components::screen::ScreenComponent::new(board_kernel, tft).finalize();
 //! ```
 
 use core::cell::Cell;
-use core::convert::From;
 
 use kernel::grant::{AllowRoCount, AllowRwCount, Grant, UpcallCount};
 use kernel::hil;

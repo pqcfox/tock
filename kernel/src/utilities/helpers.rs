@@ -76,3 +76,23 @@ pub const fn create_non_zero_u32(value: u32) -> NonZeroU32 {
         Some(non_zero_value) => non_zero_value,
     }
 }
+
+/// Compute a POSIX-style CRC32 checksum of a slice.
+///
+/// Online calculator: <https://crccalc.com/>
+pub fn crc32_posix(b: &[u8]) -> u32 {
+    let mut crc: u32 = 0;
+
+    for c in b {
+        crc ^= (*c as u32) << 24;
+
+        for _i in 0..8 {
+            if crc & (0b1 << 31) > 0 {
+                crc = (crc << 1) ^ 0x04c11db7;
+            } else {
+                crc <<= 1;
+            }
+        }
+    }
+    !crc
+}
