@@ -8,10 +8,16 @@
 mod available_buffer_list;
 mod buffer;
 mod buffer_index;
+mod chunk_index;
+mod chunk_index_iterator;
 mod endpoint;
 mod endpoint_index;
+mod endpoint_state;
 mod interrupt;
+mod packet_received;
+mod packet_size;
 mod usb;
+mod utils;
 
 pub use interrupt::UsbInterrupt;
 pub use usb::Usb;

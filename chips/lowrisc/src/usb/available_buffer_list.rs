@@ -114,6 +114,17 @@ impl AvailableBufferList {
         self.get_buffer(buffer_index).occupy()
     }
 
+    /// Frees a buffer.
+    ///
+    /// Marks a buffer as free, i.e. not occupied.
+    ///
+    /// # Parameters
+    ///
+    /// + `buffer_index`: the index of the buffer to be marked as free.
+    pub(super) fn free_buffer(&self, buffer_index: BufferIndex) {
+        self.get_buffer(buffer_index).free()
+    }
+
     /// Finds the next available buffer, occupies it, and then returns an index pointing to it.
     ///
     /// # Return value

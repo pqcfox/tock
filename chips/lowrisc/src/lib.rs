@@ -23,6 +23,6 @@ pub mod registers;
 pub mod rsa;
 pub mod spi_host;
 pub mod uart;
-pub mod usbdev;
+pub mod usb;
 mod utils;
 pub mod virtual_otbn;

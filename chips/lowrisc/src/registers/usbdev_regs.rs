@@ -47,7 +47,7 @@ register_structs! {
         /// Set NAK after OUT transactions
         (0x0030 => pub(crate) set_nak_out: [ReadWrite<u32, SET_NAK_OUT::Register>; 1]),
         /// IN Transaction Sent
-        (0x0034 => pub(crate) in_sent: [ReadWrite<u32, IN_SENT::Register>; 1]),
+        (0x0034 => pub(crate) in_sent: ReadWrite<u32, IN_SENT::Register>),
         /// OUT Endpoint STALL control
         (0x0038 => pub(crate) out_stall: [ReadWrite<u32, OUT_STALL::Register>; 1]),
         /// IN Endpoint STALL control
