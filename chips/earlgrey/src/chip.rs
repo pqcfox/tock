@@ -6,9 +6,11 @@
 
 use core::fmt::{Display, Write};
 use core::marker::PhantomData;
+use core::num::NonZeroU32;
 use core::ptr::addr_of;
 use kernel::platform::chip::{Chip, InterruptService};
 use kernel::utilities::registers::interfaces::{ReadWriteable, Readable, Writeable};
+use kernel::utilities::helpers::create_non_zero_u32;
 use rv32i::csr::{mcause, mie::mie, mtvec::mtvec, CSR};
 use rv32i::pmp::{PMPUserMPU, TORUserPMP};
 use rv32i::syscall::SysCall;
@@ -43,6 +45,7 @@ pub struct EarlGreyDefaultPeripherals<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyP
     pub usb: lowrisc::usbdev::Usb<'a>,
     pub uart0: lowrisc::uart::Uart<'a>,
     pub otbn: lowrisc::otbn::Otbn<'a>,
+    pub otp: lowrisc::otp::Otp,
     pub gpio_port: crate::gpio::Port<'a>,
     pub i2c0: lowrisc::i2c::I2c<'a>,
     pub spi_host0: lowrisc::spi_host::SpiHost<'a>,
@@ -65,6 +68,7 @@ impl<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig>
             usb: lowrisc::usbdev::Usb::new(crate::usbdev::USB0_BASE),
             uart0: lowrisc::uart::Uart::new(crate::uart::UART0_BASE, CFG::PERIPHERAL_FREQ),
             otbn: lowrisc::otbn::Otbn::new(crate::otbn::OTBN_BASE),
+            otp: lowrisc::otp::Otp::new(crate::otp::OTP_BASE),
             gpio_port: crate::gpio::Port::new::<PINMUX>(),
             i2c0: lowrisc::i2c::I2c::new(crate::i2c::I2C0_BASE, (1 / CFG::CPU_FREQ) * 1000 * 1000),
             spi_host0: lowrisc::spi_host::SpiHost::new(
@@ -95,6 +99,19 @@ impl<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig>
     pub fn init(&'static self) {
         kernel::deferred_call::DeferredCallClient::register(&self.aes);
         kernel::deferred_call::DeferredCallClient::register(&self.uart0);
+        // Recommended value by documentation
+        const INTEGRITY_CHECK_PERIOD: u32 = 0x3_FFFF;
+        // Recommended value by documentation
+        const CONSISTENCY_CHECK_PERIOD: u32 = 0x3_FFFF;
+        // Recommended value by documentation is at least 100_000.
+        const CHECK_TIMEOUT: NonZeroU32 = create_non_zero_u32(100_000);
+        self.otp
+            .init(
+                INTEGRITY_CHECK_PERIOD,
+                CONSISTENCY_CHECK_PERIOD,
+                Some(CHECK_TIMEOUT),
+            )
+            .expect("Failed to initialize OTP");
     }
 }
 
