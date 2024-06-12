@@ -573,32 +573,15 @@ unsafe fn setup() -> (
     // )
     // .finalize(components::usb_component_static!(earlgrey::usbdev::Usb));
 
-    // CDC
-    let strings = static_init!(
-        [&str; 3],
-        [
-            "NewAE Technology",             // Manufacturer
-            "ChipWhisperer CW310 - TockOS", // Product
-            "00000000000000000",            // Serial number
-        ]
+    let usb_client = static_init!(
+        capsules_extra::usb::usbc_client::Client<lowrisc::usb::Usb>,
+        capsules_extra::usb::usbc_client::Client::new(&peripherals.usb, 64),
     );
 
-    let cdc = components::cdc::CdcAcmComponent::new(
-        &peripherals.usb,
-        capsules_extra::usb::cdc::MAX_CTRL_PACKET_SIZE_EARLGREY,
-        0,
-        0,
-        strings,
-        mux_alarm,
-        None,
-    )
-    .finalize(components::cdc_acm_component_static!(
-        lowrisc::usb::Usb,
-        earlgrey::timer::RvTimer<ChipConfig>,
-    ));
-
-    cdc.enable();
-    cdc.attach();
+    use kernel::hil::usb::UsbController;
+    peripherals.usb.set_client(usb_client);
+    usb_client.enable();
+    usb_client.attach();
 
     // Kernel storage region, allocated with the storage_volume!
     // macro in common/utils.rs

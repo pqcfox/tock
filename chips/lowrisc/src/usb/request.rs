@@ -6,6 +6,8 @@
 
 use kernel::utilities::cells::VolatileCell;
 
+use core::num::NonZeroU16;
+
 /// Standard USB device request that requires sending data to host
 pub(super) enum StandardDeviceRequestToHost {
     GetStatus = 0,
@@ -39,9 +41,9 @@ pub(super) enum StandardRequest {
 /// Class USB request
 pub(super) enum ClassRequest {
     /// Class request that needs to transfer data from device to host
-    ToHost,
+    ToHost(Option<NonZeroU16>),
     /// Class request that needs to transfer data from host to device
-    FromHost,
+    FromHost(Option<NonZeroU16>),
 }
 
 /// USB request
@@ -211,10 +213,10 @@ impl Request {
     ///
     /// + Ok: `request_type_byte` is valid
     /// + Err: `request_type_byte` is invalid
-    const fn new_class(request_type_byte: u8) -> Self {
+    const fn new_class(request_type_byte: u8, length: Option<NonZeroU16>) -> Self {
         match Self::get_direction(request_type_byte) {
-            RequestDirection::FromHost => Request::Class(ClassRequest::FromHost),
-            RequestDirection::ToHost => Request::Class(ClassRequest::ToHost),
+            RequestDirection::FromHost => Request::Class(ClassRequest::FromHost(length)),
+            RequestDirection::ToHost => Request::Class(ClassRequest::ToHost(length)),
         }
     }
 
@@ -239,10 +241,22 @@ impl Request {
             None => return Err(RequestDecodeError::PacketTooShort),
         };
 
+        let length_byte0 = match packet.get(6) {
+            Some(volatile_byte) => volatile_byte.get(),
+            None => return Err(RequestDecodeError::PacketTooShort),
+        };
+
+        let length_byte1 = match packet.get(7) {
+            Some(volatile_byte) => volatile_byte.get(),
+            None => return Err(RequestDecodeError::PacketTooShort),
+        };
+
+        let length = NonZeroU16::new(u16::from_ne_bytes([length_byte0, length_byte1]));
+
         const REQUEST_TYPE_MASK: u8 = 0b0110_0000;
         match request_type_byte & REQUEST_TYPE_MASK {
             0 => Self::try_standard(request_type_byte, request_byte),
-            32 => Ok(Self::new_class(request_type_byte)),
+            32 => Ok(Self::new_class(request_type_byte, length)),
             _ => Err(RequestDecodeError::UnknownType),
         }
     }
