@@ -7,7 +7,7 @@
 
 //! Utilities used across the USB driver
 
-use core::num::{NonZeroUsize, NonZeroU8};
+use core::num::{NonZeroU8, NonZeroUsize};
 
 /// Creates a new NonZeroUsize
 ///
