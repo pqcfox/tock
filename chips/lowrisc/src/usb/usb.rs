@@ -391,11 +391,11 @@ impl<'a> Usb<'a> {
                     CtrlSetupResult::Ok => {
                         if to_host {
                             match client.ctrl_in(endpoint_index.to_usize()) {
-                                // TODO: Handle large packets
-                                CtrlInResult::Packet(size, _last) => {
+                                CtrlInResult::Packet(size, last) => {
                                     // PANIC: This panics only if the upper layer is buggy
                                     let packet_size = PacketSize::try_from_usize(size).unwrap();
                                     let endpoint_in_buffer = endpoint.get_buffer_in();
+                                    endpoint.set_last(last);
                                     endpoint_in_buffer.map(|buffer_in| {
                                         self.send_packet(
                                             endpoint_index,
@@ -698,29 +698,38 @@ impl<'a> Usb<'a> {
         self.available_buffer_list.free_buffer(buffer_index);
     }
 
+    /// Returns the transmit buffer index used by this endpoint
+    ///
+    /// # Parameters
+    ///
+    /// + `endpoint_index`: the index of the endpoint whose transmit buffer index must be returned
+    fn get_transmit_buffer(&self, endpoint_index: EndpointIndex) -> BufferIndex {
+        let configin_register = self.get_configin_register(endpoint_index);
+
+        // PANIC: `try_from_usize()` may never panic because BUFFER_0 bitfield is 5-bit wide
+        // CAST: u32 == usize on RV32I
+        BufferIndex::try_from_usize(configin_register.read(CONFIGIN::BUFFER_0) as usize)
+            .unwrap()
+    }
+
     /// Frees a buffer used for transmit
     ///
     /// # Parameters
     ///
     /// + ̀`endpoint_index`: the index of the endpoint whose IN buffer must be freed
     fn free_transmit_buffer(&self, endpoint_index: EndpointIndex) {
-        let configin_register = self.get_configin_register(endpoint_index);
-
-        // CAST: u32 == usize on RV32I
-        let buffer_index =
-            BufferIndex::try_from_usize(configin_register.read(CONFIGIN::BUFFER_0) as usize)
-                .unwrap();
+        let buffer_index = self.get_transmit_buffer(endpoint_index);
 
         self.free_buffer(buffer_index);
     }
 
-    /// Handler for a data control IN packet successfully transmitted.
+    /// Handler for the last data control IN packet successfully transmitted.
     ///
     /// # Parameters
     ///
     /// + `endpoint_index`: the index of the endpoint whose IN buffer has been transmitted
     /// + `endpoint`: the endpoint whose IN buffer has been transmitted
-    fn handle_data_transmit_ctrl_in_packet(
+    fn handle_last_data_transmit_ctrl_in_packet(
         &self,
         endpoint_index: EndpointIndex,
         endpoint: &Endpoint<'a>,
@@ -735,6 +744,58 @@ impl<'a> Usb<'a> {
 
         self.free_transmit_buffer(endpoint_index);
         self.fill_available_buffer_fifo();
+    }
+
+    /// Handler for non-last data control IN packet successfully transmitted.
+    ///
+    /// # Parameters
+    ///
+    /// + `endpoint_index`: the index of the endpoint whose IN buffer has been transmitted
+    /// + `endpoint`: the endpoint whose IN buffer has been transmitted
+    fn handle_non_last_data_transmit_ctrl_in_packet(
+        &self,
+        endpoint_index: EndpointIndex,
+        endpoint: &Endpoint<'a>,
+    ) {
+        self.client.map(|client| {
+            match client.ctrl_in(endpoint_index.to_usize()) {
+                CtrlInResult::Packet(size, last) => {
+                    // PANIC: This panics only if the upper layer is buggy
+                    let packet_size = PacketSize::try_from_usize(size).unwrap();
+                    let endpoint_in_buffer = endpoint.get_buffer_in();
+                    let buffer_index = self.get_transmit_buffer(endpoint_index);
+                    endpoint.set_last(last);
+                    endpoint_in_buffer.map(|buffer_in| {
+                        self.send_packet(
+                            endpoint_index,
+                            buffer_index,
+                            packet_size,
+                            buffer_in,
+                        );
+                    });
+                }
+                CtrlInResult::Delay => unimplemented!(),
+                CtrlInResult::Error => unimplemented!(),
+            }
+        });
+    }
+
+    /// Handler for a data control IN packet successfully transmitted.
+    ///
+    /// # Parameters
+    ///
+    /// + `endpoint_index`: the index of the endpoint whose IN buffer has been transmitted
+    /// + `endpoint`: the endpoint whose IN buffer has been transmitted
+    fn handle_data_transmit_ctrl_in_packet(
+        &self,
+        endpoint_index: EndpointIndex,
+        endpoint: &Endpoint<'a>,
+    ) {
+        if endpoint.get_last() {
+            self.handle_last_data_transmit_ctrl_in_packet(endpoint_index, endpoint);
+        } else {
+            self.handle_non_last_data_transmit_ctrl_in_packet(endpoint_index, endpoint);
+        }
     }
 
     /// Handler for a status control IN packet successfully transmitted.
