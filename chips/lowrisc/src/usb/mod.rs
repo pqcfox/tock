@@ -17,6 +17,7 @@ mod interrupt;
 mod packet_received;
 mod packet_size;
 mod usb;
+mod usb_address;
 mod utils;
 
 pub use interrupt::UsbInterrupt;

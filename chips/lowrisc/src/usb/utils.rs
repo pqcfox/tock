@@ -7,7 +7,7 @@
 
 //! Utilities used across the USB driver
 
-use core::num::NonZeroUsize;
+use core::num::{NonZeroUsize, NonZeroU8};
 
 /// Creates a new NonZeroUsize
 ///
@@ -27,5 +27,26 @@ pub(super) const fn create_non_zero_usize(value: usize) -> NonZeroUsize {
     match NonZeroUsize::new(value) {
         Some(non_zero_usize) => non_zero_usize,
         None => panic!("Attempt to create invalid NonZeroUsize"),
+    }
+}
+
+/// Creates a new NonZeroU8
+///
+/// # Parameters
+///
+/// + `value`: the value to be converted to NonZeroU8
+///
+/// # Return value
+///
+/// The NonZeroU8 representation of `value`
+///
+/// # Panic
+///
+/// This function panics if value == 0.
+#[track_caller]
+pub(super) const fn create_non_zero_u8(value: u8) -> NonZeroU8 {
+    match NonZeroU8::new(value) {
+        Some(non_zero_u8) => non_zero_u8,
+        None => panic!("Attempt to create invalid NonZeroU8"),
     }
 }
