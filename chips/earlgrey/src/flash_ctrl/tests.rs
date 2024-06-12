@@ -131,6 +131,9 @@ enum TestState {
     TestDataErase,
     TestDataWrite,
     TestDataRead,
+    TestDataEraseFault,
+    TestDataWriteFault,
+    TestDataReadFault,
 }
 
 #[derive(PartialEq, Eq, Debug)]
@@ -991,6 +994,22 @@ impl<'a> TestClient<'a> {
         self.set_page(write_page);
     }
 
+    fn check_unsuccessful_write(&self, result: Result<(), Error>, expected_error: Error) {
+        let actual_error = match result {
+            Ok(()) => panic!(
+                "Write succeeded when it was expected to fail with error {:?}",
+                expected_error,
+            ),
+            Err(error) => error,
+        };
+
+        assert_eq!(
+            actual_error, expected_error,
+            "Expected write to fail with {:?}, got {:?} instead",
+            expected_error, actual_error
+        );
+    }
+
     fn check_successful_data_erase(&self, result: Result<(), Error>) {
         assert!(
             result.is_ok(),
@@ -1060,6 +1079,22 @@ impl<'a> TestClient<'a> {
         check_page_content(read_page_array, written_message);
 
         self.set_page(read_page);
+    }
+
+    fn check_unsuccessful_read(&self, result: Result<(), Error>, expected_error: Error) {
+        let actual_error = match result {
+            Ok(()) => panic!(
+                "Read succeeded when expected to fail with error {:?}",
+                expected_error,
+            ),
+            Err(error) => error,
+        };
+
+        assert_eq!(
+            actual_error, expected_error,
+            "Expected read to fail with error {:?}, got {:?} instead",
+            expected_error, actual_error
+        );
     }
 
     fn check_op_status_clean_value(&self) {
@@ -1299,6 +1334,44 @@ impl<'a> TestClient<'a> {
                 self.test_read_page(current_data_test_page_position);
             }
             TestState::TestDataRead => {
+                if self.page_position_range.start() == self.page_position_range.end() {
+                    println!("There is only one available page for testing. Memory protection tests are skipped");
+
+                    self.state.set(TestState::TestDataReadFault);
+                    self.execute_next_test();
+                } else {
+                    print_test_header("fault page erase");
+                    self.state.set(TestState::TestDataEraseFault);
+                    let page_position = *self.page_position_range.start();
+
+                    self.test_erase_data_page(page_position);
+                }
+            }
+            TestState::TestDataEraseFault => {
+                print_test_header("fault page write");
+                self.state.set(TestState::TestDataWriteFault);
+                // From the last test, current_data_test_page_position is END - 1
+                let current_data_test_page_position = self.get_current_data_test_page_position();
+                self.test_write_page(current_data_test_page_position);
+            }
+            TestState::TestDataWriteFault => {
+                print_test_header("fault page read");
+                self.state.set(TestState::TestDataReadFault);
+                // From the last test, current_data_test_page_position is END - 1
+                let current_data_test_page_position = self.get_current_data_test_page_position();
+                let page = self.take_page();
+
+                let page_number =
+                    convert_data_page_position_to_page_number(current_data_test_page_position);
+                let result_attempt_result = self.raw_read_page(page_number, page);
+
+                assert!(
+                    result_attempt_result.is_ok(),
+                    "Attempting to read page {:?} must succeed",
+                    current_data_test_page_position
+                );
+            }
+            TestState::TestDataReadFault => {
                 println!("\r\nFinished all tests. Everything is alright!\r\n");
             }
         }
@@ -1332,6 +1405,13 @@ impl<'a> FlashClientTrait<FlashCtrl<'a>> for TestClient<'a> {
                 print_test_footer("valid page read");
                 self.execute_next_test();
             }
+            TestState::TestDataReadFault => {
+                const EXPECTED_ERROR: Error = Error::FlashMemoryProtectionError;
+                self.set_page(read_page);
+                self.check_unsuccessful_read(result, EXPECTED_ERROR);
+                print_test_footer("fault page read");
+                self.execute_next_test();
+            }
             state => panic!("read_complete must not be trigerred for state {:?}", state),
         }
     }
@@ -1359,6 +1439,13 @@ impl<'a> FlashClientTrait<FlashCtrl<'a>> for TestClient<'a> {
                 self.set_page(write_page);
                 self.read_data_message(self.current_data_test_page_position.get(), READ_MESSAGE);
             }
+            TestState::TestDataWriteFault => {
+                const EXPECTED_ERROR: Error = Error::FlashMemoryProtectionError;
+                self.set_page(write_page);
+                self.check_unsuccessful_write(result, EXPECTED_ERROR);
+                print_test_footer("fault page write");
+                self.execute_next_test();
+            }
             state => panic!(
                 "write_complete() must not be triggered for state {:?}",
                 state
@@ -1384,6 +1471,12 @@ impl<'a> FlashClientTrait<FlashCtrl<'a>> for TestClient<'a> {
                 // After the page has been erased, it will be written with a specific message
                 let current_data_test_page_position = self.current_data_test_page_position.get();
                 self.write_message(current_data_test_page_position, READ_MESSAGE);
+            }
+            TestState::TestDataEraseFault => {
+                const EXPECTED_ERROR: Error = Error::FlashMemoryProtectionError;
+                self.check_unsuccessful_erase(result, EXPECTED_ERROR);
+                print_test_footer("fault page erase");
+                self.execute_next_test();
             }
             state => panic!(
                 "info_erase_complete() must not be triggered for state {:?}",
