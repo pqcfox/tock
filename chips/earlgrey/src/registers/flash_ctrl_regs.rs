@@ -147,7 +147,7 @@ register_structs! {
         /// Memory area: Flash program FIFO.
         (0x01b0 => pub(crate) prog_fifo: WriteOnly<u32>),
         /// Memory area: Flash read FIFO.
-        (0x01b4 => pub(crate) rd_fifo: [ReadOnly<u32>; 1]),
+        (0x01b4 => pub(crate) rd_fifo: ReadOnly<u32>),
         (0x01b8 => @END),
     }
 }
