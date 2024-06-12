@@ -145,7 +145,7 @@ register_structs! {
         /// Current program and read fifo depth
         (0x01ac => pub(crate) curr_fifo_lvl: ReadWrite<u32, CURR_FIFO_LVL::Register>),
         /// Memory area: Flash program FIFO.
-        (0x01b0 => pub(crate) prog_fifo: [WriteOnly<u32>; 1]),
+        (0x01b0 => pub(crate) prog_fifo: WriteOnly<u32>),
         /// Memory area: Flash read FIFO.
         (0x01b4 => pub(crate) rd_fifo: [ReadOnly<u32>; 1]),
         (0x01b8 => @END),

@@ -6,7 +6,10 @@
 // Copyright Tock Contributors 2022.
 
 use super::bank::{Bank, BANK_SIZE, DATA_PAGES_PER_BANK, NUMBER_OF_BANKS};
-use super::chunk::WORDS_PER_CHUNK;
+use super::chunk::{
+    ImmutableChunkIterator, MutableChunkIterator, PageChunkIterator, PageChunkIteratorEmpty,
+    WORDS_PER_CHUNK,
+};
 use super::fifo_level::FifoLevel;
 use super::flash_address::FlashAddress;
 use super::info_partition_type::InfoPartitionType;
@@ -34,7 +37,7 @@ use crate::utils;
 
 use kernel::hil::flash as flash_hil;
 use kernel::utilities::cells::OptionalCell;
-use kernel::utilities::registers::interfaces::{ReadWriteable, Readable};
+use kernel::utilities::registers::interfaces::{ReadWriteable, Readable, Writeable};
 use kernel::utilities::registers::FieldValue;
 use kernel::utilities::registers::ReadWrite;
 use kernel::utilities::StaticRef;
@@ -131,6 +134,7 @@ enum FlashErrorCode {
 pub struct FlashCtrl<'a> {
     registers: StaticRef<FlashCtrlRegisters>,
     data_client: OptionalCell<&'a dyn flash_hil::Client<FlashCtrl<'a>>>,
+    page_chunk_iterator: OptionalCell<PageChunkIterator<'static>>,
     is_busy: Cell<BusyStatus>,
 }
 
@@ -149,6 +153,7 @@ impl FlashCtrl<'_> {
         let flash_ctrl = Self {
             registers: FLASH_CTRL_BASE,
             data_client: OptionalCell::empty(),
+            page_chunk_iterator: OptionalCell::empty(),
             is_busy: Cell::new(BusyStatus::NotBusy),
         };
         flash_ctrl.init(memory_protection_configuration);
@@ -994,6 +999,43 @@ impl FlashCtrl<'_> {
         }
     }
 
+    /// Write a word to the program FIFO
+    ///
+    /// # Parameters
+    ///
+    /// + `word`: the word to be written
+    fn write_word(&self, word: usize) {
+        self.registers.prog_fifo.set(word as u32);
+    }
+
+    /// Write the given chunk to the program FIFO
+    ///
+    /// # Parameters
+    ///
+    /// + `chunk_iterator`: an iterator over all words of the chunk
+    fn write_chunk(&self, chunk_iterator: ImmutableChunkIterator) {
+        for &word in chunk_iterator {
+            self.write_word(word);
+        }
+    }
+
+    /// Make the flash write the next available [Chunk] from the stored page chunk iterator
+    ///
+    /// # Panic
+    ///
+    /// This method panics if there is no page chunk stored.
+    fn write_data(&self) {
+        self.operate_on_page_chunk_iterator(|page_chunk_iterator| {
+            if let Some(immutable_page_chunk_iterator_item) = page_chunk_iterator.next_immutable() {
+                let (chunk, chunk_flash_address) = immutable_page_chunk_iterator_item.inner();
+                self.configure_address_register(chunk_flash_address);
+                self.start_flash_operation();
+                let chunk_iterator = ImmutableChunkIterator::new(chunk);
+                self.write_chunk(chunk_iterator);
+            }
+        });
+    }
+
     /// Converts a raw page number to data page index and bank.
     ///
     /// A raw page number is a page number provided by a capsule. This method attempts to map the
@@ -1151,6 +1193,70 @@ impl FlashCtrl<'_> {
         self.is_busy.set(BusyStatus::NotBusy);
     }
 
+    /// Take the stored page chunk iterator
+    ///
+    /// # Return value
+    ///
+    /// [PageChunkIterator] representing the current stored page chunk iterator
+    ///
+    /// # Panic
+    ///
+    /// This method panics if there is no page chunk stored
+    fn take_page_chunk_iterator(&self) -> PageChunkIterator<'static> {
+        self.page_chunk_iterator.take().unwrap()
+    }
+
+    /// Store the given page chunk iterator
+    ///
+    /// # Parameters
+    ///
+    /// + `page_chunk_iterator`: the page chunk iterator to be stored
+    fn set_page_chunk_iterator(&self, page_chunk_iterator: PageChunkIterator<'static>) {
+        self.page_chunk_iterator.set(page_chunk_iterator);
+    }
+
+    /// Helper function to apply a closure on the stored page chunk iterator
+    ///
+    ///
+    /// # Parameters
+    ///
+    /// + `closure`: the closure to be applied on the stored page chunk iterator
+    ///
+    /// # Panic
+    ///
+    /// This method panics if there is no page chunk stored
+    fn operate_on_page_chunk_iterator<F>(&self, closure: F)
+    where
+        F: FnOnce(&mut PageChunkIterator<'static>),
+    {
+        let mut page_chunk_iterator = self.take_page_chunk_iterator();
+        closure(&mut page_chunk_iterator);
+        self.set_page_chunk_iterator(page_chunk_iterator);
+    }
+
+    /// Write a data page
+    ///
+    /// As all internal methods, it assumes valid parameters through the type system.
+    ///
+    /// # Parameters
+    ///
+    /// + `page`: the data page to be written
+    fn internal_write_data_page(
+        &self,
+        page: DataFlashCtrlPage<'static>,
+    ) -> Result<(), (ErrorCode, DataFlashCtrlPage<'static>)> {
+        if self.is_busy() == BusyStatus::Busy {
+            return Err((ErrorCode::BUSY, page));
+        }
+
+        self.prepare_page_operation_data_partition(page.get_position(), FlashOperationType::Write);
+        let page_chunk_iterator = PageChunkIterator::new(FlashCtrlPage::DataPage(page));
+        self.set_page_chunk_iterator(page_chunk_iterator);
+        self.write_data();
+
+        Ok(())
+    }
+
     /// Erase a data page
     ///
     /// As all internal methods, it assumes valid parameters through the type system.
@@ -1286,6 +1392,19 @@ impl FlashCtrl<'_> {
         self.registers.op_status.modify(OP_STATUS::ERR::CLEAR);
     }
 
+    fn write_complete(
+        &self,
+        raw_page: &'static mut RawFlashCtrlPage,
+        result: Result<(), flash_hil::Error>,
+    ) {
+        match self.read_partition_type() {
+            PartitionType::Data => self
+                .data_client
+                .map(|data_client| data_client.write_complete(raw_page, result)),
+            PartitionType::Info => unimplemented!(),
+        };
+    }
+
     fn erase_complete(&self, result: Result<(), flash_hil::Error>) {
         match self.read_partition_type() {
             PartitionType::Data => self
@@ -1310,7 +1429,12 @@ impl FlashCtrl<'_> {
                     unimplemented!()
                 }
                 FlashOperationType::Write => {
-                    unimplemented!()
+                    // This may never panic because before an operation starts, the user of the
+                    // driver has to provide a reference to a page from which the iterator is
+                    // created and stored.
+                    let page_chunk_iterator = self.take_page_chunk_iterator();
+                    let raw_page = page_chunk_iterator.to_raw_page();
+                    self.write_complete(raw_page, Err(error));
                 }
                 FlashOperationType::Erase => self.erase_complete(Err(error)),
             }
@@ -1323,7 +1447,19 @@ impl FlashCtrl<'_> {
                 unimplemented!()
             }
             FlashOperationType::Write => {
-                unimplemented!()
+                // This may never panic because before an operation starts, the user of the
+                // driver has to provide a reference to a page from which the iterator is
+                // created and stored.
+                let page_chunk_iterator = self.take_page_chunk_iterator();
+                let empty_status = page_chunk_iterator.empty();
+
+                if PageChunkIteratorEmpty::Empty == empty_status {
+                    let raw_page = page_chunk_iterator.to_raw_page();
+                    self.write_complete(raw_page, Ok(()));
+                } else {
+                    self.page_chunk_iterator.set(page_chunk_iterator);
+                    self.write_data();
+                }
             }
             FlashOperationType::Erase => self.erase_complete(Ok(())),
         }
@@ -1359,7 +1495,18 @@ impl flash_hil::Flash for FlashCtrl<'_> {
         page_number: usize,
         raw_page: &'static mut Self::Page,
     ) -> Result<(), (ErrorCode, &'static mut Self::Page)> {
-        unimplemented!()
+        let (data_page_index, bank) =
+            match Self::convert_raw_page_number_to_data_page_index_and_bank(page_number) {
+                Ok(tuple) => tuple,
+                Err(()) => return Err((ErrorCode::INVAL, raw_page)),
+            };
+
+        let data_page_position = DataPagePosition::new(bank, data_page_index);
+
+        let data_page = DataFlashCtrlPage::new(data_page_position, raw_page);
+
+        self.internal_write_data_page(data_page)
+            .map_err(|(error_code, data_page)| (error_code, data_page.to_raw_page()))
     }
 
     fn erase_page(&self, page_number: usize) -> Result<(), ErrorCode> {
