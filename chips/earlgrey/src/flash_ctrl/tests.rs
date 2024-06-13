@@ -36,6 +36,9 @@ use crate::uart::Uart;
 use kernel::hil::flash::Client as FlashClientTrait;
 use kernel::hil::flash::Flash as FlashTrait;
 use kernel::hil::flash::HasClient;
+use kernel::hil::flash::HasInfoClient;
+use kernel::hil::flash::InfoClient as FlashInfoClientTrait;
+use kernel::hil::flash::InfoFlash as InfoFlashTrait;
 use kernel::utilities::cells::{OptionalCell, TakeCell};
 use kernel::utilities::registers::{interfaces::Readable, ReadWrite};
 use kernel::ErrorCode;
@@ -137,6 +140,16 @@ enum TestState {
     TestDataEraseBusy,
     TestDataWriteBusy,
     TestDataReadBusy,
+    TestInfoErase,
+    TestInfoWrite,
+    // There is no TestInfoRead because TestInfoErase and TestInfoWrite already use page reading
+    // since it is impossible to read a flash page directly from the host system.
+    TestInfoEraseFault,
+    TestInfoWriteFault,
+    TestInfoReadFault,
+    TestInfoEraseBusy,
+    TestInfoWriteBusy,
+    TestInfoReadBusy,
 }
 
 fn check_page_content(page_content: &[u8; EARLGREY_PAGE_SIZE.get()], message: &str) {
@@ -170,6 +183,37 @@ unsafe fn convert_data_page_position_to_host_array<'a>(
         + page_number * EARLGREY_PAGE_SIZE.get()) as *mut u8;
 
     &mut *host_ptr.cast::<[u8; EARLGREY_PAGE_SIZE.get()]>()
+}
+
+fn decompose_info_page_position(
+    info_page_position: InfoPagePosition,
+) -> (InfoPartitionType, Bank, usize) {
+    match info_page_position {
+        InfoPagePosition::Type0(info0_page_position) => match info0_page_position {
+            Info0PagePosition::Bank0(page_index) => {
+                (InfoPartitionType::Type0, Bank::Bank0, page_index.to_usize())
+            }
+            Info0PagePosition::Bank1(page_index) => {
+                (InfoPartitionType::Type0, Bank::Bank1, page_index.to_usize())
+            }
+        },
+        InfoPagePosition::Type1(info1_page_position) => match info1_page_position {
+            Info1PagePosition::Bank0(page_index) => {
+                (InfoPartitionType::Type1, Bank::Bank0, page_index.to_usize())
+            }
+            Info1PagePosition::Bank1(page_index) => {
+                (InfoPartitionType::Type1, Bank::Bank1, page_index.to_usize())
+            }
+        },
+        InfoPagePosition::Type2(info2_page_position) => match info2_page_position {
+            Info2PagePosition::Bank0(page_index) => {
+                (InfoPartitionType::Type2, Bank::Bank0, page_index.to_usize())
+            }
+            Info2PagePosition::Bank1(page_index) => {
+                (InfoPartitionType::Type2, Bank::Bank1, page_index.to_usize())
+            }
+        },
+    }
 }
 
 fn copy_message_and_fill_to_page<'a>(page: &'a mut FlashPage<'a>, message: &str) {
@@ -587,6 +631,7 @@ pub struct TestClient<'a> {
     state: Cell<TestState>,
     page_position_range: RangeInclusive<DataPagePosition>,
     current_data_test_page_position: Cell<DataPagePosition>,
+    current_info_test_page_position: Cell<InfoPagePosition>,
     current_test_message: OptionalCell<&'a str>,
 }
 
@@ -605,6 +650,9 @@ impl<'a> TestClient<'a> {
             page_position_range,
             current_data_test_page_position: Cell::new(DataPagePosition::Bank0(
                 DataPageIndex::new(0),
+            )),
+            current_info_test_page_position: Cell::new(InfoPagePosition::Type0(
+                Info0PagePosition::new(Bank::Bank0, Info0PageIndex::Index0),
             )),
             current_test_message: OptionalCell::empty(),
         }
@@ -655,6 +703,86 @@ impl<'a> TestClient<'a> {
     fn raw_erase_data_page(&self, page_number: usize) -> Result<(), ErrorCode> {
         print_test_info!("Attempting to erase page number {}", page_number);
         let result = self.flash.erase_page(page_number);
+        Self::print_info_result_erase(&result);
+
+        result
+    }
+
+    fn raw_read_info_page(
+        &self,
+        info_partition_type: InfoPartitionType,
+        bank: Bank,
+        page_number: usize,
+        page: &'static mut FlashPage<'a>,
+    ) -> Result<(), (ErrorCode, &'static mut FlashPage<'a>)> {
+        print_test_info!(
+            "Attempting to read info page: {:?}, {:?}, page number {}",
+            info_partition_type,
+            bank,
+            page_number
+        );
+        let result = self
+            .flash
+            .read_info_page(info_partition_type, bank, page_number, page);
+        Self::print_info_result_read_write(&result);
+
+        result
+    }
+
+    fn read_info_page(
+        &self,
+        info_page_position: InfoPagePosition,
+        page: &'static mut FlashPage<'a>,
+    ) {
+        let (info_partition_type, bank, page_number) =
+            decompose_info_page_position(info_page_position);
+        let result = self.raw_read_info_page(info_partition_type, bank, page_number, page);
+
+        if let Err((error_code, _page)) = result {
+            panic!(
+                "Reading page {}, {:?}, {:?} must succeed, but instead failed with error {:?}",
+                page_number, bank, info_partition_type, error_code
+            )
+        }
+    }
+
+    fn raw_write_info_page(
+        &self,
+        info_partition_type: InfoPartitionType,
+        bank: Bank,
+        page_number: usize,
+        page: &'static mut FlashPage<'a>,
+    ) -> Result<(), (ErrorCode, &'static mut FlashPage<'a>)> {
+        print_test_info!(
+            "Attempting to write info page: {:?}, {:?}, page number {}",
+            info_partition_type,
+            bank,
+            page_number,
+        );
+
+        let result = self
+            .flash
+            .write_info_page(info_partition_type, bank, page_number, page);
+        Self::print_info_result_read_write(&result);
+
+        result
+    }
+
+    fn raw_erase_info_page(
+        &self,
+        info_partition_type: InfoPartitionType,
+        bank: Bank,
+        page_number: usize,
+    ) -> Result<(), ErrorCode> {
+        print_test_info!(
+            "Attempting to erase info page: {:?}, {:?}, page number {}",
+            info_partition_type,
+            bank,
+            page_number,
+        );
+        let result = self
+            .flash
+            .erase_info_page(info_partition_type, bank, page_number);
         Self::print_info_result_erase(&result);
 
         result
@@ -886,6 +1014,61 @@ impl<'a> TestClient<'a> {
         self.test_invalid_read(page_number, page, ErrorCode::BUSY)
     }
 
+    fn test_invalid_info_read(
+        &self,
+        info_partition_type: InfoPartitionType,
+        bank: Bank,
+        page_number: usize,
+        page: &'static mut FlashPage<'static>,
+        expected_error_code: ErrorCode,
+    ) -> &'static mut FlashPage<'static> {
+        let result = self.raw_read_info_page(info_partition_type, bank, page_number, page);
+
+        let (actual_error_code, page) = match result {
+            Ok(()) => panic!(
+                "Reading info page {:?}, {:?}, page number {:?} must fail with error {:?}, but instead succeeded",
+                info_partition_type, bank, page_number, expected_error_code,
+            ),
+            Err((error_code, page)) => (error_code, page),
+        };
+
+        assert_eq!(
+            actual_error_code,
+            expected_error_code,
+            "Reading info page {:?}, {:?}, page number {:?} must fail with error {:?}, but instead failed with error {:?}",
+            info_partition_type, bank, page_number, expected_error_code, actual_error_code,
+        );
+
+        page
+    }
+
+    fn test_invalid_info_read_page_number(
+        &self,
+        info_partition_type: InfoPartitionType,
+        bank: Bank,
+        page_number: usize,
+        page: &'static mut FlashPage<'static>,
+    ) -> &'static mut FlashPage<'static> {
+        self.test_invalid_info_read(
+            info_partition_type,
+            bank,
+            page_number,
+            page,
+            ErrorCode::INVAL,
+        )
+    }
+
+    fn test_invalid_info_read_busy(
+        &self,
+        info_page_position: InfoPagePosition,
+        page: &'static mut FlashPage<'static>,
+    ) -> &'static mut FlashPage<'static> {
+        const EXPECTED_ERROR: ErrorCode = ErrorCode::BUSY;
+        let (info_partition_type, bank, page_number) =
+            decompose_info_page_position(info_page_position);
+        self.test_invalid_info_read(info_partition_type, bank, page_number, page, EXPECTED_ERROR)
+    }
+
     fn test_invalid_write(
         &self,
         page_number: usize,
@@ -927,6 +1110,61 @@ impl<'a> TestClient<'a> {
         self.test_invalid_write(page_number, page, ErrorCode::BUSY)
     }
 
+    fn test_invalid_info_write(
+        &self,
+        info_partition_type: InfoPartitionType,
+        bank: Bank,
+        page_number: usize,
+        page: &'static mut FlashPage<'static>,
+        expected_error_code: ErrorCode,
+    ) -> &'static mut FlashPage<'static> {
+        let result = self.raw_write_info_page(info_partition_type, bank, page_number, page);
+
+        let (actual_error_code, page) = match result {
+            Ok(()) => panic!(
+                "Writing info page {:?}, {:?}, page number {:?} must fail with error {:?}, but instead succeeded",
+                info_partition_type, bank, page_number, expected_error_code,
+            ),
+            Err((error_code, page)) => (error_code, page),
+        };
+
+        assert_eq!(
+            actual_error_code,
+            expected_error_code,
+            "Writing info page {:?}, {:?}, page number {:?} must fail with error {:?}, but instead failed with error {:?}",
+            info_partition_type, bank, page_number, expected_error_code, actual_error_code,
+        );
+
+        page
+    }
+
+    fn test_invalid_info_write_page_number(
+        &self,
+        info_partition_type: InfoPartitionType,
+        bank: Bank,
+        page_number: usize,
+        page: &'static mut FlashPage<'static>,
+    ) -> &'static mut FlashPage<'static> {
+        self.test_invalid_info_write(
+            info_partition_type,
+            bank,
+            page_number,
+            page,
+            ErrorCode::INVAL,
+        )
+    }
+
+    fn test_invalid_info_write_busy(
+        &self,
+        info_page_position: InfoPagePosition,
+        page: &'static mut FlashPage<'static>,
+    ) -> &'static mut FlashPage<'static> {
+        const EXPECTED_ERROR: ErrorCode = ErrorCode::BUSY;
+        let (info_partition_type, bank, page_number) =
+            decompose_info_page_position(info_page_position);
+        self.test_invalid_info_write(info_partition_type, bank, page_number, page, EXPECTED_ERROR)
+    }
+
     fn test_invalid_erase(&self, page_number: usize, expected_error_code: ErrorCode) {
         let result = self.raw_erase_data_page(page_number);
 
@@ -945,6 +1183,39 @@ impl<'a> TestClient<'a> {
         );
     }
 
+    fn test_invalid_info_erase(
+        &self,
+        info_partition_type: InfoPartitionType,
+        bank: Bank,
+        page_number: usize,
+        expected_error_code: ErrorCode,
+    ) {
+        let result = self.raw_erase_info_page(info_partition_type, bank, page_number);
+
+        let actual_error_code = match result {
+            Ok(()) => panic!(
+                "Attempting to erase info page {:?}, {:?}, page number {:?} must fail with error code {:?}, but instead succeeded",
+                info_partition_type, bank, page_number, expected_error_code,
+            ),
+            Err(error_code) => error_code,
+        };
+
+        assert_eq!(
+            expected_error_code, actual_error_code,
+            "Attempting to erase info page {:?}, {:?}, page number {:?} must fail with error code {:?}, but instead failed with error {:?}",
+            info_partition_type, bank, page_number, expected_error_code, actual_error_code,
+        );
+    }
+
+    fn test_invalid_info_erase_page_number(
+        &self,
+        info_partition_type: InfoPartitionType,
+        bank: Bank,
+        page_number: usize,
+    ) {
+        self.test_invalid_info_erase(info_partition_type, bank, page_number, ErrorCode::INVAL);
+    }
+
     fn test_invalid_erase_page_number(&self, page_number: usize) {
         self.test_invalid_erase(page_number, ErrorCode::INVAL);
     }
@@ -955,12 +1226,27 @@ impl<'a> TestClient<'a> {
         self.test_invalid_erase(page_number, ErrorCode::BUSY);
     }
 
+    fn test_invalid_info_erase_busy(&self, info_page_position: InfoPagePosition) {
+        const EXPECTED_ERROR: ErrorCode = ErrorCode::BUSY;
+        let (info_partition_type, bank, page_number) =
+            decompose_info_page_position(info_page_position);
+        self.test_invalid_info_erase(info_partition_type, bank, page_number, EXPECTED_ERROR);
+    }
+
     fn set_current_data_test_page_position(&self, page_position: DataPagePosition) {
         self.current_data_test_page_position.set(page_position);
     }
 
     fn get_current_data_test_page_position(&self) -> DataPagePosition {
         self.current_data_test_page_position.get()
+    }
+
+    fn set_current_info_test_page_position(&self, page_position: InfoPagePosition) {
+        self.current_info_test_page_position.set(page_position);
+    }
+
+    fn get_current_info_test_page_position(&self) -> InfoPagePosition {
+        self.current_info_test_page_position.get()
     }
 
     fn write_message(&self, page_position: DataPagePosition, message: &'a str) {
@@ -979,6 +1265,26 @@ impl<'a> TestClient<'a> {
             panic!(
                 "Writing page number {} must succeed, but instead failed with error {:?}",
                 page_number, error_code
+            );
+        }
+    }
+
+    fn write_message_info_page(&self, info_page_position: InfoPagePosition, message: &'a str) {
+        print_test_info!(
+            "writing info page {:?} and message \"{}\"",
+            info_page_position,
+            message
+        );
+
+        let page = self.take_page();
+        copy_message_and_fill_to_page(page, message);
+        let (info_partition_type, bank, page_number) =
+            decompose_info_page_position(info_page_position);
+        let result = self.raw_write_info_page(info_partition_type, bank, page_number, page);
+        if let Err((error_code, _page)) = result {
+            panic!(
+                "Writing info page {:?} must succeed, but instead failed with error {:?}",
+                info_page_position, error_code
             );
         }
     }
@@ -1004,13 +1310,78 @@ impl<'a> TestClient<'a> {
         }
     }
 
+    fn read_info_message(&self, info_page_position: InfoPagePosition, message: &'a str) {
+        self.set_current_test_message(message);
+        let (info_partition_type, bank, page_number) =
+            decompose_info_page_position(info_page_position);
+        let page = self.take_page();
+        let result = self.raw_read_info_page(info_partition_type, bank, page_number, page);
+        if let Err((error_code, _page)) = result {
+            panic!(
+                "Reading page {:?}, {:?}, {:?} must succeed, but instead failed with error {:?}",
+                page_number, bank, info_partition_type, error_code,
+            );
+        }
+    }
+
+    fn test_erase_info_page(&self, page_position: InfoPagePosition) {
+        let (info_partition_type, bank, page_number) = decompose_info_page_position(page_position);
+        self.set_current_info_test_page_position(page_position);
+        let result = self.raw_erase_info_page(info_partition_type, bank, page_number);
+        if let Err(error_code) = result {
+            panic!(
+                "Erasing page {:?} must succeed, but instead failed with error {:?}",
+                page_position, error_code
+            );
+        }
+    }
+
     fn test_write_page(&self, page_position: DataPagePosition) {
         self.write_message(page_position, WRITE_MESSAGE);
+    }
+
+    fn test_write_info_page(&self, page_position: InfoPagePosition) {
+        self.write_message_info_page(page_position, WRITE_MESSAGE);
     }
 
     fn test_read_page(&self, page_position: DataPagePosition) {
         // First, a page needs to be erased before writing to it
         self.test_erase_data_page(page_position);
+    }
+
+    fn test_info_invalid_arguments(&self) {
+        print_test_header("info page read with invalid page number");
+        let info_partition_type = InfoPartitionType::Type0;
+        let bank = Bank::Bank0;
+        let invalid_page_number = Info0PageIndex::Index9 as usize + 1;
+        let mut page = self.take_page();
+        page = self.test_invalid_info_read_page_number(
+            info_partition_type,
+            bank,
+            invalid_page_number,
+            page,
+        );
+        print_test_footer("info page read with invalid page number");
+
+        print_test_header("info page write with invalid page number");
+        let info_partition_type = InfoPartitionType::Type1;
+        let bank = Bank::Bank1;
+        let invalid_page_number = Info1PageIndex::Index0 as usize + 1;
+        page = self.test_invalid_info_write_page_number(
+            info_partition_type,
+            bank,
+            invalid_page_number,
+            page,
+        );
+        self.set_page(page);
+        print_test_footer("info page write with invalid page number");
+
+        print_test_header("info page erase with invalid page number");
+        let info_partition_type = InfoPartitionType::Type2;
+        let bank = Bank::Bank0;
+        let invalid_page_number = Info2PageIndex::Index1 as usize + 1;
+        self.test_invalid_info_erase_page_number(info_partition_type, bank, invalid_page_number);
+        print_test_footer("info page erase with invalid page number");
     }
 
     fn test_erase_data_page(&self, page_position: DataPagePosition) {
@@ -1038,6 +1409,21 @@ impl<'a> TestClient<'a> {
         self.test_invalid_erase_busy(page_position);
     }
 
+    fn test_erase_info_page_busy(&self, info_page_position: InfoPagePosition) {
+        self.set_current_info_test_page_position(info_page_position);
+        let (info_partition_type, bank, page_number) =
+            decompose_info_page_position(info_page_position);
+        let page = self.take_page();
+        let result = self.raw_write_info_page(info_partition_type, bank, page_number, page);
+        if let Err((error_code, _page)) = result {
+            panic!(
+                "Writing info page {:?} must succeed, but instead failed with error {:?}",
+                info_page_position, error_code,
+            );
+        }
+        self.test_invalid_info_erase_busy(info_page_position);
+    }
+
     fn test_write_busy(&self, page_position: DataPagePosition) {
         let page_number = convert_data_page_position_to_page_number(page_position);
         self.set_current_data_test_page_position(page_position);
@@ -1051,6 +1437,24 @@ impl<'a> TestClient<'a> {
         }
         let mut placeholder_page = self.take_placeholder_page();
         placeholder_page = self.test_invalid_write_busy(page_number, placeholder_page);
+        self.set_placeholder_page(placeholder_page);
+    }
+
+    fn test_write_info_page_busy(&self, info_page_position: InfoPagePosition) {
+        self.set_current_info_test_page_position(info_page_position);
+        let (info_partition_type, bank, page_number) =
+            decompose_info_page_position(info_page_position);
+        let page = self.take_page();
+        let result = self.raw_read_info_page(info_partition_type, bank, page_number, page);
+        if let Err((error_code, _page)) = result {
+            panic!(
+                "Reading info page {:?} must succeed, but instead failed with error {:?}",
+                info_page_position, error_code,
+            );
+        }
+
+        let mut placeholder_page = self.take_placeholder_page();
+        placeholder_page = self.test_invalid_info_write_busy(info_page_position, placeholder_page);
         self.set_placeholder_page(placeholder_page);
     }
 
@@ -1068,6 +1472,23 @@ impl<'a> TestClient<'a> {
         let mut placeholder_page = self.take_placeholder_page();
         placeholder_page = self.test_invalid_read_busy(page_number, placeholder_page);
         self.set_placeholder_page(placeholder_page);
+    }
+
+    fn test_read_info_page_busy(&self, info_page_position: InfoPagePosition) {
+        self.set_current_info_test_page_position(info_page_position);
+        let (info_partition_type, bank, page_number) =
+            decompose_info_page_position(info_page_position);
+        let mut page = self.take_page();
+        let result = self.raw_erase_info_page(info_partition_type, bank, page_number);
+        if let Err(error_code) = result {
+            panic!(
+                "Writing info page {:?} must succeed, but instead failed with error {:?}",
+                info_page_position, error_code,
+            );
+        }
+
+        page = self.test_invalid_info_read_busy(info_page_position, page);
+        self.set_page(page);
     }
 
     fn check_successful_data_write(
@@ -1110,6 +1531,30 @@ impl<'a> TestClient<'a> {
         );
     }
 
+    fn check_successful_info_write(
+        &self,
+        write_page: &'static mut FlashPage<'a>,
+        result: Result<(), Error>,
+    ) {
+        if let Err(error) = result {
+            panic!(
+                "Write must succeed for test case {:?}, but instead failed with error {:?}",
+                self.get_current_test_case(),
+                error
+            );
+        }
+
+        let current_info_test_page_position = self.get_current_info_test_page_position();
+        let current_test_message = self.take_current_test_message();
+        let write_page_content: &mut [u8; EARLGREY_PAGE_SIZE.get()] = write_page.as_mut();
+        // Fill the page with ERASE_BYTE_VALUE to prevent false positive tests in case the read
+        // operation doesn't work as expected.
+        write_page_content.fill(ERASE_BYTE_VALUE);
+        self.set_page(write_page);
+
+        self.read_info_message(current_info_test_page_position, current_test_message);
+    }
+
     fn check_successful_data_erase(&self, result: Result<(), Error>) {
         assert!(
             result.is_ok(),
@@ -1148,6 +1593,24 @@ impl<'a> TestClient<'a> {
             expected_error, actual_error,
             "Expected error {:?}, got {:?}",
             expected_error, actual_error
+        );
+    }
+
+    fn check_successful_info_erase(
+        read_erased_page: &FlashPage<'a>,
+        read_result: Result<(), Error>,
+    ) {
+        if let Err(error) = read_result {
+            panic!(
+                "Read failed with error {:?} when it was expected to succeed",
+                error
+            );
+        }
+
+        assert!(
+            is_slice_filled_with(read_erased_page.as_ref(), ERASE_BYTE_VALUE),
+            "Erase must fill all bytes with {:#x}",
+            ERASE_BYTE_VALUE,
         );
     }
 
@@ -1412,9 +1875,15 @@ impl<'a> TestClient<'a> {
 
                 let page_number = MAX_DATA_PAGE_INDEX.get() as usize * 3;
                 let mut page = self.take_page();
+
+                print_test_header("page read with invalid page number");
+                page = self.test_invalid_read_page_number(page_number, page);
+                print_test_footer("page read with invalid page number");
+
                 print_test_header("page write with invalid page number");
                 page = self.test_invalid_write_page_number(page_number, page);
                 print_test_footer("page write with invalid page number");
+
                 self.set_page(page);
 
                 print_test_header("page erase with invalid page number");
@@ -1498,6 +1967,49 @@ impl<'a> TestClient<'a> {
                 self.test_read_busy(page_position);
             }
             TestState::TestDataReadBusy => {
+                // First test calls with invalid arguments
+                self.test_info_invalid_arguments();
+                print_test_header("valid info page erase");
+                self.state.set(TestState::TestInfoErase);
+                self.test_erase_info_page(VALID_INFO_PAGE_POSITION);
+            }
+            TestState::TestInfoErase => {
+                print_test_header("valid info page write");
+                self.state.set(TestState::TestInfoWrite);
+                self.test_write_info_page(VALID_INFO_PAGE_POSITION);
+            }
+            TestState::TestInfoWrite => {
+                print_test_header("fault info page erase");
+                self.state.set(TestState::TestInfoEraseFault);
+                self.test_erase_info_page(INVALID_INFO_PAGE_POSITION);
+            }
+            TestState::TestInfoEraseFault => {
+                print_test_header("fault info page write");
+                self.state.set(TestState::TestInfoWriteFault);
+                self.test_write_info_page(INVALID_INFO_PAGE_POSITION);
+            }
+            TestState::TestInfoWriteFault => {
+                print_test_header("fault info page read");
+                self.state.set(TestState::TestInfoReadFault);
+                let page = self.take_page();
+                self.read_info_page(INVALID_INFO_PAGE_POSITION, page);
+            }
+            TestState::TestInfoReadFault => {
+                print_test_header("info page erase busy");
+                self.state.set(TestState::TestInfoEraseBusy);
+                self.test_erase_info_page_busy(VALID_INFO_PAGE_POSITION);
+            }
+            TestState::TestInfoEraseBusy => {
+                print_test_header("info page write busy");
+                self.state.set(TestState::TestInfoWriteBusy);
+                self.test_write_info_page_busy(VALID_INFO_PAGE_POSITION);
+            }
+            TestState::TestInfoWriteBusy => {
+                print_test_header("info page read busy");
+                self.state.set(TestState::TestInfoReadBusy);
+                self.test_read_info_page_busy(VALID_INFO_PAGE_POSITION);
+            }
+            TestState::TestInfoReadBusy => {
                 println!("\r\nFinished all tests. Everything is alright!\r\n");
             }
         }
@@ -1629,6 +2141,121 @@ impl<'a> FlashClientTrait<FlashCtrl<'a>> for TestClient<'a> {
     }
 }
 
+impl<'a> FlashInfoClientTrait<FlashCtrl<'a>> for TestClient<'a> {
+    fn info_read_complete(&self, read_page: &'static mut FlashPage<'a>, result: Result<(), Error>) {
+        self.check_clean_state();
+
+        match &result {
+            ok @ Ok(()) => print_test_info!("Read completed: {:?}", ok),
+            error => print_test_info!("Read completed: {:?}", error),
+        }
+
+        match self.get_current_test_case() {
+            TestState::TestInfoErase => {
+                Self::check_successful_info_erase(read_page, result);
+                self.set_page(read_page);
+                print_test_footer("valid info page erase");
+                self.execute_next_test();
+            }
+            TestState::TestInfoWrite => {
+                let current_test_message = self.take_current_test_message();
+                let page_content: &[u8; EARLGREY_PAGE_SIZE.get()] = read_page.as_ref();
+
+                check_page_content(page_content, current_test_message);
+                self.set_page(read_page);
+                print_test_footer("valid info page write");
+                self.execute_next_test();
+            }
+            TestState::TestInfoReadFault => {
+                const EXPECTED_ERROR: Error = Error::FlashMemoryProtectionError;
+                self.set_page(read_page);
+                self.check_unsuccessful_read(result, EXPECTED_ERROR);
+                print_test_footer("fault info page read");
+                self.execute_next_test();
+            }
+            TestState::TestInfoWriteBusy => {
+                // This is a dummy read, so its result is discarded
+                self.set_page(read_page);
+                print_test_footer("info page write busy");
+                self.execute_next_test();
+            }
+            state => panic!(
+                "info_read_complete must not be trigerred for state {:?}",
+                state
+            ),
+        }
+    }
+
+    fn info_write_complete(
+        &self,
+        write_page: &'static mut FlashPage<'a>,
+        result: Result<(), Error>,
+    ) {
+        self.check_clean_state();
+
+        match &result {
+            ok @ Ok(()) => print_test_info!("Write completed: {:?}", ok),
+            error => print_test_info!("Write completed: {:?}", error),
+        }
+
+        match self.get_current_test_case() {
+            TestState::TestInfoWrite => {
+                self.check_successful_info_write(write_page, result);
+            }
+            TestState::TestInfoWriteFault => {
+                const EXPECTED_ERROR: Error = Error::FlashMemoryProtectionError;
+                self.set_page(write_page);
+                self.check_unsuccessful_write(result, EXPECTED_ERROR);
+                print_test_footer("fault info page write");
+                self.execute_next_test();
+            }
+            TestState::TestInfoEraseBusy => {
+                // This is a dummy write, so the result is discarded.
+                self.set_page(write_page);
+                print_test_footer("info page erase busy");
+                self.execute_next_test();
+            }
+            state => panic!(
+                "info_write_complete() must not be triggered for state {:?}",
+                state
+            ),
+        }
+    }
+
+    fn info_erase_complete(&self, result: Result<(), Error>) {
+        self.check_clean_state();
+
+        match &result {
+            ok @ Ok(()) => print_test_info!("Erase completed: {:?}", ok),
+            error => print_test_info!("Erase completed: {:?}", error),
+        }
+
+        match self.get_current_test_case() {
+            TestState::TestInfoErase => {
+                self.check_successful_data_erase(result);
+                let current_info_test_page_position = self.get_current_info_test_page_position();
+                let page = self.take_page();
+                self.read_info_page(current_info_test_page_position, page);
+            }
+            TestState::TestInfoEraseFault => {
+                const EXPECTED_ERROR: Error = Error::FlashMemoryProtectionError;
+                self.check_unsuccessful_erase(result, EXPECTED_ERROR);
+                print_test_footer("fault info page erase");
+                self.execute_next_test();
+            }
+            TestState::TestInfoReadBusy => {
+                // This is a dummy erase, so its result is discarded
+                print_test_footer("info page read busy");
+                self.execute_next_test();
+            }
+            state => panic!(
+                "info_erase_complete() must not be triggered for state {:?}",
+                state
+            ),
+        }
+    }
+}
+
 fn convert_address_to_page_position(
     host_address: *const u8,
 ) -> Result<DataPagePosition, InvalidHostAddressError> {
@@ -1705,5 +2332,6 @@ pub fn run_all(
 
     test_memory_protection_region0(flash, DataMemoryProtectionRegionIndex::Index0);
     flash.set_client(test_client);
+    flash.set_info_client(test_client);
     test_client.execute_next_test();
 }

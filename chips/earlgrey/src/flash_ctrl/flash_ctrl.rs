@@ -68,6 +68,22 @@ pub(super) enum BusyStatus {
     NotBusy,
 }
 
+/// Read/Write flash operation
+#[derive(PartialEq, Eq, Clone, Copy)]
+enum ReadWriteFlashOperationType {
+    Read,
+    Write,
+}
+
+impl Into<FieldValue<u32, CONTROL::Register>> for ReadWriteFlashOperationType {
+    fn into(self) -> FieldValue<u32, CONTROL::Register> {
+        match self {
+            ReadWriteFlashOperationType::Read => CONTROL::OP::READ,
+            ReadWriteFlashOperationType::Write => CONTROL::OP::PROG,
+        }
+    }
+}
+
 /// Possible flash operations
 #[derive(PartialEq, Eq, Clone, Copy)]
 enum FlashOperationType {
@@ -134,6 +150,7 @@ enum FlashErrorCode {
 pub struct FlashCtrl<'a> {
     registers: StaticRef<FlashCtrlRegisters>,
     data_client: OptionalCell<&'a dyn flash_hil::Client<FlashCtrl<'a>>>,
+    info_client: OptionalCell<&'a dyn flash_hil::InfoClient<FlashCtrl<'a>>>,
     page_chunk_iterator: OptionalCell<PageChunkIterator<'static>>,
     is_busy: Cell<BusyStatus>,
 }
@@ -153,6 +170,7 @@ impl FlashCtrl<'_> {
         let flash_ctrl = Self {
             registers: FLASH_CTRL_BASE,
             data_client: OptionalCell::empty(),
+            info_client: OptionalCell::empty(),
             page_chunk_iterator: OptionalCell::empty(),
             is_busy: Cell::new(BusyStatus::NotBusy),
         };
@@ -999,6 +1017,27 @@ impl FlashCtrl<'_> {
         }
     }
 
+    /// Convert info partition type to register value
+    ///
+    /// Converts [InfoPartitionType] to a value suitable to be written to a register
+    ///
+    /// # Parameters
+    ///
+    /// + `info_partition_type`: [InfoPartitionType] to be converted
+    ///
+    /// # Return value
+    ///
+    /// The corresponding register value
+    const fn convert_info_partition_type_to_register_value(
+        info_partition_type: InfoPartitionType,
+    ) -> FieldValue<u32, CONTROL::Register> {
+        match info_partition_type {
+            InfoPartitionType::Type0 => CONTROL::INFO_SEL::TYPE0,
+            InfoPartitionType::Type1 => CONTROL::INFO_SEL::TYPE1,
+            InfoPartitionType::Type2 => CONTROL::INFO_SEL::TYPE2,
+        }
+    }
+
     /// Read a word from the read FIFO
     ///
     /// # Return value
@@ -1122,11 +1161,10 @@ impl FlashCtrl<'_> {
     ///
     /// + `number_bus_words`: the number of bus words to be read/written by the next operation
     /// + `flash_operation_type`: the desired flash operation type
-    // TODO: Add a new type to represent a read/write operation only
     fn configure_control_register_for_read_write_data_partition(
         &self,
         number_bus_words: NonZeroUsize,
-        flash_operation_type: FlashOperationType,
+        flash_operation_type: ReadWriteFlashOperationType,
     ) {
         // The NUM field value must be configured to the number of bus words to be written minus 1
         let number_bus_words = CONTROL::NUM.val((number_bus_words.get() - 1) as u32);
@@ -1181,10 +1219,120 @@ impl FlashCtrl<'_> {
             FlashOperationType::Erase => {
                 self.configure_control_register_for_erase_data_partition(EraseType::PageErase)
             }
-            FlashOperationType::Read | FlashOperationType::Write => self
+            FlashOperationType::Read => self
                 .configure_control_register_for_read_write_data_partition(
                     WORDS_PER_CHUNK,
-                    flash_operation_type,
+                    ReadWriteFlashOperationType::Read,
+                ),
+            FlashOperationType::Write => self
+                .configure_control_register_for_read_write_data_partition(
+                    WORDS_PER_CHUNK,
+                    ReadWriteFlashOperationType::Write,
+                ),
+        }
+    }
+
+    /// Configure the control register for read/write info partition
+    ///
+    /// Configures the control register for reading/writing data from info partitions.
+    ///
+    /// # Parameters
+    ///
+    /// + `info_partition_type`: the desired info partition to be affected by the next read/write
+    /// operation
+    /// + `number_bus_words`: the number of bus words to be read/written by the next operation
+    /// + `flash_operation_type`: the desired read/write flash operation type
+    fn configure_control_register_for_read_write_info_partition(
+        &self,
+        info_partition_type: InfoPartitionType,
+        number_bus_words: NonZeroUsize,
+        flash_operation_type: ReadWriteFlashOperationType,
+    ) {
+        // The NUM field value must be configured to the number of bus words to be written minus 1
+        let number_bus_words = CONTROL::NUM.val((number_bus_words.get() - 1) as u32);
+
+        let info_partition_type_select =
+            Self::convert_info_partition_type_to_register_value(info_partition_type);
+
+        let partition_type_select =
+            Self::convert_partition_type_to_register_value(PartitionType::Info);
+
+        let operation_type = flash_operation_type.into();
+
+        self.registers.control.modify(
+            number_bus_words
+                + info_partition_type_select
+                + partition_type_select
+                + CONTROL::PROG_SEL::NORMAL_PROGRAM
+                + operation_type
+                + CONTROL::START::CLEAR,
+        );
+    }
+
+    /// Configure the control register for erase info partition
+    ///
+    /// Configures the control register for erasing data from info partitions.
+    ///
+    /// # Parameters
+    ///
+    /// + `info_partition_type`: the desired info partition to be affected by the next erase
+    /// operation
+    /// + `erase_type`: the type of the desired erase
+    fn configure_control_register_for_erase_info_partition(
+        &self,
+        info_partition_type: InfoPartitionType,
+        erase_type: EraseType,
+    ) {
+        let info_partition_type_select =
+            Self::convert_info_partition_type_to_register_value(info_partition_type);
+
+        let partition_type_select =
+            Self::convert_partition_type_to_register_value(PartitionType::Info);
+
+        let erase_type_select = Self::convert_erase_type_to_register_value(erase_type);
+
+        let operation_type = CONTROL::OP::ERASE;
+
+        self.registers.control.modify(
+            info_partition_type_select
+                + partition_type_select
+                + erase_type_select
+                + operation_type
+                + CONTROL::START::CLEAR,
+        );
+    }
+
+    /// Configure the control register for the next operation to be carried on info partitions.
+    ///
+    /// + For read/write, configure the peripheral for reading/writing a [Chunk].
+    /// + For erase, configure the peripheral for erasing a page.
+    ///
+    /// # Parameters:
+    ///
+    /// + `info_partition_type`: the desired info partition to be affected by the next flash
+    /// operation
+    /// + `flash_operation_type`: indicates the desired flash operation
+    fn configure_control_register_for_page_operation_info_partition(
+        &self,
+        info_partition_type: InfoPartitionType,
+        flash_operation_type: FlashOperationType,
+    ) {
+        match flash_operation_type {
+            FlashOperationType::Erase => self.configure_control_register_for_erase_info_partition(
+                info_partition_type,
+                EraseType::PageErase,
+            ),
+            FlashOperationType::Read => self
+                .configure_control_register_for_read_write_info_partition(
+                    info_partition_type,
+                    WORDS_PER_CHUNK,
+                    ReadWriteFlashOperationType::Read,
+                ),
+            FlashOperationType::Write => self
+                .configure_control_register_for_read_write_info_partition(
+                    info_partition_type,
+                    WORDS_PER_CHUNK,
+                    ReadWriteFlashOperationType::Write,
                 ),
         }
     }
@@ -1214,6 +1362,27 @@ impl FlashCtrl<'_> {
     ) {
         self.configure_control_register_for_page_operation_data_partition(flash_operation_type);
         self.configure_address_register(data_page_position.to_flash_ptr());
+    }
+
+    /// Configure control and address registers for the given flash operation on info partition
+    ///
+    /// # Parameters
+    ///
+    /// + `info_page_position`: the desired info flash page to be impacted by the next flash
+    /// operation
+    /// + `flash_operation_type`: the desired flash operation
+    fn prepare_page_operation_info_partition(
+        &self,
+        info_page_position: InfoPagePosition,
+        flash_operation_type: FlashOperationType,
+    ) {
+        let info_partition_type = info_page_position.to_info_partition_type();
+
+        self.configure_control_register_for_page_operation_info_partition(
+            info_partition_type,
+            flash_operation_type,
+        );
+        self.configure_address_register(info_page_position.to_flash_ptr());
     }
 
     /// Determine whether the read FIFO is empty
@@ -1289,6 +1458,39 @@ impl FlashCtrl<'_> {
         self.set_page_chunk_iterator(page_chunk_iterator);
     }
 
+    /// Create a new info page position
+    ///
+    /// # Parameters
+    ///
+    /// + `info_type`: the type of the page
+    /// + `bank`: the bank position of the page
+    /// + `raw_page_number`: the raw page number of the page
+    ///
+    /// # Return value
+    ///
+    /// + Ok(InfoPagePosition) if `raw_page_number` is valid
+    /// + Err(()) if `raw_page_number` is invalid
+    fn new_info_page_position(
+        info_type: InfoPartitionType,
+        bank: Bank,
+        raw_page_number: usize,
+    ) -> Result<InfoPagePosition, ()> {
+        match info_type {
+            InfoPartitionType::Type0 => Ok(InfoPagePosition::Type0(Info0PagePosition::new(
+                bank,
+                Info0PageIndex::new(raw_page_number)?,
+            ))),
+            InfoPartitionType::Type1 => Ok(InfoPagePosition::Type1(Info1PagePosition::new(
+                bank,
+                Info1PageIndex::new(raw_page_number)?,
+            ))),
+            InfoPartitionType::Type2 => Ok(InfoPagePosition::Type2(Info2PagePosition::new(
+                bank,
+                Info2PageIndex::new(raw_page_number)?,
+            ))),
+        }
+    }
+
     /// Read a data page
     ///
     /// As all internal methods, it assumes valid parameters through the type system.
@@ -1351,6 +1553,73 @@ impl FlashCtrl<'_> {
         }
 
         self.prepare_page_operation_data_partition(data_page_position, FlashOperationType::Erase);
+        self.start_flash_operation();
+
+        Ok(())
+    }
+
+    /// Read a info page
+    ///
+    /// As all internal methods, it assumes valid parameters through the type system.
+    ///
+    /// # Parameters
+    ///
+    /// + `page`: the info page to be read
+    fn internal_read_info_page(
+        &self,
+        page: InfoFlashCtrlPage<'static>,
+    ) -> Result<(), (ErrorCode, InfoFlashCtrlPage<'static>)> {
+        if self.is_busy() == BusyStatus::Busy {
+            return Err((ErrorCode::BUSY, page));
+        }
+
+        self.prepare_page_operation_info_partition(page.get_position(), FlashOperationType::Read);
+        let page_chunk_iterator = PageChunkIterator::new(FlashCtrlPage::InfoPage(page));
+        self.set_page_chunk_iterator(page_chunk_iterator);
+        self.start_next_read();
+
+        Ok(())
+    }
+
+    /// Write a info page
+    ///
+    /// As all internal methods, it assumes valid parameters through the type system.
+    ///
+    /// # Parameters
+    ///
+    /// + `page`: the info page to be written
+    fn internal_write_info_page(
+        &self,
+        page: InfoFlashCtrlPage<'static>,
+    ) -> Result<(), (ErrorCode, InfoFlashCtrlPage<'static>)> {
+        if self.is_busy() == BusyStatus::Busy {
+            return Err((ErrorCode::BUSY, page));
+        }
+
+        self.prepare_page_operation_info_partition(page.get_position(), FlashOperationType::Write);
+        let page_chunk_iterator = PageChunkIterator::new(FlashCtrlPage::InfoPage(page));
+        self.set_page_chunk_iterator(page_chunk_iterator);
+        self.write_data();
+
+        Ok(())
+    }
+
+    /// Erase a info page
+    ///
+    /// As all internal methods, it assumes valid parameters through the type system.
+    ///
+    /// # Parameters
+    ///
+    /// + `info_page_position`: indicates what page to be erased
+    fn internal_erase_info_page(
+        &self,
+        info_page_position: InfoPagePosition,
+    ) -> Result<(), ErrorCode> {
+        if self.is_busy() == BusyStatus::Busy {
+            return Err(ErrorCode::BUSY);
+        }
+
+        self.prepare_page_operation_info_partition(info_page_position, FlashOperationType::Erase);
         self.start_flash_operation();
 
         Ok(())
@@ -1479,7 +1748,9 @@ impl FlashCtrl<'_> {
             PartitionType::Data => self
                 .data_client
                 .map(|data_client| data_client.read_complete(raw_page, result)),
-            PartitionType::Info => unimplemented!(),
+            PartitionType::Info => self
+                .info_client
+                .map(|info_client| info_client.info_read_complete(raw_page, result)),
         };
     }
 
@@ -1492,7 +1763,9 @@ impl FlashCtrl<'_> {
             PartitionType::Data => self
                 .data_client
                 .map(|data_client| data_client.write_complete(raw_page, result)),
-            PartitionType::Info => unimplemented!(),
+            PartitionType::Info => self
+                .info_client
+                .map(|info_client| info_client.info_write_complete(raw_page, result)),
         };
     }
 
@@ -1501,7 +1774,9 @@ impl FlashCtrl<'_> {
             PartitionType::Data => self
                 .data_client
                 .map(|data_client| data_client.erase_complete(result)),
-            PartitionType::Info => unimplemented!(),
+            PartitionType::Info => self
+                .info_client
+                .map(|info_client| info_client.info_erase_complete(result)),
         };
     }
 
@@ -1589,6 +1864,14 @@ impl<'a, Client: flash_hil::Client<FlashCtrl<'a>>> flash_hil::HasClient<'a, Clie
     }
 }
 
+impl<'a, InfoClient: flash_hil::InfoClient<FlashCtrl<'a>>> flash_hil::HasInfoClient<'a, InfoClient>
+    for FlashCtrl<'a>
+{
+    fn set_info_client(&'a self, info_client: &'a InfoClient) {
+        self.info_client.set(info_client);
+    }
+}
+
 impl flash_hil::Flash for FlashCtrl<'_> {
     type Page = RawFlashCtrlPage;
 
@@ -1640,5 +1923,59 @@ impl flash_hil::Flash for FlashCtrl<'_> {
         let data_page_position = DataPagePosition::new(bank, data_page_index);
 
         self.internal_erase_data_page(data_page_position)
+    }
+}
+
+impl flash_hil::InfoFlash for FlashCtrl<'_> {
+    type InfoType = InfoPartitionType;
+    type BankType = Bank;
+    type Page = RawFlashCtrlPage;
+
+    fn read_info_page(
+        &self,
+        info_type: Self::InfoType,
+        bank: Self::BankType,
+        page_number: usize,
+        raw_page: &'static mut Self::Page,
+    ) -> Result<(), (ErrorCode, &'static mut Self::Page)> {
+        let info_page_position = match Self::new_info_page_position(info_type, bank, page_number) {
+            Ok(info_page_position) => info_page_position,
+            Err(()) => return Err((ErrorCode::INVAL, raw_page)),
+        };
+        let info_page = InfoFlashCtrlPage::new(info_page_position, raw_page);
+
+        self.internal_read_info_page(info_page)
+            .map_err(|(error_code, info_page)| (error_code, info_page.to_raw_page()))
+    }
+
+    fn write_info_page(
+        &self,
+        info_type: Self::InfoType,
+        bank: Self::BankType,
+        page_number: usize,
+        raw_page: &'static mut Self::Page,
+    ) -> Result<(), (ErrorCode, &'static mut Self::Page)> {
+        let info_page_position = match Self::new_info_page_position(info_type, bank, page_number) {
+            Ok(info_page_position) => info_page_position,
+            Err(()) => return Err((ErrorCode::INVAL, raw_page)),
+        };
+        let info_page = InfoFlashCtrlPage::new(info_page_position, raw_page);
+
+        self.internal_write_info_page(info_page)
+            .map_err(|(error_code, info_page)| (error_code, info_page.to_raw_page()))
+    }
+
+    fn erase_info_page(
+        &self,
+        info_type: Self::InfoType,
+        bank: Self::BankType,
+        page_number: usize,
+    ) -> Result<(), ErrorCode> {
+        let info_page_position = match Self::new_info_page_position(info_type, bank, page_number) {
+            Ok(info_page_position) => info_page_position,
+            Err(()) => return Err(ErrorCode::INVAL),
+        };
+
+        self.internal_erase_info_page(info_page_position)
     }
 }

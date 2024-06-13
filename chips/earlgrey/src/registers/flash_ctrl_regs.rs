@@ -214,7 +214,11 @@ register_bitfields![u32,
             DATA = 0,
             INFO = 1,
         ],
-        INFO_SEL OFFSET(9) NUMBITS(2) [],
+        INFO_SEL OFFSET(9) NUMBITS(2) [
+            TYPE0 = 0,
+            TYPE1 = 1,
+            TYPE2 = 2,
+        ],
         NUM OFFSET(16) NUMBITS(12) [],
     ],
     pub(crate) ADDR [
