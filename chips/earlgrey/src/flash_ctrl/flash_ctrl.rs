@@ -1473,7 +1473,7 @@ impl FlashCtrl<'_> {
     fn read_complete(
         &self,
         raw_page: &'static mut RawFlashCtrlPage,
-        result: Result<(), FlashError>,
+        result: Result<(), flash_hil::Error>,
     ) {
         match self.read_partition_type() {
             PartitionType::Data => self
