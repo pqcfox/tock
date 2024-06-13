@@ -13,7 +13,7 @@ use core::num::NonZeroUsize;
 
 /// Pattern generator control
 pub trait PattGen<'a> {
-    type Channel: TryFrom<usize>;
+    type Channel: TryFrom<usize> + Into<usize>;
     type PatternLength: TryFrom<NonZeroUsize>;
     type PatternRepetitionCount: TryFrom<NonZeroUsize>;
 
@@ -35,7 +35,7 @@ pub trait PattGen<'a> {
 }
 
 /// Pattern generator client
-pub trait PattGenClient<Channel> {
+pub trait PattGenClient<Channel: Into<usize>> {
     /// Callback when pattern generation finished on a given channel
     fn pattgen_done(&self, channel: Channel);
 }
