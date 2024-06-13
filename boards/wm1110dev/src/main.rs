@@ -12,6 +12,9 @@
 #![cfg_attr(not(doc), no_main)]
 #![deny(missing_docs)]
 
+use core::ptr::addr_of;
+use core::ptr::addr_of_mut;
+
 use kernel::capabilities;
 use kernel::component::Component;
 use kernel::hil::gpio::Configure;
@@ -68,8 +71,8 @@ pub mod io;
 
 // How should the kernel respond when a process faults. For this board we choose
 // to stop the app and print a notice, but not immediately panic.
-const FAULT_RESPONSE: kernel::process::StopWithDebugFaultPolicy =
-    kernel::process::StopWithDebugFaultPolicy {};
+const FAULT_RESPONSE: capsules_system::process_policies::StopWithDebugFaultPolicy =
+    capsules_system::process_policies::StopWithDebugFaultPolicy {};
 
 // Number of concurrent processes this platform supports.
 const NUM_PROCS: usize = 8;
@@ -79,7 +82,8 @@ static mut PROCESSES: [Option<&'static dyn kernel::process::Process>; NUM_PROCS]
     [None; NUM_PROCS];
 
 static mut CHIP: Option<&'static nrf52840::chip::NRF52<Nrf52840DefaultPeripherals>> = None;
-static mut PROCESS_PRINTER: Option<&'static kernel::process::ProcessPrinterText> = None;
+static mut PROCESS_PRINTER: Option<&'static capsules_system::process_printer::ProcessPrinterText> =
+    None;
 
 /// Dummy buffer that causes the linker to reserve enough space for the stack.
 #[no_mangle]
@@ -92,6 +96,9 @@ type SHT4xSensor = components::sht4x::SHT4xComponentType<
 >;
 type TemperatureDriver = components::temperature::TemperatureComponentType<SHT4xSensor>;
 type HumidityDriver = components::humidity::HumidityComponentType<SHT4xSensor>;
+type RngDriver = components::rng::RngComponentType<nrf52840::trng::Trng<'static>>;
+
+type NonvolatileDriver = components::nonvolatile_storage::NonvolatileStorageComponentType;
 
 /// Supported drivers by the platform
 pub struct Platform {
@@ -102,8 +109,9 @@ pub struct Platform {
         LedHigh<'static, nrf52::gpio::GPIOPin<'static>>,
         2,
     >,
-    rng: &'static capsules_core::rng::RngDriver<'static>,
+    rng: &'static RngDriver,
     ipc: kernel::ipc::IPC<{ NUM_PROCS as u8 }>,
+    nonvolatile_storage: &'static NonvolatileDriver,
     alarm: &'static capsules_core::alarm::AlarmDriver<
         'static,
         capsules_core::virtualizers::virtual_alarm::VirtualMuxAlarm<
@@ -136,6 +144,9 @@ impl SyscallDriverLookup for Platform {
             capsules_core::alarm::DRIVER_NUM => f(Some(self.alarm)),
             capsules_core::led::DRIVER_NUM => f(Some(self.led)),
             capsules_core::rng::DRIVER_NUM => f(Some(self.rng)),
+            capsules_extra::nonvolatile_storage_driver::DRIVER_NUM => {
+                f(Some(self.nonvolatile_storage))
+            }
             LORA_SPI_DRIVER_NUM => f(Some(self.lr1110_spi)),
             LORA_GPIO_DRIVER_NUM => f(Some(self.lr1110_gpio)),
             kernel::ipc::DRIVER_NUM => f(Some(&self.ipc)),
@@ -152,7 +163,6 @@ impl KernelResources<nrf52::chip::NRF52<'static, Nrf52840DefaultPeripherals<'sta
     type SyscallDriverLookup = Self;
     type SyscallFilter = ();
     type ProcessFault = ();
-    type CredentialsCheckingPolicy = ();
     type Scheduler = RoundRobinSched<'static>;
     type SchedulerTimer = cortexm4::systick::SysTick;
     type WatchDog = ();
@@ -165,9 +175,6 @@ impl KernelResources<nrf52::chip::NRF52<'static, Nrf52840DefaultPeripherals<'sta
         &()
     }
     fn process_fault(&self) -> &Self::ProcessFault {
-        &()
-    }
-    fn credentials_checking_policy(&self) -> &'static Self::CredentialsCheckingPolicy {
         &()
     }
     fn scheduler(&self) -> &Self::Scheduler {
@@ -210,7 +217,7 @@ pub unsafe fn start() -> (
     nrf52840_peripherals.init();
     let base_peripherals = &nrf52840_peripherals.nrf52;
 
-    let board_kernel = static_init!(kernel::Kernel, kernel::Kernel::new(&PROCESSES));
+    let board_kernel = static_init!(kernel::Kernel, kernel::Kernel::new(&*addr_of!(PROCESSES)));
 
     nrf52_components::startup::NrfStartupComponent::new(
         false,
@@ -424,7 +431,24 @@ pub unsafe fn start() -> (
         capsules_core::rng::DRIVER_NUM,
         &base_peripherals.trng,
     )
-    .finalize(components::rng_component_static!());
+    .finalize(components::rng_component_static!(nrf52840::trng::Trng));
+
+    //--------------------------------------------------------------------------
+    // NONVOLATILE STORAGE
+    //--------------------------------------------------------------------------
+
+    let nonvolatile_storage = components::nonvolatile_storage::NonvolatileStorageComponent::new(
+        board_kernel,
+        capsules_extra::nonvolatile_storage_driver::DRIVER_NUM,
+        &base_peripherals.nvmc,
+        0xFC000,  // Start address for userspace accessible region
+        4096 * 4, // Length of userspace accessible region (16 pages)
+        0,        // No kernel access
+        0,
+    )
+    .finalize(components::nonvolatile_storage_component_static!(
+        nrf52840::nvmc::Nvmc
+    ));
 
     //--------------------------------------------------------------------------
     // FINAL SETUP AND BOARD BOOT
@@ -434,7 +458,7 @@ pub unsafe fn start() -> (
     // approach than this.
     nrf52_components::NrfClockComponent::new(&base_peripherals.clock).finalize(());
 
-    let scheduler = components::sched::round_robin::RoundRobinComponent::new(&PROCESSES)
+    let scheduler = components::sched::round_robin::RoundRobinComponent::new(&*addr_of!(PROCESSES))
         .finalize(components::round_robin_component_static!(NUM_PROCS));
 
     let platform = Platform {
@@ -443,6 +467,7 @@ pub unsafe fn start() -> (
         gpio,
         rng,
         alarm,
+        nonvolatile_storage,
         ipc: kernel::ipc::IPC::new(
             board_kernel,
             kernel::ipc::DRIVER_NUM,
@@ -493,14 +518,14 @@ pub unsafe fn start() -> (
         board_kernel,
         chip,
         core::slice::from_raw_parts(
-            &_sapps as *const u8,
-            &_eapps as *const u8 as usize - &_sapps as *const u8 as usize,
+            core::ptr::addr_of!(_sapps),
+            core::ptr::addr_of!(_eapps) as usize - core::ptr::addr_of!(_sapps) as usize,
         ),
         core::slice::from_raw_parts_mut(
-            &mut _sappmem as *mut u8,
-            &_eappmem as *const u8 as usize - &_sappmem as *const u8 as usize,
+            core::ptr::addr_of_mut!(_sappmem),
+            core::ptr::addr_of!(_eappmem) as usize - core::ptr::addr_of!(_sappmem) as usize,
         ),
-        &mut PROCESSES,
+        &mut *addr_of_mut!(PROCESSES),
         &FAULT_RESPONSE,
         &process_management_capability,
     )

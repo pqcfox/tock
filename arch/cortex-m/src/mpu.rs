@@ -10,7 +10,6 @@ use core::cmp;
 use core::fmt;
 use core::num::NonZeroUsize;
 
-use kernel;
 use kernel::platform::mpu;
 use kernel::utilities::cells::OptionalCell;
 use kernel::utilities::math;
@@ -319,7 +318,7 @@ impl CortexMRegion {
         // To compute the mask, we start with all subregions disabled and enable
         // the ones in the inclusive range [min_subregion, max_subregion].
         if let Some((min_subregion, max_subregion)) = subregions {
-            let mask = (min_subregion..=max_subregion).fold(u8::max_value(), |res, i| {
+            let mask = (min_subregion..=max_subregion).fold(u8::MAX, |res, i| {
                 // Enable subregions bit by bit (1 ^ 1 == 0)
                 res ^ (1 << i)
             });

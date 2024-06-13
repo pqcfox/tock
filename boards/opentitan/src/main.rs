@@ -20,6 +20,7 @@ use crate::pinmux_layout::BoardPinmuxLayout;
 use capsules_aes_gcm::aes_gcm;
 use capsules_core::virtualizers::virtual_aes_ccm;
 use capsules_core::virtualizers::virtual_alarm::{MuxAlarm, VirtualMuxAlarm};
+use core::ptr::{addr_of, addr_of_mut};
 use earlgrey::chip::EarlGreyDefaultPeripherals;
 use earlgrey::chip_config::EarlGreyConfig;
 use earlgrey::pinmux_config::EarlGreyPinmuxConfig;
@@ -155,10 +156,12 @@ static mut RSA_HARDWARE: Option<&lowrisc::rsa::OtbnRsa<'static>> = None;
 static mut SHA256SOFT: Option<&capsules_extra::sha256::Sha256Software<'static>> = None;
 
 static mut CHIP: Option<&'static EarlGreyChip> = None;
-static mut PROCESS_PRINTER: Option<&'static kernel::process::ProcessPrinterText> = None;
+static mut PROCESS_PRINTER: Option<&'static capsules_system::process_printer::ProcessPrinterText> =
+    None;
 
 // How should the kernel respond when a process faults.
-const FAULT_RESPONSE: kernel::process::PanicFaultPolicy = kernel::process::PanicFaultPolicy {};
+const FAULT_RESPONSE: capsules_system::process_policies::PanicFaultPolicy =
+    capsules_system::process_policies::PanicFaultPolicy {};
 
 /// Dummy buffer that causes the linker to reserve enough space for the stack.
 #[no_mangle]
@@ -196,7 +199,10 @@ struct EarlGrey {
             lowrisc::spi_host::SpiHost<'static>,
         >,
     >,
-    rng: &'static capsules_core::rng::RngDriver<'static>,
+    rng: &'static capsules_core::rng::RngDriver<
+        'static,
+        capsules_core::rng::Entropy32ToRandom<'static, lowrisc::csrng::CsRng<'static>>,
+    >,
     aes: &'static capsules_extra::symmetric_encryption::aes::AesDriver<
         'static,
         aes_gcm::Aes128Gcm<
@@ -204,6 +210,7 @@ struct EarlGrey {
             virtual_aes_ccm::VirtualAES128CCM<'static, earlgrey::aes::Aes<'static>>,
         >,
     >,
+    /*
     kv_driver: &'static capsules_extra::kv_driver::KVStoreDriver<
         'static,
         capsules_extra::virtual_kv::VirtualKVPermissions<
@@ -226,6 +233,7 @@ struct EarlGrey {
             >,
         >,
     >,
+    */
     syscall_filter: &'static TbfHeaderFilterDefaultAllow,
     scheduler: &'static PrioritySched,
     scheduler_timer: &'static VirtualSchedulerTimer<
@@ -251,7 +259,7 @@ impl SyscallDriverLookup for EarlGrey {
             capsules_core::spi_controller::DRIVER_NUM => f(Some(self.spi_controller)),
             capsules_core::rng::DRIVER_NUM => f(Some(self.rng)),
             capsules_extra::symmetric_encryption::aes::DRIVER_NUM => f(Some(self.aes)),
-            capsules_extra::kv_driver::DRIVER_NUM => f(Some(self.kv_driver)),
+            //capsules_extra::kv_driver::DRIVER_NUM => f(Some(self.kv_driver)),
             _ => f(None),
         }
     }
@@ -261,7 +269,6 @@ impl KernelResources<EarlGreyChip> for EarlGrey {
     type SyscallDriverLookup = Self;
     type SyscallFilter = TbfHeaderFilterDefaultAllow;
     type ProcessFault = ();
-    type CredentialsCheckingPolicy = ();
     type Scheduler = PrioritySched;
     type SchedulerTimer = VirtualSchedulerTimer<
         VirtualMuxAlarm<'static, earlgrey::timer::RvTimer<'static, ChipConfig>>,
@@ -276,9 +283,6 @@ impl KernelResources<EarlGreyChip> for EarlGrey {
         self.syscall_filter
     }
     fn process_fault(&self) -> &Self::ProcessFault {
-        &()
-    }
-    fn credentials_checking_policy(&self) -> &'static Self::CredentialsCheckingPolicy {
         &()
     }
     fn scheduler(&self) -> &Self::Scheduler {
@@ -336,15 +340,15 @@ unsafe fn setup() -> (
     let earlgrey_epmp = earlgrey::epmp::EarlGreyEPMP::new_debug(
         earlgrey::epmp::FlashRegion(
             rv32i::pmp::NAPOTRegionSpec::new(
-                &_sflash as *const u8,                                           // start
-                &_eflash as *const u8 as usize - &_sflash as *const u8 as usize, // size
+                core::ptr::addr_of!(_sflash),
+                core::ptr::addr_of!(_eflash) as usize - core::ptr::addr_of!(_sflash) as usize,
             )
             .unwrap(),
         ),
         earlgrey::epmp::RAMRegion(
             rv32i::pmp::NAPOTRegionSpec::new(
-                &_ssram as *const u8,                                          // start
-                &_esram as *const u8 as usize - &_ssram as *const u8 as usize, // size
+                core::ptr::addr_of!(_ssram),
+                core::ptr::addr_of!(_esram) as usize - core::ptr::addr_of!(_ssram) as usize,
             )
             .unwrap(),
         ),
@@ -357,8 +361,8 @@ unsafe fn setup() -> (
         ),
         earlgrey::epmp::KernelTextRegion(
             rv32i::pmp::TORRegionSpec::new(
-                &_stext as *const u8, // start
-                &_etext as *const u8, // end
+                core::ptr::addr_of!(_stext),
+                core::ptr::addr_of!(_etext),
             )
             .unwrap(),
         ),
@@ -383,7 +387,7 @@ unsafe fn setup() -> (
     let process_mgmt_cap = create_capability!(capabilities::ProcessManagementCapability);
     let memory_allocation_cap = create_capability!(capabilities::MemoryAllocationCapability);
 
-    let board_kernel = static_init!(kernel::Kernel, kernel::Kernel::new(&PROCESSES));
+    let board_kernel = static_init!(kernel::Kernel, kernel::Kernel::new(&*addr_of!(PROCESSES)));
 
     let peripherals = static_init!(
         EarlGreyDefaultPeripherals<ChipConfig, BoardPinmuxLayout>,
@@ -604,6 +608,7 @@ unsafe fn setup() -> (
         static _estorage: u8;
     }
 
+    /*
     // Flash setup memory protection for the ROM/Kernel
     // Only allow reads for this region, any other ops will cause an MP fault
     let mp_cfg = FlashMPConfig {
@@ -617,8 +622,8 @@ unsafe fn setup() -> (
 
     // Allocate a flash protection region (associated cfg number: 0), for the code section.
     if let Err(e) = peripherals.flash_ctrl.mp_set_region_perms(
-        &_manifest as *const u8 as usize,
-        &_etext as *const u8 as usize,
+        core::ptr::addr_of!(_manifest) as usize,
+        core::ptr::addr_of!(_etext) as usize,
         0,
         &mp_cfg,
     ) {
@@ -629,7 +634,9 @@ unsafe fn setup() -> (
             debug!("Failed to lock memory protection config: {:?}", e);
         }
     }
+    */
 
+    /*
     // Flash
     let flash_ctrl_read_buf = static_init!(
         [u8; lowrisc::flash_ctrl::PAGE_SIZE],
@@ -754,6 +761,7 @@ unsafe fn setup() -> (
             >,
         >
     ));
+    */
 
     let mux_otbn = crate::otbn::AccelMuxComponent::new(&peripherals.otbn)
         .finalize(otbn_mux_component_static!());
@@ -767,8 +775,8 @@ unsafe fn setup() -> (
         crate::otbn::find_app(
             "otbn-rsa",
             core::slice::from_raw_parts(
-                &_sapps as *const u8,
-                &_eapps as *const u8 as usize - &_sapps as *const u8 as usize,
+                core::ptr::addr_of!(_sapps),
+                core::ptr::addr_of!(_eapps) as usize - core::ptr::addr_of!(_sapps) as usize,
             ),
         )
     {
@@ -793,13 +801,16 @@ unsafe fn setup() -> (
 
     // Convert hardware RNG to the Random interface.
     let entropy_to_random = static_init!(
-        capsules_core::rng::Entropy32ToRandom<'static>,
+        capsules_core::rng::Entropy32ToRandom<'static, lowrisc::csrng::CsRng<'static>>,
         capsules_core::rng::Entropy32ToRandom::new(&peripherals.rng)
     );
     peripherals.rng.set_client(entropy_to_random);
     // Setup RNG for userspace
     let rng = static_init!(
-        capsules_core::rng::RngDriver<'static>,
+        capsules_core::rng::RngDriver<
+            'static,
+            capsules_core::rng::Entropy32ToRandom<'static, lowrisc::csrng::CsRng<'static>>,
+        >,
         capsules_core::rng::RngDriver::new(
             entropy_to_random,
             board_kernel.create_grant(capsules_core::rng::DRIVER_NUM, &memory_allocation_cap)
@@ -875,7 +886,7 @@ unsafe fn setup() -> (
             i2c_master,
             spi_controller,
             aes,
-            kv_driver,
+            //kv_driver,
             syscall_filter,
             scheduler,
             scheduler_timer,
@@ -887,14 +898,14 @@ unsafe fn setup() -> (
         board_kernel,
         chip,
         core::slice::from_raw_parts(
-            &_sapps as *const u8,
-            &_eapps as *const u8 as usize - &_sapps as *const u8 as usize,
+            core::ptr::addr_of!(_sapps),
+            core::ptr::addr_of!(_eapps) as usize - core::ptr::addr_of!(_sapps) as usize,
         ),
         core::slice::from_raw_parts_mut(
-            &mut _sappmem as *mut u8,
-            &_eappmem as *const u8 as usize - &_sappmem as *const u8 as usize,
+            core::ptr::addr_of_mut!(_sappmem),
+            core::ptr::addr_of!(_eappmem) as usize - core::ptr::addr_of!(_sappmem) as usize,
         ),
-        &mut PROCESSES,
+        &mut *addr_of_mut!(PROCESSES),
         &FAULT_RESPONSE,
         &process_mgmt_cap,
     )

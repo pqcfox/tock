@@ -14,6 +14,8 @@
 #![deny(missing_docs)]
 
 mod imix_components;
+use core::ptr::{addr_of, addr_of_mut};
+
 use capsules_core::alarm::AlarmDriver;
 use capsules_core::console_ordered::ConsoleOrdered;
 use capsules_core::virtualizers::virtual_aes_ccm::MuxAES128CCM;
@@ -25,14 +27,13 @@ use capsules_extra::net::ipv6::ip_utils::IPAddr;
 use kernel::capabilities;
 use kernel::component::Component;
 use kernel::deferred_call::DeferredCallClient;
-use kernel::hil::digest::Digest;
 use kernel::hil::i2c::I2CMaster;
 use kernel::hil::radio;
 #[allow(unused_imports)]
 use kernel::hil::radio::{RadioConfig, RadioData};
 use kernel::hil::symmetric_encryption::AES128;
 use kernel::platform::{KernelResources, SyscallDriverLookup};
-use kernel::process_checker::basic::AppCheckerSha256;
+use kernel::process::ProcessLoadingAsync;
 use kernel::scheduler::round_robin::RoundRobinSched;
 
 //use kernel::hil::time::Alarm;
@@ -41,8 +42,6 @@ use kernel::hil::Controller;
 #[allow(unused_imports)]
 use kernel::{create_capability, debug, debug_gpio, static_buf, static_init};
 use sam4l::chip::Sam4lDefaultPeripherals;
-
-use capsules_extra::sha256::Sha256Software;
 
 use components::alarm::{AlarmDriverComponent, AlarmMuxComponent};
 use components::console::{ConsoleOrderedComponent, UartMuxComponent};
@@ -88,20 +87,22 @@ const NUM_PROCS: usize = 4;
 // have those devices talk to each other without having to modify the kernel flashed
 // onto each device. This makes MAC address configuration a good target for capabilities -
 // only allow one app per board to have control of MAC address configuration?
-const RADIO_CHANNEL: u8 = 26;
+const RADIO_CHANNEL: radio::RadioChannel = radio::RadioChannel::Channel26;
 const DST_MAC_ADDR: MacAddress = MacAddress::Short(49138);
 const DEFAULT_CTX_PREFIX_LEN: u8 = 8; //Length of context for 6LoWPAN compression
 const DEFAULT_CTX_PREFIX: [u8; 16] = [0x0_u8; 16]; //Context for 6LoWPAN Compression
 const PAN_ID: u16 = 0xABCD;
 
 // how should the kernel respond when a process faults
-const FAULT_RESPONSE: kernel::process::StopFaultPolicy = kernel::process::StopFaultPolicy {};
+const FAULT_RESPONSE: capsules_system::process_policies::StopFaultPolicy =
+    capsules_system::process_policies::StopFaultPolicy {};
 
 static mut PROCESSES: [Option<&'static dyn kernel::process::Process>; NUM_PROCS] =
     [None; NUM_PROCS];
 
 static mut CHIP: Option<&'static sam4l::chip::Sam4l<Sam4lDefaultPeripherals>> = None;
-static mut PROCESS_PRINTER: Option<&'static kernel::process::ProcessPrinterText> = None;
+static mut PROCESS_PRINTER: Option<&'static capsules_system::process_printer::ProcessPrinterText> =
+    None;
 
 /// Dummy buffer that causes the linker to reserve enough space for the stack.
 #[no_mangle]
@@ -114,6 +115,14 @@ type SI7021Sensor = components::si7021::SI7021ComponentType<
 >;
 type TemperatureDriver = components::temperature::TemperatureComponentType<SI7021Sensor>;
 type HumidityDriver = components::humidity::HumidityComponentType<SI7021Sensor>;
+type RngDriver = components::rng::RngComponentType<sam4l::trng::Trng<'static>>;
+
+type Rf233 = capsules_extra::rf233::RF233<
+    'static,
+    VirtualSpiMasterDevice<'static, sam4l::spi::SpiHw<'static>>,
+>;
+type Ieee802154MacDevice =
+    components::ieee802154::Ieee802154ComponentMacDeviceType<Rf233, sam4l::aes::Aes<'static>>;
 
 struct Imix {
     pconsole: &'static capsules_core::process_console::ProcessConsole<
@@ -141,7 +150,7 @@ struct Imix {
         1,
     >,
     button: &'static capsules_core::button::Button<'static, sam4l::gpio::GPIOPin<'static>>,
-    rng: &'static capsules_core::rng::RngDriver<'static>,
+    rng: &'static RngDriver,
     analog_comparator: &'static capsules_extra::analog_comparator::AnalogComparator<
         'static,
         sam4l::acifc::Acifc<'static>,
@@ -163,23 +172,7 @@ struct Imix {
         &'static capsules_extra::nonvolatile_storage_driver::NonvolatileStorage<'static>,
     scheduler: &'static RoundRobinSched<'static>,
     systick: cortexm4::systick::SysTick,
-    credentials_checking_policy: &'static (),
-    //credentials_checking_policy: &'static AppCheckerSha256,
 }
-
-// The RF233 radio stack requires our buffers for its SPI operations:
-//
-//   1. buf: a packet-sized buffer for SPI operations, which is
-//      used as the read buffer when it writes a packet passed to it and the write
-//      buffer when it reads a packet into a buffer passed to it.
-//   2. rx_buf: buffer to receive packets into
-//   3 + 4: two small buffers for performing registers
-//      operations (one read, one write).
-
-static mut RF233_BUF: [u8; radio::MAX_BUF_SIZE] = [0x00; radio::MAX_BUF_SIZE];
-static mut RF233_REG_WRITE: [u8; 2] = [0x00; 2];
-static mut RF233_REG_READ: [u8; 2] = [0x00; 2];
-static mut SHA256_CHECKER_BUF: [u8; 32] = [0; 32];
 
 impl SyscallDriverLookup for Imix {
     fn with_driver<F, R>(&self, driver_num: usize, f: F) -> R
@@ -217,8 +210,6 @@ impl KernelResources<sam4l::chip::Sam4l<Sam4lDefaultPeripherals>> for Imix {
     type SyscallDriverLookup = Self;
     type SyscallFilter = ();
     type ProcessFault = ();
-    type CredentialsCheckingPolicy = ();
-    //type CredentialsCheckingPolicy = AppCheckerSha256;
     type Scheduler = RoundRobinSched<'static>;
     type SchedulerTimer = cortexm4::systick::SysTick;
     type WatchDog = ();
@@ -232,9 +223,6 @@ impl KernelResources<sam4l::chip::Sam4l<Sam4lDefaultPeripherals>> for Imix {
     }
     fn process_fault(&self) -> &Self::ProcessFault {
         &()
-    }
-    fn credentials_checking_policy(&self) -> &'static Self::CredentialsCheckingPolicy {
-        self.credentials_checking_policy
     }
     fn scheduler(&self) -> &Self::Scheduler {
         self.scheduler
@@ -377,16 +365,7 @@ pub unsafe fn main() {
         },
     );
 
-    let sha = static_init!(Sha256Software<'static>, Sha256Software::new());
-    kernel::deferred_call::DeferredCallClient::register(sha);
-
-    let checker = static_init!(
-        AppCheckerSha256,
-        AppCheckerSha256::new(sha, &mut SHA256_CHECKER_BUF)
-    );
-    sha.set_client(checker);
-
-    let board_kernel = static_init!(kernel::Kernel, kernel::Kernel::new(&PROCESSES));
+    let board_kernel = static_init!(kernel::Kernel, kernel::Kernel::new(&*addr_of!(PROCESSES)));
 
     let process_printer = components::process_printer::ProcessPrinterTextComponent::new()
         .finalize(components::process_printer_text_component_static!());
@@ -614,7 +593,7 @@ pub unsafe fn main() {
         capsules_core::rng::DRIVER_NUM,
         &peripherals.trng,
     )
-    .finalize(components::rng_component_static!());
+    .finalize(components::rng_component_static!(sam4l::trng::Trng));
 
     // For now, assign the 802.15.4 MAC address on the device as
     // simply a 16-bit short address which represents the last 16 bits
@@ -633,8 +612,6 @@ pub unsafe fn main() {
     aes_mux.register();
     peripherals.aes.set_client(aes_mux);
 
-    // Can this initialize be pushed earlier, or into component? -pal
-    let _ = rf233.initialize(&mut RF233_BUF, &mut RF233_REG_WRITE, &mut RF233_REG_READ);
     let (_, mux_mac) = components::ieee802154::Ieee802154Component::new(
         board_kernel,
         capsules_extra::ieee802154::DRIVER_NUM,
@@ -671,10 +648,10 @@ pub unsafe fn main() {
         board_kernel,
         capsules_extra::nonvolatile_storage_driver::DRIVER_NUM,
         &peripherals.flash_controller,
-        0x60000,                          // Start address for userspace accessible region
-        0x20000,                          // Length of userspace accessible region
-        &_sstorage as *const u8 as usize, //start address of kernel region
-        &_estorage as *const u8 as usize - &_sstorage as *const u8 as usize, // length of kernel region
+        0x60000, // Start address for userspace accessible region
+        0x20000, // Length of userspace accessible region
+        core::ptr::addr_of!(_sstorage) as usize, //start address of kernel region
+        core::ptr::addr_of!(_estorage) as usize - core::ptr::addr_of!(_sstorage) as usize, // length of kernel region
     )
     .finalize(components::nonvolatile_storage_component_static!(
         sam4l::flashcalw::FLASHCALW
@@ -705,7 +682,10 @@ pub unsafe fn main() {
         local_ip_ifaces,
         mux_alarm,
     )
-    .finalize(components::udp_mux_component_static!(sam4l::ast::Ast));
+    .finalize(components::udp_mux_component_static!(
+        sam4l::ast::Ast,
+        Ieee802154MacDevice
+    ));
 
     // UDP driver initialization happens here
     let udp_driver = components::udp_driver::UDPDriverComponent::new(
@@ -718,8 +698,67 @@ pub unsafe fn main() {
     )
     .finalize(components::udp_driver_component_static!(sam4l::ast::Ast));
 
-    let scheduler = components::sched::round_robin::RoundRobinComponent::new(&PROCESSES)
+    let scheduler = components::sched::round_robin::RoundRobinComponent::new(&*addr_of!(PROCESSES))
         .finalize(components::round_robin_component_static!(NUM_PROCS));
+
+    // Create the software-based SHA engine.
+    let sha = components::sha::ShaSoftware256Component::new()
+        .finalize(components::sha_software_256_component_static!());
+
+    // Create the credential checker.
+    let checking_policy = components::appid::checker_sha::AppCheckerSha256Component::new(sha)
+        .finalize(components::app_checker_sha256_component_static!());
+
+    // Create the AppID assigner.
+    let assigner = components::appid::assigner_name::AppIdAssignerNamesComponent::new()
+        .finalize(components::appid_assigner_names_component_static!());
+
+    // Create the process checking machine.
+    let checker = components::appid::checker::ProcessCheckerMachineComponent::new(checking_policy)
+        .finalize(components::process_checker_machine_component_static!());
+
+    // These symbols are defined in the linker script.
+    extern "C" {
+        /// Beginning of the ROM region containing app images.
+        static _sapps: u8;
+        /// End of the ROM region containing app images.
+        static _eapps: u8;
+        /// Beginning of the RAM region for app memory.
+        static mut _sappmem: u8;
+        /// End of the RAM region for app memory.
+        static _eappmem: u8;
+    }
+
+    let process_binary_array = static_init!(
+        [Option<kernel::process::ProcessBinary>; NUM_PROCS],
+        [None, None, None, None]
+    );
+
+    let loader = static_init!(
+        kernel::process::SequentialProcessLoaderMachine<
+            sam4l::chip::Sam4l<Sam4lDefaultPeripherals>,
+        >,
+        kernel::process::SequentialProcessLoaderMachine::new(
+            checker,
+            &mut *addr_of_mut!(PROCESSES),
+            process_binary_array,
+            board_kernel,
+            chip,
+            core::slice::from_raw_parts(
+                core::ptr::addr_of!(_sapps),
+                core::ptr::addr_of!(_eapps) as usize - core::ptr::addr_of!(_sapps) as usize,
+            ),
+            core::slice::from_raw_parts_mut(
+                core::ptr::addr_of_mut!(_sappmem),
+                core::ptr::addr_of!(_eappmem) as usize - core::ptr::addr_of!(_sappmem) as usize,
+            ),
+            &FAULT_RESPONSE,
+            assigner,
+            &process_mgmt_cap
+        )
+    );
+
+    checker.set_client(loader);
 
     let imix = Imix {
         pconsole,
@@ -744,8 +783,6 @@ pub unsafe fn main() {
         nonvolatile_storage,
         scheduler,
         systick: cortexm4::systick::SysTick::new(),
-        //credentials_checking_policy: checker,
-        credentials_checking_policy: &(),
     };
 
     // Need to initialize the UART for the nRF51 serialization.
@@ -809,38 +846,8 @@ pub unsafe fn main() {
 
     debug!("Initialization complete. Entering main loop");
 
-    // These symbols are defined in the linker script.
-    extern "C" {
-        /// Beginning of the ROM region containing app images.
-        static _sapps: u8;
-        /// End of the ROM region containing app images.
-        static _eapps: u8;
-        /// Beginning of the RAM region for app memory.
-        static mut _sappmem: u8;
-        /// End of the RAM region for app memory.
-        static _eappmem: u8;
-    }
-
-    kernel::process::load_and_check_processes(
-        board_kernel,
-        &imix,
-        chip,
-        core::slice::from_raw_parts(
-            &_sapps as *const u8,
-            &_eapps as *const u8 as usize - &_sapps as *const u8 as usize,
-        ),
-        core::slice::from_raw_parts_mut(
-            &mut _sappmem as *mut u8,
-            &_eappmem as *const u8 as usize - &_sappmem as *const u8 as usize,
-        ),
-        &mut PROCESSES,
-        &FAULT_RESPONSE,
-        &process_mgmt_cap,
-    )
-    .unwrap_or_else(|err| {
-        debug!("Error loading processes!");
-        debug!("{:?}", err);
-    });
+    loader.register();
+    loader.start();
 
     board_kernel.kernel_loop(&imix, chip, Some(&imix.ipc), &main_cap);
 }

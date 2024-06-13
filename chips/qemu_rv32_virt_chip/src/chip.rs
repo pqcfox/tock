@@ -5,15 +5,14 @@
 //! High-level setup and interrupt mapping for the chip.
 
 use core::fmt::Write;
+use core::ptr::addr_of;
 
-use kernel;
 use kernel::debug;
 use kernel::hil::time::Freq10MHz;
 use kernel::platform::chip::{Chip, InterruptService};
 
 use kernel::utilities::registers::interfaces::{ReadWriteable, Readable};
 
-use rv32i;
 use rv32i::csr::{mcause, mie::mie, mip::mip, CSR};
 
 use crate::plic::PLIC;
@@ -88,7 +87,7 @@ impl<'a, I: InterruptService + 'a> QemuRv32VirtChip<'a, I> {
         Self {
             userspace_kernel_boundary: rv32i::syscall::SysCall::new(),
             pmp: rv32i::pmp::PMPUserMPU::new(pmp),
-            plic: &PLIC,
+            plic: &*addr_of!(PLIC),
             timer,
             plic_interrupt_service,
         }

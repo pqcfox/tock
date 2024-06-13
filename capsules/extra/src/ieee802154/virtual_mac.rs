@@ -15,7 +15,7 @@
 //! Usage
 //! -----
 //!
-//! ```
+//! ```rust,ignore
 //! # use kernel::static_init;
 //!
 //! // Create the mux.
@@ -35,8 +35,6 @@
 use crate::ieee802154::{device, framer};
 use crate::net::ieee802154::{Header, KeyId, MacAddress, PanID, SecurityLevel};
 
-use core::cell::Cell;
-
 use kernel::collections::list::{List, ListLink, ListNode};
 use kernel::utilities::cells::{MapCell, OptionalCell};
 use kernel::ErrorCode;
@@ -44,13 +42,13 @@ use kernel::ErrorCode;
 /// IEE 802.15.4 MAC device muxer that keeps a list of MAC users and sequences
 /// any pending transmission requests. Any received frames from the underlying
 /// MAC device are sent to all users.
-pub struct MuxMac<'a> {
-    mac: &'a dyn device::MacDevice<'a>,
-    users: List<'a, MacUser<'a>>,
-    inflight: OptionalCell<&'a MacUser<'a>>,
+pub struct MuxMac<'a, M: device::MacDevice<'a>> {
+    mac: &'a M,
+    users: List<'a, MacUser<'a, M>>,
+    inflight: OptionalCell<&'a MacUser<'a, M>>,
 }
 
-impl device::TxClient for MuxMac<'_> {
+impl<'a, M: device::MacDevice<'a>> device::TxClient for MuxMac<'a, M> {
     fn send_done(&self, spi_buf: &'static mut [u8], acked: bool, result: Result<(), ErrorCode>) {
         self.inflight.take().map(move |user| {
             user.send_done(spi_buf, acked, result);
@@ -59,16 +57,23 @@ impl device::TxClient for MuxMac<'_> {
     }
 }
 
-impl device::RxClient for MuxMac<'_> {
-    fn receive<'b>(&self, buf: &'b [u8], header: Header<'b>, data_offset: usize, data_len: usize) {
+impl<'a, M: device::MacDevice<'a>> device::RxClient for MuxMac<'a, M> {
+    fn receive<'b>(
+        &self,
+        buf: &'b [u8],
+        header: Header<'b>,
+        lqi: u8,
+        data_offset: usize,
+        data_len: usize,
+    ) {
         for user in self.users.iter() {
-            user.receive(buf, header, data_offset, data_len);
+            user.receive(buf, header, lqi, data_offset, data_len);
         }
     }
 }
 
-impl<'a> MuxMac<'a> {
-    pub const fn new(mac: &'a dyn device::MacDevice<'a>) -> MuxMac<'a> {
+impl<'a, M: device::MacDevice<'a>> MuxMac<'a, M> {
+    pub const fn new(mac: &'a M) -> MuxMac<'a, M> {
         MuxMac {
             mac: mac,
             users: List::new(),
@@ -78,13 +83,13 @@ impl<'a> MuxMac<'a> {
 
     /// Registers a MAC user with this MAC mux device. Each MAC user should only
     /// be registered once.
-    pub fn add_user(&self, user: &'a MacUser<'a>) {
+    pub fn add_user(&self, user: &'a MacUser<'a, M>) {
         self.users.push_head(user);
     }
 
     /// Gets the next `MacUser` and operation to perform if an operation is not
     /// already underway.
-    fn get_next_op_if_idle(&self) -> Option<(&'a MacUser<'a>, Op)> {
+    fn get_next_op_if_idle(&self) -> Option<(&'a MacUser<'a, M>, Op)> {
         if self.inflight.is_some() {
             return None;
         }
@@ -107,7 +112,7 @@ impl<'a> MuxMac<'a> {
     /// Performs a non-idle operation on a `MacUser` asynchronously: that is, if the
     /// transmission operation results in immediate failure, then return the
     /// buffer to the `MacUser` via its transmit client.
-    fn perform_op_async(&self, node: &'a MacUser<'a>, op: Op) {
+    fn perform_op_async(&self, node: &'a MacUser<'a, M>, op: Op) {
         if let Op::Transmit(frame) = op {
             match self.mac.transmit(frame) {
                 // If Err, the transmission failed,
@@ -126,7 +131,7 @@ impl<'a> MuxMac<'a> {
     /// the error code and the buffer immediately.
     fn perform_op_sync(
         &self,
-        node: &'a MacUser<'a>,
+        node: &'a MacUser<'a, M>,
         op: Op,
     ) -> Option<Result<(), (ErrorCode, &'static mut [u8])>> {
         if let Op::Transmit(frame) = op {
@@ -162,7 +167,7 @@ impl<'a> MuxMac<'a> {
     /// device but fails immediately, return the buffer synchronously.
     fn do_next_op_sync(
         &self,
-        new_node: &MacUser<'a>,
+        new_node: &MacUser<'a, M>,
     ) -> Option<Result<(), (ErrorCode, &'static mut [u8])>> {
         self.get_next_op_if_idle().and_then(|(node, op)| {
             if core::ptr::eq(node, new_node) {
@@ -192,53 +197,60 @@ enum Op {
 /// all MacUsers because there is only one MAC device. For example, the MAC
 /// device address is shared, so calling `set_address` on one `MacUser` sets the
 /// MAC address for all `MacUser`s.
-pub struct MacUser<'a> {
-    mux: &'a MuxMac<'a>,
+pub struct MacUser<'a, M: device::MacDevice<'a>> {
+    mux: &'a MuxMac<'a, M>,
     operation: MapCell<Op>,
-    next: ListLink<'a, MacUser<'a>>,
-    tx_client: Cell<Option<&'a dyn device::TxClient>>,
-    rx_client: Cell<Option<&'a dyn device::RxClient>>,
+    next: ListLink<'a, MacUser<'a, M>>,
+    tx_client: OptionalCell<&'a dyn device::TxClient>,
+    rx_client: OptionalCell<&'a dyn device::RxClient>,
 }
 
-impl<'a> MacUser<'a> {
-    pub const fn new(mux: &'a MuxMac<'a>) -> MacUser<'a> {
-        MacUser {
+impl<'a, M: device::MacDevice<'a>> MacUser<'a, M> {
+    pub const fn new(mux: &'a MuxMac<'a, M>) -> Self {
+        Self {
             mux: mux,
             operation: MapCell::new(Op::Idle),
             next: ListLink::empty(),
-            tx_client: Cell::new(None),
-            rx_client: Cell::new(None),
+            tx_client: OptionalCell::empty(),
+            rx_client: OptionalCell::empty(),
         }
     }
 }
 
-impl MacUser<'_> {
+impl<'a, M: device::MacDevice<'a>> MacUser<'a, M> {
     fn send_done(&self, spi_buf: &'static mut [u8], acked: bool, result: Result<(), ErrorCode>) {
         self.tx_client
             .get()
             .map(move |client| client.send_done(spi_buf, acked, result));
     }
 
-    fn receive<'b>(&self, buf: &'b [u8], header: Header<'b>, data_offset: usize, data_len: usize) {
+    fn receive<'b>(
+        &self,
+        buf: &'b [u8],
+        header: Header<'b>,
+        lqi: u8,
+        data_offset: usize,
+        data_len: usize,
+    ) {
         self.rx_client
             .get()
-            .map(move |client| client.receive(buf, header, data_offset, data_len));
+            .map(move |client| client.receive(buf, header, lqi, data_offset, data_len));
     }
 }
 
-impl<'a> ListNode<'a, MacUser<'a>> for MacUser<'a> {
-    fn next(&'a self) -> &'a ListLink<'a, MacUser<'a>> {
+impl<'a, M: device::MacDevice<'a>> ListNode<'a, MacUser<'a, M>> for MacUser<'a, M> {
+    fn next(&'a self) -> &'a ListLink<'a, MacUser<'a, M>> {
         &self.next
     }
 }
 
-impl<'a> device::MacDevice<'a> for MacUser<'a> {
+impl<'a, M: device::MacDevice<'a>> device::MacDevice<'a> for MacUser<'a, M> {
     fn set_transmit_client(&self, client: &'a dyn device::TxClient) {
-        self.tx_client.set(Some(client));
+        self.tx_client.set(client);
     }
 
     fn set_receive_client(&self, client: &'a dyn device::RxClient) {
-        self.rx_client.set(Some(client));
+        self.rx_client.set(client);
     }
 
     fn get_address(&self) -> u16 {
