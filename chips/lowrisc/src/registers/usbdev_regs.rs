@@ -55,9 +55,9 @@ register_structs! {
         /// Configure IN Transaction
         (0x0040 => pub(crate) configin: [ReadWrite<u32, CONFIGIN::Register>; 12]),
         /// OUT Endpoint isochronous setting
-        (0x0070 => pub(crate) out_iso: [ReadWrite<u32, OUT_ISO::Register>; 1]),
+        (0x0070 => pub(crate) out_iso: ReadWrite<u32, OUT_ISO::Register>),
         /// IN Endpoint isochronous setting
-        (0x0074 => pub(crate) in_iso: [ReadWrite<u32, IN_ISO::Register>; 1]),
+        (0x0074 => pub(crate) in_iso: ReadWrite<u32, IN_ISO::Register>),
         /// Clear the data toggle flag
         (0x0078 => pub(crate) data_toggle_clear: [ReadWrite<u32, DATA_TOGGLE_CLEAR::Register>; 1]),
         /// USB PHY pins sense.
