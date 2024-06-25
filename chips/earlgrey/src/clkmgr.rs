@@ -4,6 +4,7 @@
 
 //! Provides access to determine the clock status, enable and disable clocks and
 //!  clock measurement checks, get and clear errors.
+//!
 
 use kernel::debug;
 use kernel::utilities::registers::interfaces::{ReadWriteable, Readable, Writeable};
@@ -17,6 +18,7 @@ use crate::registers::clkmgr_regs::{
     JITTER_ENABLE, JITTER_REGWEN, MAIN_MEAS_CTRL_EN, MAIN_MEAS_CTRL_SHADOWED, MEASURE_CTRL_REGWEN,
     RECOV_ERR_CODE, USB_MEAS_CTRL_EN, USB_MEAS_CTRL_SHADOWED,
 };
+
 use crate::registers::top_earlgrey::CLKMGR_AON_BASE_ADDR;
 
 pub struct Clkmgr {
@@ -111,6 +113,9 @@ impl Clkmgr {
         }
     }
 
+    /// Set the extclk state while spin waiting for a certain number of loops.
+    ///
+    /// The  'req_state' represents the requested state and 'timeout' represents number of spinloops that it should wait for. Since at this point of initiaization, a lot of times the clocks are not availalble, this is just a number of for loop iterations. This gives you the option of setting and upper ceiling or not waiting at all, in case you want the clock request to be set but do not want to wait around for the resolution, you might have other work to do than busy waiting during the init phase. The return is a feedback that tells you if the clock has been confirmed to have entered the requested state in case it returns 'true' or it has not _yet_ entered the desired state, if it returns 'false'
     pub fn set_extclk(&self, req_state: ExtClkState, timeout: usize) -> bool {
         let (extclk_en, extclk_hispeed, feedback_expected) = match req_state {
             ExtClkState::ExtClkOnHighSpeed => (
@@ -544,10 +549,10 @@ impl Clkmgr {
     pub fn run_tests(&self) -> bool {
         debug!("* Start running clkmgr tests!");
         test_helper("Check exclk On High Speed timeout 0 ", || {
-            self.set_extclk(ExtClkState::ExtClkOnHighSpeed, 0) == false
+            !self.set_extclk(ExtClkState::ExtClkOnHighSpeed, 0)
         });
         test_helper("Check exclk On High Speed timeout 1000 ", || {
-            (self.set_extclk(ExtClkState::ExtClkOnHighSpeed, 10000) == true)
+            self.set_extclk(ExtClkState::ExtClkOnHighSpeed, 10000)
                 && (self.registers.extclk_ctrl.get() == 0x66)
                 && (self.registers.extclk_status.get() == 0x6)
         });
@@ -555,7 +560,7 @@ impl Clkmgr {
             self.get_extclk_sts() == ExtClkState::ExtClkOnHighSpeed
         });
         test_helper("Check exclk On ExtClkOnLowSpeed ", || {
-            (self.set_extclk(ExtClkState::ExtClkOnLowSpeed, 1000) == true)
+            self.set_extclk(ExtClkState::ExtClkOnLowSpeed, 1000)
                 && (self.registers.extclk_ctrl.get() == 0x96)
                 && (self.registers.extclk_status.get() == 0x6)
         });
@@ -565,7 +570,7 @@ impl Clkmgr {
                 && (self.registers.extclk_status.get() == 0x6)
         });
         test_helper("Check exclk On ExtClkOff ", || {
-            (self.set_extclk(ExtClkState::ExtClkOff, 10000) == true)
+            self.set_extclk(ExtClkState::ExtClkOff, 10000)
                 && (self.registers.extclk_ctrl.get() == 0x99)
                 && (self.registers.extclk_status.get() == 0x9)
         });
@@ -577,17 +582,17 @@ impl Clkmgr {
 
         self.set_clk_jitter(true);
         test_helper("Check Jitter enable ", || {
-            (self.get_clk_jitter() == true) && (self.registers.jitter_enable.get() == 0x6)
+            self.get_clk_jitter() && (self.registers.jitter_enable.get() == 0x6)
         });
 
         self.set_clk_jitter(false);
         test_helper("Check Jitter disable ", || {
-            (self.get_clk_jitter() == false) && (self.registers.jitter_enable.get() == 0x9)
+            !self.get_clk_jitter() && (self.registers.jitter_enable.get() == 0x9)
         });
 
         self.set_clk_jitter(true);
         test_helper("Check Jitter enable ", || {
-            (self.get_clk_jitter() == true) && (self.registers.jitter_enable.get() == 0x6)
+            self.get_clk_jitter() && (self.registers.jitter_enable.get() == 0x6)
         });
 
         let cklist = [
@@ -603,13 +608,13 @@ impl Clkmgr {
         for iter in cklist.iter() {
             self.set_clk_enable(*iter, false);
             test_helper(" Check Clk disable ", || {
-                self.is_clk_enabled(*iter) == false
+                !self.is_clk_enabled(*iter)
                 // (self.is_clk_enabled(*iter) == false)
                 //&& (self.registers.clk_enables.get() == 0x6)
             });
             self.set_clk_enable(*iter, true);
             test_helper(" Check Clk enable ", || {
-                self.is_clk_enabled(*iter) == true
+                self.is_clk_enabled(*iter)
                 // (self.is_clk_enabled(*iter) == false)
                 //&& (self.registers.clk_enables.get() == 0x6)
             });
@@ -681,10 +686,10 @@ impl Clkmgr {
                 self.is_recov_err_code_present(Some(err)) == expected_ret
                     && (self.registers.recov_err_code.get() == expected_reg)
             });
-            if expected_ret == true {
+            if expected_ret {
                 self.clear_recov_err_code(err);
                 test_helper(" Check Recoverable error clearing", || {
-                    self.is_recov_err_code_present(Some(err)) == false
+                    !self.is_recov_err_code_present(Some(err))
                 });
             }
         }
