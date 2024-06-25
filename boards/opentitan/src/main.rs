@@ -20,6 +20,7 @@ use crate::pinmux_layout::BoardPinmuxLayout;
 use capsules_aes_gcm::aes_gcm;
 use capsules_core::virtualizers::virtual_aes_ccm;
 use capsules_core::virtualizers::virtual_alarm::{MuxAlarm, VirtualMuxAlarm};
+use core::num::NonZeroU16;
 use earlgrey::chip::EarlGreyDefaultPeripherals;
 use earlgrey::chip_config::EarlGreyConfig;
 use earlgrey::flash_ctrl;
@@ -41,7 +42,6 @@ use kernel::utilities::registers::interfaces::ReadWriteable;
 use kernel::{create_capability, debug, static_init};
 use lowrisc::flash_ctrl::FlashMPConfig;
 use rv32i::csr;
-use core::num::NonZeroU16;
 
 pub mod io;
 mod otbn;
@@ -989,6 +989,13 @@ fn test_flash(
         )
     };
 
+    let placeholder_flash_page = unsafe {
+        static_init!(
+            <earlgrey::flash_ctrl::FlashCtrl as FlashHIL>::Page,
+            <earlgrey::flash_ctrl::FlashCtrl as FlashHIL>::Page::default()
+        )
+    };
+
     let page_index_range =
         earlgrey::flash_ctrl::tests::convert_flash_slice_to_page_position_range(unsafe {
             core::slice::from_raw_parts(
@@ -1001,7 +1008,12 @@ fn test_flash(
     let test_client = unsafe {
         static_init!(
             earlgrey::flash_ctrl::tests::TestClient,
-            earlgrey::flash_ctrl::tests::TestClient::new(flash_ctrl, flash_page, page_index_range),
+            earlgrey::flash_ctrl::tests::TestClient::new(
+                flash_ctrl,
+                flash_page,
+                placeholder_flash_page,
+                page_index_range
+            ),
         )
     };
 
