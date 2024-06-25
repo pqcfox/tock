@@ -42,7 +42,7 @@ pub struct EarlGrey<
 pub struct EarlGreyDefaultPeripherals<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig> {
     pub aes: crate::aes::Aes<'a>,
     pub hmac: lowrisc::hmac::Hmac<'a>,
-    pub usb: lowrisc::usbdev::Usb<'a>,
+    pub usb: lowrisc::usb::Usb<'a>,
     pub uart0: lowrisc::uart::Uart<'a>,
     pub otbn: lowrisc::otbn::Otbn<'a>,
     pub otp: lowrisc::otp::Otp,
@@ -65,7 +65,7 @@ impl<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig>
         Self {
             aes: crate::aes::Aes::new(),
             hmac: lowrisc::hmac::Hmac::new(crate::hmac::HMAC0_BASE),
-            usb: lowrisc::usbdev::Usb::new(crate::usbdev::USB0_BASE),
+            usb: lowrisc::usb::Usb::new(crate::usbdev::USB0_BASE),
             uart0: lowrisc::uart::Uart::new(crate::uart::UART0_BASE, CFG::PERIPHERAL_FREQ),
             otbn: lowrisc::otbn::Otbn::new(crate::otbn::OTBN_BASE),
             otp: lowrisc::otp::Otp::new(crate::otp::OTP_BASE),
@@ -130,8 +130,12 @@ impl<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig> InterruptService
             interrupts::HMAC_HMACDONE..=interrupts::HMAC_HMACERR => {
                 self.hmac.handle_interrupt();
             }
-            interrupts::USBDEV_PKTRECEIVED..=interrupts::USBDEV_LINKOUTERR => {
-                self.usb.handle_interrupt();
+            raw_usb_interrupt @ interrupts::USBDEV_PKTRECEIVED..=interrupts::USBDEV_LINKOUTERR => {
+                // PANIC: raw_usb_interrupt is a valid interrupt because of the match arm
+                // CAST: u32 == usize on RV32I
+                let usb_interrupt =
+                    lowrisc::usb::UsbInterrupt::try_from_usize(raw_usb_interrupt as usize).unwrap();
+                self.usb.handle_interrupt(usb_interrupt);
             }
             /*
             interrupts::FLASHCTRL_PROGEMPTY..=interrupts::FLASHCTRL_OPDONE => {
