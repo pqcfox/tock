@@ -146,10 +146,6 @@ impl Clkmgr {
 
         self.registers.extclk_ctrl.write(extclk_en + extclk_hispeed);
 
-        // self.registers
-        //     .extclk_ctrl_regwen
-        //     .modify(EXTCLK_CTRL_REGWEN::EN::CLEAR);
-
         wait_for(timeout, || {
             self.registers.extclk_status.read(EXTCLK_STATUS::ACK) == feedback_expected
         })
@@ -170,6 +166,25 @@ impl Clkmgr {
             }
             (MULTI_BIT_BOOL_4FALSE, _, _) => ExtClkState::ExtClkOff,
             (_, _, _) => ExtClkState::ExtClkError,
+        }
+    }
+
+    /// Lock the extclk setting. This is a sticky lock and can only be removed by reset.
+    pub fn lock_extclk_setting(&self) {
+        self.registers
+            .extclk_ctrl_regwen
+            .modify(EXTCLK_CTRL_REGWEN::EN::CLEAR);
+    }
+
+    /// Get the the extclk lock setting. Returns 'true' if locked, false otherwise.
+    pub fn get_lock_extclk_setting(&self) -> bool {
+        match self
+            .registers
+            .extclk_ctrl_regwen
+            .read(EXTCLK_CTRL_REGWEN::EN)
+        {
+            0x1 => true,
+            _ => false,
         }
     }
 
@@ -378,6 +393,25 @@ impl Clkmgr {
         //     .write(MEASURE_CTRL_REGWEN::EN::CLEAR);
 
         Ok(())
+    }
+
+    /// Lock the measure control setting. This is a sticky lock and can only be removed by reset.
+    pub fn lock_meas_ctrl_setting(&self) {
+        self.registers
+            .measure_ctrl_regwen
+            .write(MEASURE_CTRL_REGWEN::EN::CLEAR);
+    }
+
+    /// Get the the measure control lock setting. Returns 'true' if locked, false otherwise.
+    pub fn get_lock_meas_ctrl_setting(&self) -> bool {
+        match self
+            .registers
+            .measure_ctrl_regwen
+            .read(MEASURE_CTRL_REGWEN::EN)
+        {
+            0x1 => true,
+            _ => false,
+        }
     }
 
     /// Gets the state of the speciffic clock measurement control.
