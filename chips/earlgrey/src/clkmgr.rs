@@ -115,7 +115,12 @@ impl Clkmgr {
 
     /// Set the extclk state while spin waiting for a certain number of loops.
     ///
-    /// The  'req_state' represents the requested state and 'timeout' represents number of spinloops that it should wait for. Since at this point of initiaization, a lot of times the clocks are not availalble, this is just a number of for loop iterations. This gives you the option of setting and upper ceiling or not waiting at all, in case you want the clock request to be set but do not want to wait around for the resolution, you might have other work to do than busy waiting during the init phase. The return is a feedback that tells you if the clock has been confirmed to have entered the requested state in case it returns 'true' or it has not _yet_ entered the desired state, if it returns 'false'
+    /// The  'req_state' represents the requested state and 'timeout' represents number of spinloops that it should wait for.
+    /// Since at this point of initiaization, a lot of times the clocks are not availalble, this is just a number of for loop
+    /// iterations. This gives you the option of setting and upper ceiling or not waiting at all, in case you want the clock
+    /// request to be set but do not want to wait around for the resolution, you might have other work to do than busy waiting
+    /// during the init phase. The return is a feedback that tells you if the clock has been confirmed to have entered the
+    /// requested state in case it returns 'true' or it has not _yet_ entered the desired state, if it returns 'false'.
     pub fn set_extclk(&self, req_state: ExtClkState, timeout: usize) -> bool {
         let (extclk_en, extclk_hispeed, feedback_expected) = match req_state {
             ExtClkState::ExtClkOnHighSpeed => (
@@ -150,6 +155,7 @@ impl Clkmgr {
         })
     }
 
+    /// Returns the state the external clock is in.
     pub fn get_extclk_sts(&self) -> ExtClkState {
         match (
             self.registers.extclk_ctrl.read(EXTCLK_CTRL::SEL),
@@ -167,6 +173,9 @@ impl Clkmgr {
         }
     }
 
+    /// Sets the state the clock jitter.
+    ///
+    /// The 'jitter_enabled' argument is the request of the jitter setting
     pub fn set_clk_jitter(&self, jitter_enabled: bool) {
         self.registers.jitter_regwen.write(JITTER_REGWEN::EN::SET);
 
@@ -180,14 +189,19 @@ impl Clkmgr {
         self.registers.jitter_regwen.write(JITTER_REGWEN::EN::CLEAR);
     }
 
+    /// Gets the state the clock jitter.
     pub fn get_clk_jitter(&self) -> bool {
         !matches!(
             self.registers.jitter_enable.read(JITTER_ENABLE::VAL),
             MULTI_BIT_BOOL_4FALSE
         )
     }
-
-    /// Returns true if the clock enable has succeeded and false if it did not succeed.
+    /// Requests the enabling state of the speciffic clock.
+    ///
+    /// The 'clk' argument selects the clock the requests is addressed to. The 'req' argument says the
+    /// state that is requested, where 'true' is enabled and 'false' is disabled
+    ///
+    /// Returns true if the clock enable has succeeded and false if the request did not succeed.
     pub fn set_clk_enable(&self, clk: GateableClk, req: bool) -> bool {
         if self.is_clk_enabled(clk) != req {
             match clk {
@@ -224,6 +238,10 @@ impl Clkmgr {
         }
     }
 
+    /// Gets the enabling state of the speciffic clock.
+    ///
+    /// The 'clk' argument selects the clock it wants to query the state of.
+    ///
     /// Returns true if the clock is enabled and false if the clock is not enabled.
     pub fn is_clk_enabled(&self, clk: GateableClk) -> bool {
         match clk {
@@ -256,7 +274,13 @@ impl Clkmgr {
         }
     }
 
-    // Returns true if the clock is enabled and false if the clock is not enabled.
+    /// Requests the state of the speciffic clock measurement control.
+    ///
+    /// The 'clk' argument selects the clock it wants to set the measurement control state for. The 'en' is the state
+    /// of the measurement control itself, 'lo' is the low range of the clock measurement supervision and 'hi' is the
+    /// high range of the clock mesurement supervision
+    ///
+    /// Returns an Result that is () if the request succeded and ErrorCode if an error happened during the setting.
     pub fn set_clk_meas_ctrl(
         &self,
         clk: MeasCtrlClk,
@@ -356,7 +380,12 @@ impl Clkmgr {
         Ok(())
     }
 
-    // Returns true if the clock is enabled and false if the clock is not enabled.
+    /// Gets the state of the speciffic clock measurement control.
+    ///
+    /// The 'clk' argument selects the clock it wants to query measurement control state for.
+    ///
+    /// Returns a tuple where the first 'bool' argument signifies if the clock measurement control
+    /// is enabled, and the 2nd and 3rd members signify the lo and hi ranges respectively.
     pub fn get_clk_meas_ctrl(&self, clk: MeasCtrlClk) -> (bool, u32, u32) {
         let en: u32;
         let lo: u32;
@@ -429,6 +458,11 @@ impl Clkmgr {
         (en_sts, lo, hi)
     }
 
+    /// Queries if a specific error code is present.
+    ///
+    /// The 'err' argument selects the error it wants to query for.
+    ///
+    /// Returns 'true' if the error is present and 'false' otherwise
     pub fn is_recov_err_code_present(&self, err: Option<RecovErr>) -> bool {
         match err {
             Some(RecovErr::UsbTimeoutErr) => self
@@ -479,6 +513,9 @@ impl Clkmgr {
         }
     }
 
+    /// Clears a specific error code.
+    ///
+    /// The 'err' argument selects the error it wants to clear.
     pub fn clear_recov_err_code(&self, err: RecovErr) {
         match err {
             RecovErr::UsbTimeoutErr => self
@@ -528,6 +565,11 @@ impl Clkmgr {
         };
     }
 
+    /// Queries if a specific fatal error code is present.
+    ///
+    /// The 'err' argument selects the fatal error it wants to query for.
+    ///
+    /// Returns 'true' if the  fatal error is present and 'false' otherwise
     pub fn is_fatal_err_code_present(&self, err: Option<FatalErr>) -> bool {
         match err {
             Some(FatalErr::ShadowStorageErr) => self
