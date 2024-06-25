@@ -30,6 +30,7 @@ use kernel::component::Component;
 use kernel::hil;
 use kernel::hil::entropy::Entropy32;
 use kernel::hil::flash::Flash as FlashHIL;
+use kernel::hil::flash::HasInfoClient;
 use kernel::hil::hasher::Hasher;
 use kernel::hil::i2c::I2CMaster;
 use kernel::hil::led::LedHigh;
@@ -185,6 +186,7 @@ struct EarlGrey {
         VirtualMuxAlarm<'static, earlgrey::timer::RvTimer<'static, ChipConfig>>,
     >,
     hmac: &'static capsules_extra::hmac::HmacDriver<'static, lowrisc::hmac::Hmac<'static>, 32>,
+    info_flash: Option<&'static capsules_extra::info_flash::InfoFlash<'static, earlgrey::flash_ctrl::FlashCtrl<'static>>>,
     lldb: &'static capsules_core::low_level_debug::LowLevelDebug<
         'static,
         capsules_core::virtualizers::virtual_uart::UartDevice<'static>,
@@ -256,6 +258,10 @@ impl SyscallDriverLookup for EarlGrey {
             capsules_core::rng::DRIVER_NUM => f(Some(self.rng)),
             capsules_extra::symmetric_encryption::aes::DRIVER_NUM => f(Some(self.aes)),
             //capsules_extra::kv_driver::DRIVER_NUM => f(Some(self.kv_driver)),
+            capsules_extra::info_flash::DRIVER_NUMBER => match self.info_flash {
+                Some(info_flash) => f(Some(info_flash)),
+                None => f(None),
+            }
             _ => f(None),
         }
     }
@@ -826,6 +832,34 @@ unsafe fn setup() -> (
     ));
     */
 
+    let info_flash = if !FLASH_TESTS_ENABLED {
+        use capsules_extra::info_flash::InfoFlash;
+        let raw_flash_ctrl_page = static_init!(
+            earlgrey::flash_ctrl::RawFlashCtrlPage,
+            earlgrey::flash_ctrl::RawFlashCtrlPage::default()
+        );
+
+        let info_flash: &'static InfoFlash<earlgrey::flash_ctrl::FlashCtrl> = static_init!(
+            InfoFlash<earlgrey::flash_ctrl::FlashCtrl>,
+            InfoFlash::new(
+                &peripherals.flash_ctrl,
+                board_kernel.create_grant(
+                    capsules_extra::info_flash::DRIVER_NUMBER,
+                    &memory_allocation_cap
+                ),
+                raw_flash_ctrl_page,
+            ),
+        );
+
+        peripherals.flash_ctrl.set_info_client(info_flash);
+
+        Some(info_flash)
+    } else {
+        // Don't instantiate the info flash capsule when testing the flash peripheral. It may
+        // interfere with the tests.
+        None
+    };
+
     let mux_otbn = crate::otbn::AccelMuxComponent::new(&peripherals.otbn)
         .finalize(otbn_mux_component_static!());
 
@@ -941,6 +975,7 @@ unsafe fn setup() -> (
             console,
             alarm,
             hmac,
+            info_flash,
             rng,
             lldb: lldb,
             i2c_master,

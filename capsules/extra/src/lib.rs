@@ -43,6 +43,7 @@ pub mod hs3003;
 pub mod hts221;
 pub mod humidity;
 pub mod ieee802154;
+pub mod info_flash;
 pub mod isl29035;
 pub mod kv_driver;
 pub mod kv_store_permissions;
