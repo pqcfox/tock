@@ -122,7 +122,7 @@ impl Clkmgr {
     /// requested state in case it returns 'Ok()'. it returns 'false'.
     pub fn set_extclk(&self, req_state: ExtClkState, timeout: usize) -> Result<(), ErrorCode> {
         // Return error if the lock is already set, it's sticky and will only get cleared on reset.
-        if self.get_lock_extclk_setting() {
+        if self.is_extclk_setting_locked() {
             return Err(ErrorCode::FAIL);
         }
 
@@ -159,7 +159,7 @@ impl Clkmgr {
     }
 
     /// Returns the state the external clock is in.
-    pub fn get_extclk_sts(&self) -> ExtClkState {
+    pub fn get_extclk_state(&self) -> ExtClkState {
         match (
             self.registers.extclk_ctrl.read(EXTCLK_CTRL::SEL),
             self.registers.extclk_ctrl.read(EXTCLK_CTRL::HI_SPEED_SEL),
@@ -184,7 +184,7 @@ impl Clkmgr {
     }
 
     /// Get the the extclk lock setting. Returns 'true' if locked, false otherwise.
-    pub fn get_lock_extclk_setting(&self) -> bool {
+    pub fn is_extclk_setting_locked(&self) -> bool {
         match self
             .registers
             .extclk_ctrl_regwen
@@ -212,7 +212,7 @@ impl Clkmgr {
     }
 
     /// Gets the state the clock jitter.
-    pub fn get_clk_jitter(&self) -> bool {
+    pub fn is_clk_jitter_enabled(&self) -> bool {
         !matches!(
             self.registers.jitter_enable.read(JITTER_ENABLE::VAL),
             MULTI_BIT_BOOL_4FALSE
@@ -310,7 +310,7 @@ impl Clkmgr {
         lo: u32,
         hi: u32,
     ) -> Result<(), ErrorCode> {
-        if self.get_lock_meas_ctrl_setting() {
+        if self.is_locked_meas_ctrl_setting() {
             return Err(ErrorCode::FAIL);
         }
 
@@ -410,7 +410,7 @@ impl Clkmgr {
     }
 
     /// Get the the measure control lock setting. Returns 'true' if locked, false otherwise.
-    pub fn get_lock_meas_ctrl_setting(&self) -> bool {
+    pub fn is_locked_meas_ctrl_setting(&self) -> bool {
         match self
             .registers
             .measure_ctrl_regwen
@@ -427,7 +427,7 @@ impl Clkmgr {
     ///
     /// Returns a tuple where the first 'bool' argument signifies if the clock measurement control
     /// is enabled, and the 2nd and 3rd members signify the lo and hi ranges respectively.
-    pub fn get_clk_meas_ctrl(&self, clk: MeasCtrlClk) -> (bool, u32, u32) {
+    pub fn get_clk_meas_ctrl_setting(&self, clk: MeasCtrlClk) -> (bool, u32, u32) {
         let en: u32;
         let lo: u32;
         let hi: u32;
@@ -632,6 +632,8 @@ impl Clkmgr {
     /// Test runner that contains a set of unit tests to run on target for the clkmgr.
     pub fn run_tests(&self) -> bool {
         debug!("* Start running clkmgr tests!");
+
+        // Run tests on extclk interactions
         test_helper("Check exclk On High Speed timeout 0 ", || {
             self.set_extclk(ExtClkState::ExtClkOnHighSpeed, 0) == Err(ErrorCode::BUSY)
         });
@@ -644,7 +646,7 @@ impl Clkmgr {
                 && (self.registers.extclk_status.get() == 0x6)
         });
         test_helper("Check exclk status ExtClkOnHighSpeed ", || {
-            self.get_extclk_sts() == ExtClkState::ExtClkOnHighSpeed
+            self.get_extclk_state() == ExtClkState::ExtClkOnHighSpeed
         });
         test_helper("Check exclk On ExtClkOnLowSpeed ", || {
             (self.set_extclk(ExtClkState::ExtClkOnLowSpeed, 1000) == Ok(()))
@@ -652,7 +654,7 @@ impl Clkmgr {
                 && (self.registers.extclk_status.get() == 0x6)
         });
         test_helper("Check exclk status ExtClkOnLowSpeed ", || {
-            (self.get_extclk_sts() == ExtClkState::ExtClkOnLowSpeed)
+            (self.get_extclk_state() == ExtClkState::ExtClkOnLowSpeed)
                 && (self.registers.extclk_ctrl.get() == 0x96)
                 && (self.registers.extclk_status.get() == 0x6)
         });
@@ -662,26 +664,28 @@ impl Clkmgr {
                 && (self.registers.extclk_status.get() == 0x9)
         });
         test_helper("Check exclk status ExtClkOff ", || {
-            (self.get_extclk_sts() == ExtClkState::ExtClkOff)
+            (self.get_extclk_state() == ExtClkState::ExtClkOff)
                 && (self.registers.extclk_ctrl.get() == 0x99)
                 && (self.registers.extclk_status.get() == 0x9)
         });
 
+        // Run tests on clock jitter
         self.set_clk_jitter(true);
         test_helper("Check Jitter enable ", || {
-            self.get_clk_jitter() && (self.registers.jitter_enable.get() == 0x6)
+            self.is_clk_jitter_enabled() && (self.registers.jitter_enable.get() == 0x6)
         });
 
         self.set_clk_jitter(false);
         test_helper("Check Jitter disable ", || {
-            !self.get_clk_jitter() && (self.registers.jitter_enable.get() == 0x9)
+            !self.is_clk_jitter_enabled() && (self.registers.jitter_enable.get() == 0x9)
         });
 
         self.set_clk_jitter(true);
         test_helper("Check Jitter enable ", || {
-            self.get_clk_jitter() && (self.registers.jitter_enable.get() == 0x6)
+            self.is_clk_jitter_enabled() && (self.registers.jitter_enable.get() == 0x6)
         });
 
+        // Define tests for gateble clocks as an array
         let cklist = [
             GateableClk::UsbPeri,
             GateableClk::IoPeri,
@@ -692,6 +696,7 @@ impl Clkmgr {
             GateableClk::TransClkMainHMAC,
             GateableClk::TransClkMainAES,
         ];
+        // Run the tests for all clocks.
         for iter in cklist.iter() {
             self.set_clk_enable(*iter, false);
             test_helper(" Check Clk disable ", || !self.is_clk_enabled(*iter));
@@ -700,6 +705,7 @@ impl Clkmgr {
         }
 
         // Test the recoverable error reading before messing with the measurement control because that will induce errors.
+        // We use the same trick with an array of tuples.
         let cklist = [
             (RecovErr::UsbTimeoutErr, false, 0x0),
             (RecovErr::MainTimeoutErr, false, 0x0),
@@ -718,6 +724,8 @@ impl Clkmgr {
                     && (self.registers.recov_err_code.get() == expected_reg)
             });
         }
+
+        // Test all interactions for setting measurement controls and see the error cases as well.
         let cklist = [
             (MeasCtrlClk::Io, true, 0x2, 0xA, Ok(())),
             (MeasCtrlClk::Io, true, 0xA, 0xB, Ok(())),
@@ -742,11 +750,14 @@ impl Clkmgr {
             let current_resp = self.set_clk_meas_ctrl(clock, clk_meas_set, lo, hi);
             if Ok(()) == expected_response {
                 test_helper(" Check Clk Meas set ", || {
-                    self.get_clk_meas_ctrl(clock) == (clk_meas_set, lo, hi)
+                    self.get_clk_meas_ctrl_setting(clock) == (clk_meas_set, lo, hi)
                         && (expected_response == current_resp)
                 });
             }
         }
+
+        // Check getting recoverable errors and confront with the actual register value.
+        // This must run _after_ clk_meas_ctrl setting since that will actually induce the clocke errors.
         let cklist = [
             (RecovErr::UsbTimeoutErr, false, 0x3E),
             (RecovErr::MainTimeoutErr, false, 0x3E),
@@ -772,6 +783,9 @@ impl Clkmgr {
                 });
             }
         }
+
+        // Check reading fatal errors, those I just check the absence of because we don't have a readily
+        // available way of stimulation.
         let cklist = [
             (FatalErr::ShadowStorageErr, false, 0x0),
             (FatalErr::IdleCnt, false, 0x0),
