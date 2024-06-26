@@ -5,7 +5,8 @@
 //! Provides access to determine the clock status, enable and disable clocks and
 //!  clock measurement checks, get and clear errors.
 //!
-
+//!
+#[cfg(feature = "clkmgr_tests")]
 use kernel::debug;
 use kernel::utilities::registers::interfaces::{ReadWriteable, Readable, Writeable};
 use kernel::utilities::StaticRef;
@@ -82,6 +83,12 @@ const MULTI_BIT_BOOL_4FALSE: u32 = 0x9;
 pub const CLK_MGR_BASE: StaticRef<ClkmgrRegisters> =
     unsafe { StaticRef::new(CLKMGR_AON_BASE_ADDR as *const ClkmgrRegisters) };
 
+#[cfg(feature = "clkmgr_tests")]
+/// Test helper that takes a test text describing the test and a pass criteria for the test itself.
+///
+/// We do not print to the debug buffer anything unless it's a fail to prevent the debug buffer filling
+///  with positive feedback. The buffer is limited because we run before the system is fully running and
+/// the debugger manages to flush the data.
 fn test_helper(test_text: &str, f: impl Fn() -> bool) -> bool {
     static mut TEST_ID: usize = 0;
     unsafe {
@@ -621,7 +628,8 @@ impl Clkmgr {
             None => self.registers.fatal_err_code.get() == 0x0,
         }
     }
-
+    #[cfg(feature = "clkmgr_tests")]
+    /// Test runner that contains a set of unit tests to run on target for the clkmgr.
     pub fn run_tests(&self) -> bool {
         debug!("* Start running clkmgr tests!");
         test_helper("Check exclk On High Speed timeout 0 ", || {
