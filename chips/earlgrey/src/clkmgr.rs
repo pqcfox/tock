@@ -190,8 +190,8 @@ impl Clkmgr {
             .extclk_ctrl_regwen
             .read(EXTCLK_CTRL_REGWEN::EN)
         {
-            0x1 => true,
-            _ => false,
+            0x1 => false,
+            _ => true,
         }
     }
 
@@ -416,8 +416,8 @@ impl Clkmgr {
             .measure_ctrl_regwen
             .read(MEASURE_CTRL_REGWEN::EN)
         {
-            0x1 => true,
-            _ => false,
+            0x1 => false,
+            _ => true,
         }
     }
 
