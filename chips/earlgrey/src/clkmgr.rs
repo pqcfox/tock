@@ -82,22 +82,12 @@ const MULTI_BIT_BOOL_4FALSE: u32 = 0x9;
 pub const CLK_MGR_BASE: StaticRef<ClkmgrRegisters> =
     unsafe { StaticRef::new(CLKMGR_AON_BASE_ADDR as *const ClkmgrRegisters) };
 
-fn wait_for(count: usize, f: impl Fn() -> bool) -> bool {
-    for _ in 0..count {
-        if f() {
-            return true;
-        }
-    }
-    false
-}
-
 fn test_helper(test_text: &str, f: impl Fn() -> bool) -> bool {
     static mut TEST_ID: usize = 0;
     unsafe {
         TEST_ID += 1;
         if f() {
-            // debug!("*   Test No. {} Passed!", TEST_ID);
-            // debug!("*  ");
+            // Keep test success silent, we don't want to fill the buffer if everything is OK!
             true
         } else {
             debug!("*   Test No. {} Failed! : {}", TEST_ID, test_text);
@@ -146,9 +136,12 @@ impl Clkmgr {
 
         self.registers.extclk_ctrl.write(extclk_en + extclk_hispeed);
 
-        wait_for(timeout, || {
-            self.registers.extclk_status.read(EXTCLK_STATUS::ACK) == feedback_expected
-        })
+        for _ in 0..timeout {
+            if self.registers.extclk_status.read(EXTCLK_STATUS::ACK) == feedback_expected {
+                return true;
+            }
+        }
+        false
     }
 
     /// Returns the state the external clock is in.
@@ -388,10 +381,6 @@ impl Clkmgr {
                 );
             }
         };
-        // self.registers
-        //     .measure_ctrl_regwen
-        //     .write(MEASURE_CTRL_REGWEN::EN::CLEAR);
-
         Ok(())
     }
 
