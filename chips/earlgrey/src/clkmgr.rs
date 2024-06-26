@@ -109,9 +109,16 @@ impl Clkmgr {
     /// Since at this point of initiaization, a lot of times the clocks are not availalble, this is just a number of for loop
     /// iterations. This gives you the option of setting and upper ceiling or not waiting at all, in case you want the clock
     /// request to be set but do not want to wait around for the resolution, you might have other work to do than busy waiting
-    /// during the init phase. The return is a feedback that tells you if the clock has been confirmed to have entered the
-    /// requested state in case it returns 'true' or it has not _yet_ entered the desired state, if it returns 'false'.
-    pub fn set_extclk(&self, req_state: ExtClkState, timeout: usize) -> bool {
+    /// during the init phase.
+    ///
+    /// The return is a 'Result<(), ErrorCode>'  that tells you if the clock has been confirmed to have entered the
+    /// requested state in case it returns 'Ok()'. it returns 'false'.
+    pub fn set_extclk(&self, req_state: ExtClkState, timeout: usize) -> Result<(), ErrorCode> {
+        // Return error if the lock is already set, it's sticky and will only get cleared on reset.
+        if self.get_lock_extclk_setting() {
+            return Err(ErrorCode::FAIL);
+        }
+
         let (extclk_en, extclk_hispeed, feedback_expected) = match req_state {
             ExtClkState::ExtClkOnHighSpeed => (
                 EXTCLK_CTRL::SEL.val(MULTI_BIT_BOOL_4TRUE),
@@ -128,7 +135,7 @@ impl Clkmgr {
                 EXTCLK_CTRL::HI_SPEED_SEL.val(MULTI_BIT_BOOL_4FALSE),
                 MULTI_BIT_BOOL_4FALSE,
             ),
-            _ => return false,
+            _ => return Err(ErrorCode::INVAL),
         };
         self.registers
             .extclk_ctrl_regwen
@@ -138,10 +145,10 @@ impl Clkmgr {
 
         for _ in 0..timeout {
             if self.registers.extclk_status.read(EXTCLK_STATUS::ACK) == feedback_expected {
-                return true;
+                return Ok(());
             }
         }
-        false
+        Err(ErrorCode::BUSY)
     }
 
     /// Returns the state the external clock is in.
@@ -296,6 +303,10 @@ impl Clkmgr {
         lo: u32,
         hi: u32,
     ) -> Result<(), ErrorCode> {
+        if self.get_lock_meas_ctrl_setting() {
+            return Err(ErrorCode::FAIL);
+        }
+
         let set_req = match en {
             true => MULTI_BIT_BOOL_4TRUE,
             false => MULTI_BIT_BOOL_4FALSE,
@@ -614,10 +625,13 @@ impl Clkmgr {
     pub fn run_tests(&self) -> bool {
         debug!("* Start running clkmgr tests!");
         test_helper("Check exclk On High Speed timeout 0 ", || {
-            !self.set_extclk(ExtClkState::ExtClkOnHighSpeed, 0)
+            self.set_extclk(ExtClkState::ExtClkOnHighSpeed, 0) == Err(ErrorCode::BUSY)
+        });
+        test_helper("Check exclk On High Speed timeout 0 ", || {
+            self.set_extclk(ExtClkState::ExtClkError, 0) == Err(ErrorCode::INVAL)
         });
         test_helper("Check exclk On High Speed timeout 1000 ", || {
-            self.set_extclk(ExtClkState::ExtClkOnHighSpeed, 10000)
+            (self.set_extclk(ExtClkState::ExtClkOnHighSpeed, 10000) == Ok(()))
                 && (self.registers.extclk_ctrl.get() == 0x66)
                 && (self.registers.extclk_status.get() == 0x6)
         });
@@ -625,7 +639,7 @@ impl Clkmgr {
             self.get_extclk_sts() == ExtClkState::ExtClkOnHighSpeed
         });
         test_helper("Check exclk On ExtClkOnLowSpeed ", || {
-            self.set_extclk(ExtClkState::ExtClkOnLowSpeed, 1000)
+            (self.set_extclk(ExtClkState::ExtClkOnLowSpeed, 1000) == Ok(()))
                 && (self.registers.extclk_ctrl.get() == 0x96)
                 && (self.registers.extclk_status.get() == 0x6)
         });
@@ -635,7 +649,7 @@ impl Clkmgr {
                 && (self.registers.extclk_status.get() == 0x6)
         });
         test_helper("Check exclk On ExtClkOff ", || {
-            self.set_extclk(ExtClkState::ExtClkOff, 10000)
+            (self.set_extclk(ExtClkState::ExtClkOff, 10000) == Ok(()))
                 && (self.registers.extclk_ctrl.get() == 0x99)
                 && (self.registers.extclk_status.get() == 0x9)
         });
@@ -672,17 +686,9 @@ impl Clkmgr {
         ];
         for iter in cklist.iter() {
             self.set_clk_enable(*iter, false);
-            test_helper(" Check Clk disable ", || {
-                !self.is_clk_enabled(*iter)
-                // (self.is_clk_enabled(*iter) == false)
-                //&& (self.registers.clk_enables.get() == 0x6)
-            });
+            test_helper(" Check Clk disable ", || !self.is_clk_enabled(*iter));
             self.set_clk_enable(*iter, true);
-            test_helper(" Check Clk enable ", || {
-                self.is_clk_enabled(*iter)
-                // (self.is_clk_enabled(*iter) == false)
-                //&& (self.registers.clk_enables.get() == 0x6)
-            });
+            test_helper(" Check Clk enable ", || self.is_clk_enabled(*iter));
         }
 
         // Test the recoverable error reading before messing with the measurement control because that will induce errors.
