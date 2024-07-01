@@ -34,7 +34,7 @@ impl EarlGreyPinmuxConfig for BoardPinmuxLayout {
         In::Ioc2,         // GpioGpio12
         In::Ioc5,         // GpioGpio13
         In::Ioc6,         // GpioGpio14
-        In::Ioc7,         // GpioGpio15
+        In::ConstantZero, // GpioGpio15
         In::Ioc8,         // GpioGpio16
         In::Ioc9,         // GpioGpio17
         In::Ioc10,        // GpioGpio18
@@ -75,7 +75,7 @@ impl EarlGreyPinmuxConfig for BoardPinmuxLayout {
         In::ConstantZero, // SysrstCtrlAonKey2In
         In::ConstantZero, // SysrstCtrlAonPwrbIn
         In::ConstantZero, // SysrstCtrlAonLidOpen
-        In::ConstantZero, // UsbdevSense
+        In::Ioc7,         // UsbdevSense
     ];
 
     #[rustfmt::skip]
@@ -112,7 +112,7 @@ impl EarlGreyPinmuxConfig for BoardPinmuxLayout {
         Out::Uart0Tx,       // Ioc4 UART0_TX
         Out::ConstantHighZ, // Ioc5 (TAP STRAP 1)
         Out::GpioGpio14,    // Ioc6
-        Out::GpioGpio15,    // Ioc7
+        Out::ConstantHighZ, // Ioc7
         Out::ConstantHighZ, // Ioc8 (TAP STRAP 0)
         Out::GpioGpio17,    // Ioc9
         Out::GpioGpio18,    // Ioc10

@@ -21,6 +21,26 @@ pub(super) const NUMBER_BUFFERS: NonZeroUsize = match NonZeroUsize::new(32) {
 pub(super) struct BufferIndex(u8);
 
 impl BufferIndex {
+    /// Tries to create a new buffer index from the given usize
+    ///
+    /// # Parameters
+    ///
+    /// + `value`: the usize supposed to represent a buffer index
+    ///
+    /// # Return value
+    ///
+    /// + Ok: value is valid (< 32)
+    /// + Err: value is invalid (>= 32)
+    pub(super) const fn try_from_usize(value: usize) -> Result<Self, ()> {
+        if value >= NUMBER_BUFFERS.get() {
+            Err(())
+        } else {
+            // CAST: Because of the if condition, value < NUMBER_BUFFERS = 32, so value fits in a
+            // u8
+            Ok(Self(value as u8))
+        }
+    }
+
     /// Converts the given buffer index to a usize.
     ///
     /// # Return value
