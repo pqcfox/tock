@@ -41,7 +41,6 @@ use kernel::platform::{KernelResources, SyscallDriverLookup, TbfHeaderFilterDefa
 use kernel::scheduler::priority::PrioritySched;
 use kernel::utilities::registers::interfaces::ReadWriteable;
 use kernel::{create_capability, debug, static_init};
-use lowrisc::flash_ctrl::FlashMPConfig;
 use rv32i::csr;
 
 pub mod io;
@@ -135,7 +134,7 @@ static mut TICKV: Option<
         'static,
         capsules_core::virtualizers::virtual_flash::FlashUser<
             'static,
-            lowrisc::flash_ctrl::FlashCtrl<'static>,
+            earlgrey::flash_ctrl::FlashCtrl<'static>,
         >,
         capsules_extra::sip_hash::SipHasher24<'static>,
         2048,
@@ -208,7 +207,6 @@ struct EarlGrey {
             virtual_aes_ccm::VirtualAES128CCM<'static, earlgrey::aes::Aes<'static>>,
         >,
     >,
-    /*
     kv_driver: &'static capsules_extra::kv_driver::KVStoreDriver<
         'static,
         capsules_extra::virtual_kv::VirtualKVPermissions<
@@ -221,7 +219,7 @@ struct EarlGrey {
                         'static,
                         capsules_core::virtualizers::virtual_flash::FlashUser<
                             'static,
-                            lowrisc::flash_ctrl::FlashCtrl<'static>,
+                            earlgrey::flash_ctrl::FlashCtrl<'static>,
                         >,
                         capsules_extra::sip_hash::SipHasher24<'static>,
                         2048,
@@ -231,7 +229,6 @@ struct EarlGrey {
             >,
         >,
     >,
-    */
     syscall_filter: &'static TbfHeaderFilterDefaultAllow,
     scheduler: &'static PrioritySched,
     scheduler_timer: &'static VirtualSchedulerTimer<
@@ -257,7 +254,7 @@ impl SyscallDriverLookup for EarlGrey {
             capsules_core::spi_controller::DRIVER_NUM => f(Some(self.spi_controller)),
             capsules_core::rng::DRIVER_NUM => f(Some(self.rng)),
             capsules_extra::symmetric_encryption::aes::DRIVER_NUM => f(Some(self.aes)),
-            //capsules_extra::kv_driver::DRIVER_NUM => f(Some(self.kv_driver)),
+            capsules_extra::kv_driver::DRIVER_NUM => f(Some(self.kv_driver)),
             capsules_extra::info_flash::DRIVER_NUMBER => match self.info_flash {
                 Some(info_flash) => f(Some(info_flash)),
                 None => f(None),
@@ -705,19 +702,18 @@ unsafe fn setup() -> (
     }
     */
 
-    /*
     // Flash
     let flash_ctrl_read_buf = static_init!(
         [u8; lowrisc::flash_ctrl::PAGE_SIZE],
         [0; lowrisc::flash_ctrl::PAGE_SIZE]
     );
     let page_buffer = static_init!(
-        lowrisc::flash_ctrl::LowRiscPage,
-        lowrisc::flash_ctrl::LowRiscPage::default()
+        earlgrey::flash_ctrl::RawFlashCtrlPage,
+        earlgrey::flash_ctrl::RawFlashCtrlPage::default()
     );
 
     let mux_flash = components::flash::FlashMuxComponent::new(&peripherals.flash_ctrl).finalize(
-        components::flash_mux_component_static!(lowrisc::flash_ctrl::FlashCtrl),
+        components::flash_mux_component_static!(earlgrey::flash_ctrl::FlashCtrl),
     );
 
     // SipHash
@@ -739,7 +735,7 @@ unsafe fn setup() -> (
         page_buffer,         // Buffer used with the flash controller
     )
     .finalize(components::tickv_component_static!(
-        lowrisc::flash_ctrl::FlashCtrl,
+        earlgrey::flash_ctrl::FlashCtrl,
         capsules_extra::sip_hash::SipHasher24,
         2048
     ));
@@ -751,7 +747,7 @@ unsafe fn setup() -> (
         components::tickv_kv_store_component_static!(
             capsules_extra::tickv::TicKVSystem<
                 capsules_core::virtualizers::virtual_flash::FlashUser<
-                    lowrisc::flash_ctrl::FlashCtrl,
+                    earlgrey::flash_ctrl::FlashCtrl,
                 >,
                 capsules_extra::sip_hash::SipHasher24<'static>,
                 2048,
@@ -765,7 +761,7 @@ unsafe fn setup() -> (
             capsules_extra::tickv_kv_store::TicKVKVStore<
                 capsules_extra::tickv::TicKVSystem<
                     capsules_core::virtualizers::virtual_flash::FlashUser<
-                        lowrisc::flash_ctrl::FlashCtrl,
+                        earlgrey::flash_ctrl::FlashCtrl,
                     >,
                     capsules_extra::sip_hash::SipHasher24<'static>,
                     2048,
@@ -781,7 +777,7 @@ unsafe fn setup() -> (
                 capsules_extra::tickv_kv_store::TicKVKVStore<
                     capsules_extra::tickv::TicKVSystem<
                         capsules_core::virtualizers::virtual_flash::FlashUser<
-                            lowrisc::flash_ctrl::FlashCtrl,
+                            earlgrey::flash_ctrl::FlashCtrl,
                         >,
                         capsules_extra::sip_hash::SipHasher24<'static>,
                         2048,
@@ -798,7 +794,7 @@ unsafe fn setup() -> (
                 capsules_extra::tickv_kv_store::TicKVKVStore<
                     capsules_extra::tickv::TicKVSystem<
                         capsules_core::virtualizers::virtual_flash::FlashUser<
-                            lowrisc::flash_ctrl::FlashCtrl,
+                            earlgrey::flash_ctrl::FlashCtrl,
                         >,
                         capsules_extra::sip_hash::SipHasher24<'static>,
                         2048,
@@ -820,7 +816,7 @@ unsafe fn setup() -> (
                 capsules_extra::tickv_kv_store::TicKVKVStore<
                     capsules_extra::tickv::TicKVSystem<
                         capsules_core::virtualizers::virtual_flash::FlashUser<
-                            lowrisc::flash_ctrl::FlashCtrl,
+                            earlgrey::flash_ctrl::FlashCtrl,
                         >,
                         capsules_extra::sip_hash::SipHasher24<'static>,
                         2048,
@@ -830,7 +826,6 @@ unsafe fn setup() -> (
             >,
         >
     ));
-    */
 
     let info_flash = if !FLASH_TESTS_ENABLED {
         use capsules_extra::info_flash::InfoFlash;
@@ -981,7 +976,7 @@ unsafe fn setup() -> (
             i2c_master,
             spi_controller,
             aes,
-            //kv_driver,
+            kv_driver,
             syscall_filter,
             scheduler,
             scheduler_timer,
