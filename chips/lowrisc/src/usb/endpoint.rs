@@ -23,6 +23,9 @@ pub(super) struct Endpoint<'a> {
     buffer_in: OptionalCell<&'a [VolatileCell<u8>]>,
     buffer_out: OptionalCell<&'a [VolatileCell<u8>]>,
     state: Cell<EndpointState>,
+    // Indicates whether buffer_in contains the last packet to be transmitted as part of a long
+    // transaction
+    last: Cell<bool>,
 }
 
 impl<'a> Endpoint<'a> {
@@ -42,6 +45,7 @@ impl<'a> Endpoint<'a> {
             state: Cell::new(EndpointState::Ctrl(CtrlEndpointState::Receive(
                 ReceiveCtrlEndpointState::Setup,
             ))),
+            last: Cell::new(false),
         }
     }
 
@@ -103,5 +107,25 @@ impl<'a> Endpoint<'a> {
     /// + ̀`state`: the state to be set
     pub(super) fn set_state(&self, state: EndpointState) {
         self.state.set(state);
+    }
+
+    /// Returns true if `buffer_in` contains the last packet to be transmitted as part of a long
+    /// transaction, false otherwise.
+    ///
+    /// # Return value
+    ///
+    /// + false: there are still other packets that need to be transmitted
+    /// + true: `buffer_in` contains the last packet to be transmitted
+    pub(super) fn get_last(&self) -> bool {
+        self.last.get()
+    }
+
+    /// Sets `last` packet to be transmitted mark
+    ///
+    /// # Parameters
+    ///
+    /// + `last`: indicate whether `buffer_in` contains the last packet to be transmitted
+    pub(super) fn set_last(&self, last: bool) {
+        self.last.set(last)
     }
 }
