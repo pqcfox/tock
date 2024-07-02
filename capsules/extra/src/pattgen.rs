@@ -79,9 +79,11 @@ impl TryFrom<usize> for Command {
     }
 }
 
+/// IDs of all possible upcalls
 #[repr(usize)]
 enum UpcallId {
     PattGenDone,
+    CapsuleUnlocked,
 }
 
 impl UpcallId {
@@ -91,6 +93,7 @@ impl UpcallId {
     }
 }
 
+/// The configuration of a channel
 struct ChannelConfig {
     pattern: [u32; 2],
     pattern_length: NonZeroUsize,
@@ -111,53 +114,96 @@ impl Default for ChannelConfig {
     }
 }
 
+/// Data to be stored for each process by the Pattern generator capsule
 #[derive(Default)]
 pub struct AppData {
     channel_config: ChannelConfig,
 }
 
 impl AppData {
+    /// Return the configured pattern
+    ///
+    /// # Return value
+    ///
+    /// The configured pattern
     fn get_pattern(&self) -> &[u32; 2] {
         &self.channel_config.pattern
     }
 
-    fn set_pattern(&mut self, value1: u32, value2: u32) {
-        self.channel_config.pattern[0] = value1;
-        self.channel_config.pattern[1] = value2;
+    /// Configure the pattern
+    ///
+    /// # Parameters
+    /// 
+    /// + `bottom_half`: the bottom half of the pattern
+    /// + `top_half`: the top half of the pattern
+    fn set_pattern(&mut self, bottom_half: u32, top_half: u32) {
+        self.channel_config.pattern[0] = bottom_half;
+        self.channel_config.pattern[1] = top_half;
     }
 
+    /// Return the configured pattern length
+    ///
+    /// # Return value
+    ///
+    /// The configured pattern length
     fn get_pattern_length(&self) -> NonZeroUsize {
         self.channel_config.pattern_length
     }
 
+    /// Configure the pattern length
+    ///
+    /// # Parameters
+    ///
+    /// + `pattern_length`: the pattern length to be configured
     fn set_pattern_length(&mut self, pattern_length: NonZeroUsize) {
         self.channel_config.pattern_length = pattern_length;
     }
 
+    /// Return the configured pattern repetition count
+    ///
+    /// # Return value
+    ///
+    /// The configured pattern repetition count
     fn get_pattern_repetition_count(&self) -> NonZeroUsize {
         self.channel_config.pattern_repetition_count
     }
 
+    /// Configure the pattern repetition count
+    ///
+    /// # Parameters
+    ///
+    /// + `pattern_repetition_count`: the pattern repetition count to be configured
     fn set_pattern_repetition_count(&mut self, pattern_repetition_count: NonZeroUsize) {
         self.channel_config.pattern_repetition_count = pattern_repetition_count;
     }
 
+    /// Return the configured predivider
+    ///
+    /// # Return value
+    ///
+    /// The configured predivider
     fn get_predivider(&self) -> usize {
         self.channel_config.predivider
     }
 
+    /// Configure the predivider
+    ///
+    /// # Parameters
+    ///
+    /// + `predivider`: the predivider to be configured
     fn set_predivider(&mut self, predivider: usize) {
         self.channel_config.predivider = predivider;
     }
 }
 
 /// Number of upcalls used by the capsule
-const UPCALL_ID_COUNT: u8 = 1;
+const UPCALL_ID_COUNT: u8 = 2;
 /// Number of read-only allows used by the capsule
 const RO_ALLOW_COUNT: u8 = 0;
 /// Number of read-write allows used by the capsule
 const RW_ALLOW_COUNT: u8 = 0;
 
+/// Grant used by pattern generator capsule.
 pub type PattGenGrant = Grant<
     AppData,
     UpcallCount<UPCALL_ID_COUNT>,
@@ -187,10 +233,19 @@ impl<'a, PattGenPeripheral: PattGenHIL<'a>> PattGen<'a, PattGenPeripheral> {
         }
     }
 
-    fn extract_pattern_length_and_repetition_count(
-        argument1: usize,
-    ) -> Result<(NonZeroUsize, NonZeroUsize), ()> {
-        let raw_pattern_length = argument1 & 0xFFFF;
+    /// Extract the pattern length and repetition count from the first argument of a command system
+    /// call.
+    ///
+    /// # Parameter
+    ///
+    /// + `argument1`: the first argument of the command system call
+    ///
+    /// # Return value
+    ///
+    /// + Ok((pattern_length, repetition_count)): the extracted pattern length and repetition count
+    /// + Err(()): either pattern length or repetition count is wrong
+    fn extract_pattern_length_and_repetition_count(argument1: usize) -> Result<(NonZeroUsize, NonZeroUsize), ()> {
+        let raw_pattern_length = argument1 & 0xFFFF; 
         let raw_pattern_repetition_count = (argument1 & 0xFFFF0000) >> 16;
 
         let pattern_length = match NonZeroUsize::new(raw_pattern_length) {
@@ -206,9 +261,26 @@ impl<'a, PattGenPeripheral: PattGenHIL<'a>> PattGen<'a, PattGenPeripheral> {
         Ok((pattern_length, pattern_repetition_count))
     }
 
-    fn configure_pattern(&self, value1: u32, value2: u32, process_id: ProcessId) -> CommandReturn {
+    /// Configure the pattern to be used by the start command.
+    ///
+    /// # Parameters
+    ///
+    /// + `bottom_half`: the bottom half of the pattern
+    /// + `top_half`: the top half of the pattern
+    /// + `process_id`: the identifier of the process that wishes to configure the pattern
+    ///
+    /// # Return value
+    ///
+    /// + CommandReturn::success(): the pattern has been successfully configured
+    /// + CommandReturn::failure(error): pattern configuration failed with `error`
+    fn configure_pattern(
+        &self,
+        bottom_half: u32,
+        top_half: u32,
+        process_id: ProcessId
+    ) -> CommandReturn {
         match self.grant.enter(process_id, |app_data, _| {
-            app_data.set_pattern(value1, value2);
+            app_data.set_pattern(bottom_half, top_half);
             CommandReturn::success()
         }) {
             Err(error) => CommandReturn::from(error),
@@ -216,6 +288,19 @@ impl<'a, PattGenPeripheral: PattGenHIL<'a>> PattGen<'a, PattGenPeripheral> {
         }
     }
 
+    /// Configure the pattern parameters.
+    ///
+    /// # Parameters
+    ///
+    /// + `pattern_length`: length of the pattern
+    /// + `pattern_repetition_count`: pattern repetition count
+    /// + `predivider`: clock input predivider
+    /// + `process_id`: the identifier of the process that wishes to configure the channel
+    ///
+    /// # Return value
+    ///
+    /// + CommandReturn::success(): the pattern parameters have been successfully configured
+    /// + CommandReturn::failure(error): pattern configuration failed with `error`
     fn configure_pattern_params(
         &self,
         pattern_length: NonZeroUsize,
@@ -241,6 +326,15 @@ impl<'a, PattGenPeripheral: PattGenHIL<'a>> PattGen<'a, PattGenPeripheral> {
     /// + `channel`: the channel that pattern generation must be started
     /// + `ro_allow_id`: the read-only ID of the buffer containing channel's configuration
     /// + `process_id`: the process that initiated the start command
+    ///
+    /// # Return value
+    ///
+    /// + CommandReturn::success(): pattern generation successfully started
+    /// + CommandReturn::failure(ErrorCode::INVAL): either pattern length or pettern repetition
+    /// count are invalid
+    /// + CommandReturn::failure(ErrorCode::NOMEM): not enough memory available for grant
+    /// allocation
+    /// + CommandReturn::failure(error): start command failed with `error`
     fn start_command(
         &self,
         channel: <PattGenPeripheral as PattGenHIL<'a>>::Channel,
@@ -283,6 +377,15 @@ impl<'a, PattGenPeripheral: PattGenHIL<'a>> PattGen<'a, PattGenPeripheral> {
     }
 
     /// Stops pattern generation on the given channel
+    ///
+    /// # Parameters
+    ///
+    /// + `channel`: the channel to be stopped
+    ///
+    /// # Return value
+    ///
+    /// + CommandReturn::success(): stop command succeeded
+    /// + CommandReturn::failure(error): stop command failed with `error`
     fn stop_command(
         &self,
         channel: <PattGenPeripheral as PattGenHIL<'a>>::Channel,
@@ -293,6 +396,16 @@ impl<'a, PattGenPeripheral: PattGenHIL<'a>> PattGen<'a, PattGenPeripheral> {
         }
     }
 
+    /// Check if a process owns capsule's lock
+    ///
+    /// # Parameters
+    ///
+    /// + `process_id`: the process that needs to be checked
+    ///
+    /// # Return value
+    ///
+    /// + false: `process_id` does not own capsule's lock
+    /// + true: `process_id` owns capsule's lock
     fn is_owner(&self, process_id: ProcessId) -> bool {
         match self.get_owner() {
             None => false,
@@ -300,6 +413,12 @@ impl<'a, PattGenPeripheral: PattGenHIL<'a>> PattGen<'a, PattGenPeripheral> {
         }
     }
 
+    /// Get the current capsule's lock owner
+    ///
+    /// # Return value
+    ///
+    /// + None: no process owns the lock
+    /// + Some(process_id): `process_id` owns the lock
     fn get_owner(&self) -> Option<ProcessId> {
         let owner_id = self.owner.get()?;
 
@@ -310,6 +429,19 @@ impl<'a, PattGenPeripheral: PattGenHIL<'a>> PattGen<'a, PattGenPeripheral> {
         Some(owner_id)
     }
 
+    /// Handler of pattgen command
+    ///
+    /// # Parameters
+    ///
+    /// + `pattgen_command`: pattern generator command
+    /// + `argument1`: the first command argument
+    /// + `argument2`: the second command argument
+    /// + `process_id`: the process issuing the command
+    ///
+    /// # Return value
+    ///
+    /// + CommandReturn::success(): `pattgen_command` succeeded
+    /// + CommandReturn::failure(error): `pattgen_command` failed with `error`
     fn handle_pattgen_command(
         &self,
         pattgen_command: PattgenCommand,
@@ -361,6 +493,17 @@ impl<'a, PattGenPeripheral: PattGenHIL<'a>> PattGen<'a, PattGenPeripheral> {
         }
     }
 
+    /// Handle lock command
+    ///
+    /// # Parameters
+    ///
+    /// + `process_id`: the identifier of the process that issued the lock command
+    ///
+    /// # Return value
+    ///
+    /// + CommandReturn::success(): the lock command succeeded
+    /// + CommandReturn::failure(ErrorCode::BUSY): the capsule's lock is owned by another process
+    /// + CommandReturn::failure(ErrorCode::ALREADY): `process_id` already owns the capsule's lock
     fn handle_lock_command(&self, process_id: ProcessId) -> CommandReturn {
         match self.get_owner() {
             Some(owner_id) => {
@@ -378,12 +521,45 @@ impl<'a, PattGenPeripheral: PattGenHIL<'a>> PattGen<'a, PattGenPeripheral> {
         }
     }
 
+    /// Notify all processes waiting to acquire the capsule's lock when an unlock command is
+    /// issued.
+    ///
+    /// The processes are notified through [CapsuleUnlocked] upcall.
+    ///
+    /// # Parameters
+    ///
+    /// + `owner_id`: the process that issued the unlock command
+    fn notify_unlock(&self, owner_id: ProcessId) {
+        for grant in self.grant.iter() {
+            if grant.processid() != owner_id {
+                grant.enter(|_, kernel_data| {
+                    let _ = kernel_data.schedule_upcall(
+                        UpcallId::CapsuleUnlocked.to_usize(),
+                        (0, 0, 0)
+                    );
+                });
+            }
+        }
+    }
+
+    /// Handle unlock command
+    ///
+    /// # Parameters
+    ///
+    /// + `process_id`: the process that issued the unlock command
+    ///
+    /// # Return value
+    ///
+    /// + CommandReturn::success(): the unlock command succeeded
+    /// + CommandReturn::failure(ErrorCode::BUSY): the capsule's lock is owned by another process
+    /// + CommandReturn::failure(ErrorCode::ALREADY): the capsule is already unlocked
     fn handle_unlock_command(&self, process_id: ProcessId) -> CommandReturn {
         match self.get_owner() {
             None => CommandReturn::failure(ErrorCode::ALREADY),
             Some(owner_id) => {
                 if owner_id == process_id {
                     self.owner.clear();
+                    self.notify_unlock(owner_id);
                     CommandReturn::success()
                 } else {
                     CommandReturn::failure(ErrorCode::BUSY)
@@ -392,6 +568,12 @@ impl<'a, PattGenPeripheral: PattGenHIL<'a>> PattGen<'a, PattGenPeripheral> {
         }
     }
 
+    /// Handler of locking command
+    ///
+    /// # Parameters
+    ///
+    /// + `locking command`: locking command
+    /// + `process_id`: the identifier of the process that issued the locking command
     fn handle_locking_command(
         &self,
         locking_command: LockingCommand,
@@ -403,19 +585,31 @@ impl<'a, PattGenPeripheral: PattGenHIL<'a>> PattGen<'a, PattGenPeripheral> {
         }
     }
 
-    fn get_channel_from_argument(
-        argument: usize,
-    ) -> Result<
-        <PattGenPeripheral as PattGenHIL<'a>>::Channel,
-        <<PattGenPeripheral as PattGenHIL<'a>>::Channel as TryFrom<usize>>::Error,
-    > {
+    /// Convert a raw command argument to channel
+    ///
+    /// # Return value
+    ///
+    /// + Ok(channel): the conversion succeeded
+    /// + Err(error): the conversion failed with `error`
+    fn get_channel_from_argument(argument: usize) ->
+        Result<
+            <PattGenPeripheral as PattGenHIL<'a>>::Channel,
+            <<PattGenPeripheral as PattGenHIL<'a>>::Channel as TryFrom<usize>>::Error,
+        >
+    {
         <PattGenPeripheral as PattGenHIL<'a>>::Channel::try_from(argument)
     }
 
-    fn schedule_upcall(
+    /// Schedule pattgen done upcall
+    ///
+    /// # Parameters
+    ///
+    /// + `process_id`: the process to be notified through [PattGenDone] upcall
+    /// + `channel`: the channel that finished pattern generation
+    fn schedule_pattgen_done_upcall(
         &self,
         process_id: ProcessId,
-        channel: <PattGenPeripheral as PattGenHIL<'a>>::Channel,
+        channel: <PattGenPeripheral as PattGenHIL<'a>>::Channel
     ) {
         // Ignore any grant errors. There is not much that can be done about that.
         let _ = self.grant.enter(process_id, |_, kernel_data| {
@@ -462,8 +656,8 @@ impl<'a, PattGenPeripheral: PattGenHIL<'a>>
     for PattGen<'a, PattGenPeripheral>
 {
     fn pattgen_done(&self, channel: <PattGenPeripheral as PattGenHIL<'a>>::Channel) {
-        if let Some(owner_id) = self.owner.get() {
-            self.schedule_upcall(owner_id, channel);
+        if let Some(owner_id) = self.get_owner() {
+            self.schedule_pattgen_done_upcall(owner_id, channel);
         }
     }
 }
