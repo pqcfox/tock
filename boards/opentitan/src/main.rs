@@ -18,32 +18,30 @@ use crate::hil::symmetric_encryption::AES128_BLOCK_SIZE;
 use crate::otbn::OtbnComponent;
 use crate::pinmux_layout::BoardPinmuxLayout;
 use capsules_aes_gcm::aes_gcm;
+use capsules_core::driver;
 use capsules_core::virtualizers::virtual_aes_ccm;
 use capsules_core::virtualizers::virtual_alarm::{MuxAlarm, VirtualMuxAlarm};
+use capsules_extra::opentitan_sysrst::SystemReset;
 use earlgrey::chip::EarlGreyDefaultPeripherals;
 use earlgrey::chip_config::EarlGreyConfig;
-use earlgrey::pinmux::{Pad, SelectInput, SelectOutput};
 use earlgrey::pinmux_config::EarlGreyPinmuxConfig;
-use earlgrey::registers::top_earlgrey::{MuxedPads, PinmuxInsel, PinmuxOutsel, PinmuxPeripheralIn};
 use kernel::capabilities;
 use kernel::component::Component;
 use kernel::hil;
 use kernel::hil::entropy::Entropy32;
-use kernel::hil::gpio::Configure;
-use kernel::hil::gpio::FloatingState;
 use kernel::hil::hasher::Hasher;
 use kernel::hil::i2c::I2CMaster;
 use kernel::hil::led::LedHigh;
 use kernel::hil::rng::Rng;
 use kernel::hil::symmetric_encryption::AES128;
-use kernel::hil::time::{Ticks, Time};
 use kernel::platform::scheduler_timer::VirtualSchedulerTimer;
 use kernel::platform::{KernelResources, SyscallDriverLookup, TbfHeaderFilterDefaultAllow};
 use kernel::scheduler::priority::PrioritySched;
 use kernel::utilities::registers::interfaces::ReadWriteable;
 use kernel::{create_capability, debug, static_init};
 use lowrisc::flash_ctrl::FlashMPConfig;
-use lowrisc::sysrst_ctrl::{SRCKeyInterruptConfig, SRCWakeupConfig};
+use lowrisc::sysrst_ctrl::SysRstCtrl;
+use pinmux_layout::prepare_wiring_sysrst_ctrl_tests;
 use rv32i::csr;
 
 pub mod io;
@@ -231,6 +229,7 @@ struct EarlGrey {
             >,
         >,
     >,
+    opentitan_sysrst: &'static SystemReset<'static, SysRstCtrl<'static>>,
     syscall_filter: &'static TbfHeaderFilterDefaultAllow,
     scheduler: &'static PrioritySched,
     scheduler_timer: &'static VirtualSchedulerTimer<
@@ -257,6 +256,7 @@ impl SyscallDriverLookup for EarlGrey {
             capsules_core::rng::DRIVER_NUM => f(Some(self.rng)),
             capsules_extra::symmetric_encryption::aes::DRIVER_NUM => f(Some(self.aes)),
             capsules_extra::kv_driver::DRIVER_NUM => f(Some(self.kv_driver)),
+            capsules_extra::opentitan_sysrst::DRIVER_NUM => f(Some(self.opentitan_sysrst)),
             _ => f(None),
         }
     }
@@ -545,8 +545,6 @@ unsafe fn setup() -> (
     );
 
     peripherals.i2c0.set_master_client(i2c_master);
-
-    let a = hardware_alarm.now();
 
     //SPI
     let mux_spi = components::spi::SpiMuxComponent::new(&peripherals.spi_host0).finalize(
@@ -842,106 +840,29 @@ unsafe fn setup() -> (
         .finalize(components::priority_component_static!());
     let watchdog = &peripherals.watchdog;
 
-    let key0_pad = MuxedPads::Ioa2;
-    let pwrb_pad = MuxedPads::Ioa5;
-    let key0_force = MuxedPads::Ioa6;
-    let pwrb_force = MuxedPads::Ioc12;
-
-    peripherals
-        .sysreset
-        .configure_keyinterrupt(SRCKeyInterruptConfig {
-            debounce_timer_us: 1000,
-            pwrb_H2L: false,
-            pwrb_L2H: false,
-            key0_H2L: true,
-            key0_L2H: true,
-            key1_H2L: false,
-            key1_L2H: false,
-            key2_H2L: false,
-            key2_L2H: false,
-            ac_present_H2L: false,
-            ac_present_L2H: false,
-            ec_reset_H2L: false,
-            ec_reset_L2H: false,
-            flash_wp_H2L: false,
-            flash_wp_L2H: false,
-        });
-
-    kernel::debug!(
-        "INIT K{} P{}",
-        peripherals
-            .sysreset
-            .get_input_pin_state(&lowrisc::sysrst_ctrl::SRCInputPin::Key0),
-        peripherals
-            .sysreset
-            .get_input_pin_state(&lowrisc::sysrst_ctrl::SRCInputPin::Pwrb),
+    let opentitan_sysrst = static_init!(
+        SystemReset<'static, SysRstCtrl>,
+        SystemReset::new(
+            &peripherals.sysreset,
+            board_kernel.create_grant(
+                driver::NUM::OpenTitanSysRst as usize,
+                &memory_allocation_cap
+            ),
+        )
     );
 
-    kernel::debug!(
-        "in{} out {} ",
-        peripherals.sysreset.get_all_input_pins_state(),
-        peripherals.sysreset.get_all_output_pins_state(),
-    );
+    // let rng = static_init!(
+    //     capsules_core::rng::RngDriver<'static>,
+    //     capsules_core::rng::RngDriver::new(
+    //         entropy_to_random,
+    //         board_kernel.create_grant(capsules_core::rng::DRIVER_NUM, &memory_allocation_cap)
+    //     )
+    // );
+    /* TESTs */
 
-    // check that the pins have been correctly routed
-    assert_eq!(key0_force.get_selector(), PinmuxOutsel::GpioGpio2);
-    assert_eq!(pwrb_force.get_selector(), PinmuxOutsel::GpioGpio20);
-    assert_eq!(key0_pad.get_selector(), PinmuxOutsel::ConstantHighZ);
-    assert_eq!(pwrb_pad.get_selector(), PinmuxOutsel::ConstantHighZ);
-
-    assert_eq!(
-        PinmuxPeripheralIn::SysrstCtrlAonKey0In.get_selector(),
-        key0_pad.into()
-    );
-    assert_eq!(
-        PinmuxPeripheralIn::SysrstCtrlAonPwrbIn.get_selector(),
-        pwrb_pad.into()
-    );
-
-    key0_force.connect_low();
-    pwrb_force.connect_low();
-
-    kernel::debug!(
-        "LOW K{} P{}",
-        peripherals
-            .sysreset
-            .get_input_pin_state(&lowrisc::sysrst_ctrl::SRCInputPin::Key0),
-        peripherals
-            .sysreset
-            .get_input_pin_state(&lowrisc::sysrst_ctrl::SRCInputPin::Pwrb),
-    );
-    kernel::debug!(
-        "in{} out {} ",
-        peripherals.sysreset.get_all_input_pins_state(),
-        peripherals.sysreset.get_all_output_pins_state(),
-    );
-
-    key0_force.connect_high();
-    pwrb_force.connect_high();
-
-    for index in 0..10 {
-        kernel::debug!(
-            "HIGH K{} P{}",
-            peripherals
-                .sysreset
-                .get_input_pin_state(&lowrisc::sysrst_ctrl::SRCInputPin::Key0),
-            peripherals
-                .sysreset
-                .get_input_pin_state(&lowrisc::sysrst_ctrl::SRCInputPin::Pwrb),
-        );
-
-        kernel::debug!(
-            "in{} out {} intr{}",
-            peripherals.sysreset.get_all_input_pins_state(),
-            peripherals.sysreset.get_all_output_pins_state(),
-            peripherals.sysreset.key_interrupt_status(),
-        );
-    }
-
-    for index in (0..0xAC).step_by(4) {
-        let p = (0x40430000 + index) as *const u32;
-        let value = core::ptr::read(p);
-        kernel::debug!("{:x}: {:x} {:b}", index, value, value);
+    #[cfg(feature = "test_sysrst_ctrl")]
+    {
+        test_sysrst_ctrl(peripherals);
     }
 
     let earlgrey = static_init!(
@@ -961,6 +882,7 @@ unsafe fn setup() -> (
             syscall_filter,
             scheduler,
             scheduler_timer,
+            opentitan_sysrst,
             watchdog,
         }
     );
@@ -987,6 +909,17 @@ unsafe fn setup() -> (
     debug!("OpenTitan initialisation complete. Entering main loop");
 
     (board_kernel, earlgrey, chip, peripherals)
+}
+
+#[cfg(feature = "test_sysrst_ctrl")]
+fn test_sysrst_ctrl(peripherals: &EarlGreyDefaultPeripherals<ChipConfig, BoardPinmuxLayout>) {
+    prepare_wiring_sysrst_ctrl_tests();
+    lowrisc::sysrst_ctrl::tests::test_all(
+        &peripherals.sysreset,
+        &peripherals.gpio_port[7],
+        &peripherals.gpio_port[2],
+        &peripherals.gpio_port[20],
+    );
 }
 
 /// Main function.

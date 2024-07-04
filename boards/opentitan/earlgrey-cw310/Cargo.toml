@@ -23,7 +23,8 @@ capsules-aes-gcm = { path = "../../../capsules/aes_gcm" }
 
 
 [features]
-default = ["fpga_cw310"]
+default = ["fpga_cw310", "test_sysrst_ctrl"]
+test_sysrst_ctrl = ["lowrisc/test_sysrst_ctrl"]
 
 # OpenTitan SoC design can be synthesized or compiled for different targets. A
 # target can be a specific FPGA board, an ASIC technology, or a simulation tool.

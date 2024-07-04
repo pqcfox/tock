@@ -65,6 +65,7 @@ pub mod ninedof;
 pub mod nonvolatile_storage_driver;
 pub mod nonvolatile_to_pages;
 pub mod nrf51822_serialization;
+pub mod opentitan_sysrst;
 pub mod panic_button;
 pub mod pca9544a;
 pub mod pressure;

@@ -25,6 +25,7 @@ pub mod kv;
 pub mod led;
 pub mod log;
 pub mod nonvolatile_storage;
+pub mod opentitan_sysrst;
 pub mod public_key_crypto;
 pub mod pwm;
 pub mod radio;

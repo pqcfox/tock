@@ -2,8 +2,11 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // Copyright Tock Contributors 2023.
 
+use earlgrey::pinmux::{PadConfig, SelectInput, SelectOutput};
 use earlgrey::pinmux_config::{EarlGreyPinmuxConfig, INPUT_NUM, OUTPUT_NUM};
-use earlgrey::registers::top_earlgrey::{PinmuxInsel, PinmuxOutsel};
+use earlgrey::registers::top_earlgrey::{MuxedPads, PinmuxInsel, PinmuxOutsel, PinmuxPeripheralIn};
+use kernel::hil::gpio::Configure;
+use lowrisc::gpio::{pins, GpioPin};
 
 type In = PinmuxInsel;
 type Out = PinmuxOutsel;
@@ -41,7 +44,7 @@ impl EarlGreyPinmuxConfig for BoardPinmuxLayout {
         In::Ioc9,         // GpioGpio17
         In::Ioc10,        // GpioGpio18
         In::Ioc11,        // GpioGpio19
-        In::ConstantZero, // GpioGpio20
+        In::Ioc12, // GpioGpio20
         In::Ior0,         // GpioGpio21
         In::Ior1,         // GpioGpio22
         In::Ior2,         // GpioGpio23
@@ -137,4 +140,102 @@ impl EarlGreyPinmuxConfig for BoardPinmuxLayout {
         Out::GpioGpio31,    // Ior12
         Out::ConstantHighZ, // Ior13
     ];
+}
+
+#[cfg(feature = "test_sysrst_ctrl")]
+pub fn prepare_wiring_sysrst_ctrl_tests() {
+    // prepare IOs for SysRstCtrl tests
+    // (GPIO) key0_force -> key0_input     PERIPHERAL    key0_output -> key0_sense (GPIO)
+    let key0_force = MuxedPads::Ioa6; // Gpio2 output
+    let key0_input = MuxedPads::Ioa2; // SysRstCtrl.key0_input
+
+    let key0_out = MuxedPads::Ioa4; // SysRstCtrl.key0_output
+    let key0_sense = MuxedPads::Ioa8; // Gpio7 input
+
+    let pwrb_force = MuxedPads::Ioc12; // Gpio20 output
+    let pwrb_input = MuxedPads::Ioa5; // SysRstCtrl.pwrb_input
+
+    key0_out.connect_output(PinmuxOutsel::SysrstCtrlAonKey0Out);
+
+    let key0_force_gpio = GpioPin::new(
+        earlgrey::gpio::GPIO_BASE,
+        PadConfig::InOut(
+            key0_force,
+            PinmuxPeripheralIn::GpioGpio2,
+            PinmuxOutsel::GpioGpio2,
+        ),
+        lowrisc::gpio::pins::pin2,
+    );
+
+    let pwrb_force_gpio = GpioPin::new(
+        earlgrey::gpio::GPIO_BASE,
+        PadConfig::InOut(
+            pwrb_force,
+            PinmuxPeripheralIn::GpioGpio20,
+            PinmuxOutsel::GpioGpio20,
+        ),
+        lowrisc::gpio::pins::pin20,
+    );
+
+    key0_force_gpio.make_output();
+    pwrb_force_gpio.make_output();
+
+    // configure each input pin as HiZ + connectedt to SysRstCtrl/GPIO
+    // code below should work but it doesn't (left it here as it's intent is much more readable)
+    // PadConfig::InOut(
+    //     key0_input,
+    //     PinmuxPeripheralIn::SysrstCtrlAonKey0In,
+    //     PinmuxOutsel::ConstantHighZ,
+    // )
+    // .connect();
+
+    // PadConfig::InOut(
+    //     pwrb_input,
+    //     PinmuxPeripheralIn::SysrstCtrlAonPwrbIn,
+    //     PinmuxOutsel::ConstantHighZ,
+    // )
+    // .connect();
+
+    // PadConfig::InOut(
+    //     key0_sense,
+    //     PinmuxPeripheralIn::GpioGpio7,
+    //     PinmuxOutsel::ConstantHighZ,
+    // )
+    // .connect();
+
+    // this code should do exactly the same thing as the code above but this one works
+    PinmuxPeripheralIn::SysrstCtrlAonKey0In.connect_input(PinmuxInsel::from(key0_input));
+    key0_input.connect_output(PinmuxOutsel::ConstantHighZ);
+
+    PinmuxPeripheralIn::SysrstCtrlAonPwrbIn.connect_input(PinmuxInsel::from(pwrb_input));
+    pwrb_input.connect_output(PinmuxOutsel::ConstantHighZ);
+
+    PinmuxPeripheralIn::GpioGpio7.connect_input(PinmuxInsel::from(key0_sense));
+    key0_sense.connect_output(PinmuxOutsel::ConstantHighZ);
+
+    // check that the pins have been correctly routed
+    assert_eq!(key0_force.get_selector(), PinmuxOutsel::GpioGpio2);
+    assert_eq!(pwrb_force.get_selector(), PinmuxOutsel::GpioGpio20);
+    assert_eq!(key0_input.get_selector(), PinmuxOutsel::ConstantHighZ);
+    assert_eq!(pwrb_input.get_selector(), PinmuxOutsel::ConstantHighZ);
+    assert_eq!(key0_out.get_selector(), PinmuxOutsel::SysrstCtrlAonKey0Out);
+    assert_eq!(key0_sense.get_selector(), PinmuxOutsel::ConstantHighZ);
+
+    assert_eq!(
+        PinmuxPeripheralIn::SysrstCtrlAonKey0In.get_selector(),
+        key0_input.into()
+    );
+    assert_eq!(
+        PinmuxPeripheralIn::SysrstCtrlAonPwrbIn.get_selector(),
+        pwrb_input.into()
+    );
+    assert_eq!(
+        PinmuxPeripheralIn::GpioGpio7.get_selector(),
+        key0_sense.into()
+    );
+
+    assert_eq!(
+        PinmuxPeripheralIn::GpioGpio2.get_selector(),
+        key0_force.into()
+    );
 }
