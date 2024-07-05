@@ -24,7 +24,7 @@ impl EarlGreyPinmuxConfig for BoardPinmuxLayout {
     /// Array of input selector initial configurations
     #[rustfmt::skip]
     const INPUT: &'static [PinmuxInsel; INPUT_NUM] = &[
-        In::ConstantZero,         // GpioGpio0
+        In::Ioa2,         // GpioGpio0
         In::Ioa3,         // GpioGpio1
         In::Ioa6,         // GpioGpio2
         In::Iob0,         // GpioGpio3
@@ -44,7 +44,7 @@ impl EarlGreyPinmuxConfig for BoardPinmuxLayout {
         In::Ioc9,         // GpioGpio17
         In::Ioc10,        // GpioGpio18
         In::Ioc11,        // GpioGpio19
-        In::Ioc12, // GpioGpio20
+        In::Ioc12,        // GpioGpio20
         In::Ior0,         // GpioGpio21
         In::Ior1,         // GpioGpio22
         In::Ior2,         // GpioGpio23
@@ -58,7 +58,7 @@ impl EarlGreyPinmuxConfig for BoardPinmuxLayout {
         In::Ior12,        // GpioGpio31
         In::Ioa7,         // I2c0Sda
         In::Ioa8,         // I2c0Scl
-        In::Ior6,        // I2c1Sda
+        In::Iob10,        // I2c1Sda
         In::Iob9,         // I2c1Scl
         In::Iob11,        // I2c2Sda
         In::Iob12,        // I2c2Scl
@@ -67,7 +67,7 @@ impl EarlGreyPinmuxConfig for BoardPinmuxLayout {
         In::ConstantZero, // SpiHost1Sd2
         In::ConstantZero, // SpiHost1Sd3
         In::Ioa0,         // Uart0Rx
-        In::ConstantZero,         // Uart1Rx
+        In::Ioa4,         // Uart1Rx
         In::Iob4,         // Uart2Rx
         In::Ioc3,         // Uart3Rx
         In::ConstantZero, // SpiDeviceTpmCsb
@@ -75,10 +75,10 @@ impl EarlGreyPinmuxConfig for BoardPinmuxLayout {
         In::ConstantZero, // FlashCtrlTms
         In::ConstantZero, // FlashCtrlTdi
         In::ConstantZero, // SysrstCtrlAonAcPresent
-        In::Ioa2,         // SysrstCtrlAonKey0In
+        In::ConstantZero,         // SysrstCtrlAonKey0In
         In::ConstantZero, // SysrstCtrlAonKey1In
         In::ConstantZero, // SysrstCtrlAonKey2In
-        In::Ioa5,         // SysrstCtrlAonPwrbIn
+        In::ConstantZero, // SysrstCtrlAonPwrbIn
         In::ConstantZero, // SysrstCtrlAonLidOpen
         In::ConstantZero, // UsbdevSense
     ];
@@ -89,10 +89,10 @@ impl EarlGreyPinmuxConfig for BoardPinmuxLayout {
         // __________  BANK IOA __________
         Out::ConstantHighZ, // Ioa0 (CW310Hyp Uart_RX / CW310 SAM3X)
         Out::Uart3Tx,       // Ioa1 (CW310Hyp Uart_Tx / CW310 SAM3x)
-        Out::ConstantHighZ, // Ioa2
+        Out::GpioGpio0,     // Ioa2
         Out::GpioGpio1,     // Ioa3
-        Out::SysrstCtrlAonKey0Out, // Ioa4
-        Out::ConstantHighZ, // Ioa5
+        Out::ConstantHighZ, // Ioa4
+        Out::Uart1Tx,       // Ioa5
         Out::GpioGpio2,     // Ioa6
         Out::I2c0Sda,       // Ioa7 I2C0_TPM_SDA
         Out::I2c0Scl,       // Ioa8 I2C0_TPM_SCL
@@ -107,7 +107,7 @@ impl EarlGreyPinmuxConfig for BoardPinmuxLayout {
         Out::GpioGpio8,     // Iob7
         Out::GpioGpio9,     // Iob8
         Out::I2c1Scl,       // Iob9  I2C1_SCL
-        Out::ConstantHighZ, // Iob10 I2C1_SDA
+        Out::I2c1Sda,       // Iob10 I2C1_SDA
         Out::I2c2Sda,       // Iob11 I2C2_SDA
         Out::I2c2Scl,       // Iob12 I2C2_SCL
         // __________ BANK IOC __________
@@ -120,7 +120,7 @@ impl EarlGreyPinmuxConfig for BoardPinmuxLayout {
         Out::GpioGpio14,    // Ioc6
         Out::GpioGpio15,    // Ioc7
         Out::ConstantHighZ, // Ioc8 (TAP STRAP 0)
-        Out::ConstantHighZ, // Ioc9
+        Out::GpioGpio17,    // Ioc9
         Out::GpioGpio18,    // Ioc10
         Out::GpioGpio19,    // Ioc11
         Out::GpioGpio20,    // Ioc12
@@ -144,8 +144,28 @@ impl EarlGreyPinmuxConfig for BoardPinmuxLayout {
 
 #[cfg(feature = "test_sysrst_ctrl")]
 pub fn prepare_wiring_sysrst_ctrl_tests() {
+    // in order to test sysrst_ctrl 3 wires need to be connected on CW310 board
+    // these 3 wires will connect GPIO Outputs to SysRst_Ctrl's inputs and a GPIO Input to one of SysRstr's output such that the test functions are able to trigger various input combinations and observe one of the output signals
+    kernel::debug!("SystemReset_Ctrl wiring setup: ");
+    kernel::debug!("  Connect PMOD1_1 to PMOD1_5 using a wire");
+    kernel::debug!("  Connect PMOD1_2 to PMOD1_6 using a wire");
+    kernel::debug!("  Connect PMOD1_3 to PMOD1_7 using a wire");
+    kernel::debug!("SystemReset_Ctrl's test STARTED");
+
     // prepare IOs for SysRstCtrl tests
-    // (GPIO) key0_force -> key0_input     PERIPHERAL    key0_output -> key0_sense (GPIO)
+    //     GPIO 2           PAD (A6)           PAD (A2)      SysRst
+    // key0_force_gpio ->  key0_force -wire-> key0_input -> key0_input
+    //
+    //     GPIO 20           PAD (C12)          PAD (A5)      SysRst
+    // pwrb_force_gpio ->  pwrb_force -wire-> pwrb_input -> pwrb_input
+    //
+    //    SysRST       PAD (A4)           PAD (A8)      GPIO 7
+    // key0_output ->  key0_out  -wire-> key0_sense -> key0_sense
+
+    // on CW310 the wires are routed as:
+    //  (key0_input) A2 -> PMOD_IO1 -wire-> PMOD_IO5 A6  (key0_force)
+    //  (pwrb_input) A5 -> PMOD_IO2 -wire-> PMOD_IO6 C12 (pwrb_force)
+    //  (key0_out)   A5 -> PMOD_IO3 -wire-> PMOD_IO7 A8  (key0_sense)
     let key0_force = MuxedPads::Ioa6; // Gpio2 output
     let key0_input = MuxedPads::Ioa2; // SysRstCtrl.key0_input
 

@@ -41,7 +41,6 @@ use kernel::utilities::registers::interfaces::ReadWriteable;
 use kernel::{create_capability, debug, static_init};
 use lowrisc::flash_ctrl::FlashMPConfig;
 use lowrisc::sysrst_ctrl::SysRstCtrl;
-use pinmux_layout::prepare_wiring_sysrst_ctrl_tests;
 use rv32i::csr;
 
 pub mod io;
@@ -851,13 +850,6 @@ unsafe fn setup() -> (
         )
     );
 
-    // let rng = static_init!(
-    //     capsules_core::rng::RngDriver<'static>,
-    //     capsules_core::rng::RngDriver::new(
-    //         entropy_to_random,
-    //         board_kernel.create_grant(capsules_core::rng::DRIVER_NUM, &memory_allocation_cap)
-    //     )
-    // );
     /* TESTs */
 
     #[cfg(feature = "test_sysrst_ctrl")]
@@ -913,7 +905,7 @@ unsafe fn setup() -> (
 
 #[cfg(feature = "test_sysrst_ctrl")]
 fn test_sysrst_ctrl(peripherals: &EarlGreyDefaultPeripherals<ChipConfig, BoardPinmuxLayout>) {
-    prepare_wiring_sysrst_ctrl_tests();
+    pinmux_layout::prepare_wiring_sysrst_ctrl_tests();
     lowrisc::sysrst_ctrl::tests::test_all(
         &peripherals.sysreset,
         &peripherals.gpio_port[7],

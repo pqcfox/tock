@@ -2,59 +2,24 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // Copyright Tock Contributors 2022.
 
-//! Provides userspace applications with access to GPIO pins.
+//! Provides userspace applications with access to OpenTitan's SystemReset Controller peripheral.
 //!
-//! GPIOs are presented through a driver interface with synchronous commands
-//! and a callback for interrupts.
-//!
-//! This capsule takes an array of pins to expose as generic GPIOs.
-//! Note that this capsule is used for general purpose GPIOs. Pins that are
-//! attached to LEDs or buttons are generally wired directly to those capsules,
-//! not through this capsule as an intermediary.
-//!
-//! Usage
-//! -----
-//!
-//! ```rust
-//! # use kernel::static_init;
-//!
-//! let gpio_pins = static_init!(
-//!     [Option<&'static sam4l::gpio::GPIOPin>; 4],
-//!     [Option<&sam4l::gpio::PB[14]>,
-//!      Option<&sam4l::gpio::PB[15]>,
-//!      Option<&sam4l::gpio::PB[11]>,
-//!      Option<&sam4l::gpio::PB[12]>]);
-//! let gpio = static_init!(
-//!     capsules::gpio::GPIO<'static, sam4l::gpio::GPIOPin>,
-//!     capsules::gpio::GPIO::new(gpio_pins));
-//! for maybe_pin in gpio_pins.iter() {
-//!     if let Some(pin) = maybe_pin {
-//!         pin.set_client(gpio);
-//!     }
-//! }
-//! ```
-//!
+//! This capsule gives userspace applications access to read SysRstr_Ctrl input signal's state and receive callbacks when a combo detector or key interrupt triggered.
+//!//!
 //! Syscall Interface
 //! -----------------
 //!
-//! - Stability: 2 - Stable
-//!
-//! ### Commands
-//!
-//! All GPIO operations are synchronous.
-//!
-//! Commands control and query GPIO information, namely how many GPIOs are
-//! present, the GPIO direction and state, and whether they should interrupt.
+//! ### Commands:
+//!     0 - Existance
+//!     1 - Input pin state
 //!
 //! ### Subscribes
 //!
-//! The GPIO interface provides only one callback, which is used for pins that
-//! have had interrupts enabled.
+//! This capsules provides two callbacks for Combo Detector triggers and for KeyInterrupt triggers
 
 /// Syscall driver number.
 use kernel::grant::{AllowRoCount, AllowRwCount, Grant, UpcallCount};
 
-use kernel::hil::gpio::{Configure, Input, InterruptWithValue, Output};
 use kernel::hil::opentitan_sysrst::{OpenTitanSysRstr, OpenTitanSysRstrClient};
 
 use kernel::syscall::{CommandReturn, SyscallDriver};
@@ -65,12 +30,14 @@ pub const DRIVER_NUM: usize = capsules_core::driver::NUM::OpenTitanSysRst as usi
 
 /// ### `subscribe_num`
 ///
-/// - `0`: Subscribe to interrupts from all pins with interrupts enabled.
-///        The callback signature is `fn(pin_num: usize, pin_state: bool)`
+/// - `0`: Subscribe to SysRst_Ctrl's combo detector triggers
+///        The callback signature is `fn(detector_id, input_pin_state)`
+/// - `1`: Subsscibe to SysRstr_Ctrl's key interrupt trigger
+///        The callback signature is `fn(keys_l2h, keys_h2l)`
 mod upcall {
-    pub const COMBO_DETECTED: usize = 1;
-    pub const KEY_INTERRUPT: usize = 2;
-    pub const COUNT: u8 = 3;
+    pub const COMBO_DETECTED: usize = 0;
+    pub const KEY_INTERRUPT: usize = 1;
+    pub const COUNT: u8 = 2;
 }
 
 pub struct SystemReset<'a, Driver: OpenTitanSysRstr> {
