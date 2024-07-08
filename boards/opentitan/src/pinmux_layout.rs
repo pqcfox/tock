@@ -234,28 +234,15 @@ pub fn prepare_wiring_sysrst_ctrl_tests() {
     key0_sense.connect_output(PinmuxOutsel::ConstantHighZ);
 
     // check that the pins have been correctly routed
-    assert_eq!(key0_force.get_selector(), PinmuxOutsel::GpioGpio2);
-    assert_eq!(pwrb_force.get_selector(), PinmuxOutsel::GpioGpio20);
-    assert_eq!(key0_input.get_selector(), PinmuxOutsel::ConstantHighZ);
-    assert_eq!(pwrb_input.get_selector(), PinmuxOutsel::ConstantHighZ);
-    assert_eq!(key0_out.get_selector(), PinmuxOutsel::SysrstCtrlAonKey0Out);
-    assert_eq!(key0_sense.get_selector(), PinmuxOutsel::ConstantHighZ);
+    assert!(key0_force.get_selector() == PinmuxOutsel::GpioGpio2);
+    assert!(pwrb_force.get_selector() == PinmuxOutsel::GpioGpio20);
+    assert!(key0_input.get_selector() == PinmuxOutsel::ConstantHighZ);
+    assert!(pwrb_input.get_selector() == PinmuxOutsel::ConstantHighZ);
+    assert!(key0_out.get_selector() == PinmuxOutsel::SysrstCtrlAonKey0Out);
+    assert!(key0_sense.get_selector() == PinmuxOutsel::ConstantHighZ);
 
-    assert_eq!(
-        PinmuxPeripheralIn::SysrstCtrlAonKey0In.get_selector(),
-        key0_input.into()
-    );
-    assert_eq!(
-        PinmuxPeripheralIn::SysrstCtrlAonPwrbIn.get_selector(),
-        pwrb_input.into()
-    );
-    assert_eq!(
-        PinmuxPeripheralIn::GpioGpio7.get_selector(),
-        key0_sense.into()
-    );
-
-    assert_eq!(
-        PinmuxPeripheralIn::GpioGpio2.get_selector(),
-        key0_force.into()
-    );
+    assert!(PinmuxPeripheralIn::SysrstCtrlAonKey0In.get_selector() == key0_input.into());
+    assert!(PinmuxPeripheralIn::SysrstCtrlAonPwrbIn.get_selector() == pwrb_input.into());
+    assert!(PinmuxPeripheralIn::GpioGpio7.get_selector() == key0_sense.into());
+    assert!(PinmuxPeripheralIn::GpioGpio2.get_selector() == key0_force.into());
 }

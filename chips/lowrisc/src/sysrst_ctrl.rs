@@ -10,7 +10,7 @@ use crate::registers::sysrst_ctrl_regs::{
     COM_DET_CTL, COM_OUT_CTL, COM_PRE_DET_CTL, COM_PRE_SEL_CTL, COM_SEL_CTL, EC_RST_CTL, INTR,
     KEY_INTR_CTL, KEY_INTR_DEBOUNCE_CTL, KEY_INTR_STATUS, KEY_INVERT_CTL, PIN_ALLOWED_CTL,
     PIN_IN_VALUE, PIN_OUT_CTL, PIN_OUT_VALUE, REGWEN, ULP_AC_DEBOUNCE_CTL, ULP_CTL,
-    ULP_LID_DEBOUNCE_CTL, ULP_PWRB_DEBOUNCE_CTL, ULP_STATUS,
+    ULP_LID_DEBOUNCE_CTL, ULP_PWRB_DEBOUNCE_CTL, ULP_STATUS, WKUP_STATUS,
 };
 use kernel::{
     hil::opentitan_sysrst::{
@@ -127,62 +127,88 @@ impl<'a> SysRstCtrl<'a> {
     }
 
     /* WAKEUP */
-    //TODO: ULP_STATUS or WKUP_STATUS
+
+    /// WKUP_STATUS can be triggered by ULP_WAKEUP circuit and by Key Interrupt
     pub fn wakeup_detected(&self) -> bool {
-        self.registers.ulp_status.read(ULP_STATUS::ULP_WAKEUP) != 0
+        self.registers.wkup_status.is_set(WKUP_STATUS::WAKEUP_STS)
+    }
+
+    pub fn clear_wakeup(&self) {
+        self.registers
+            .wkup_status
+            .write(WKUP_STATUS::WAKEUP_STS.val(1));
+    }
+
+    /* ULP WAKEUP */
+
+    pub fn ulp_wakeup_detected(&self) -> bool {
+        self.registers.ulp_status.is_set(ULP_STATUS::ULP_WAKEUP)
     }
 
     /// ULP Wakeup registers are on the 200kHz AON clock domain. In order to reset the wakeup detection capability, the code needs to disable WKUP, wait for the ULP_ENABLE bit to become 0 and then enable WKUP. This will take some time (~200kHz), waiting in a busy loop would take too much time from other tasks, a deffred task would leave a significant gap when WKKUP detection is disabled. The chosen solution is to split this operation in 2 functions and inside the interrupt handle to start the process, execute other functions and finally finish this process by busy waiting, hoping that the process can be finished now
-    pub fn clear_wakeup(&self) {
+    pub fn reset_ulp_wakeup(&self) {
         // wait for ULP_ENABLE to be cleared
         while self.registers.ulp_ctl.is_set(ULP_CTL::ULP_ENABLE) {}
         // enable ULP_ENABLE
         self.registers.ulp_ctl.write(ULP_CTL::ULP_ENABLE.val(1));
     }
 
-    pub fn preclear_wakeup(&self) {
+    pub fn clear_ulp_wakeup(&self) {
         self.registers.ulp_ctl.write(ULP_CTL::ULP_ENABLE.val(0));
     }
 
+    /* INTERRUPTS */
     pub fn enable_interrupts(&self) {
         self.registers
             .intr_enable
             .write(INTR::EVENT_DETECTED.val(1));
     }
 
+    /// clear interrupt flags except ULP_WAKEUP and WKUP_STATUS as they need special handling
+    pub fn clear_interrupt_flags(&self) {
+        // clear COMBO_INTR_STATUS register
+        self.registers.combo_intr_status.write(
+            COMBO_INTR_STATUS::COMBO0_H2L.val(1)
+                + COMBO_INTR_STATUS::COMBO1_H2L.val(1)
+                + COMBO_INTR_STATUS::COMBO2_H2L.val(1)
+                + COMBO_INTR_STATUS::COMBO3_H2L.val(1),
+        );
+
+        // clear KEY_INTR_STATUS register
+        self.registers.key_intr_status.write(
+            KEY_INTR_STATUS::PWRB_H2L.val(1)
+                + KEY_INTR_STATUS::KEY0_IN_H2L.val(1)
+                + KEY_INTR_STATUS::KEY1_IN_H2L.val(1)
+                + KEY_INTR_STATUS::KEY2_IN_H2L.val(1)
+                + KEY_INTR_STATUS::AC_PRESENT_H2L.val(1)
+                + KEY_INTR_STATUS::EC_RST_L_H2L.val(1)
+                + KEY_INTR_STATUS::FLASH_WP_L_H2L.val(1)
+                + KEY_INTR_STATUS::PWRB_L2H.val(1)
+                + KEY_INTR_STATUS::KEY0_IN_L2H.val(1)
+                + KEY_INTR_STATUS::KEY1_IN_L2H.val(1)
+                + KEY_INTR_STATUS::KEY2_IN_L2H.val(1)
+                + KEY_INTR_STATUS::AC_PRESENT_L2H.val(1)
+                + KEY_INTR_STATUS::EC_RST_L_L2H.val(1)
+                + KEY_INTR_STATUS::FLASH_WP_L_L2H.val(1),
+        );
+
+        // clear peripheral's central interrupt flag
+        self.registers.intr_state.write(INTR::EVENT_DETECTED.val(1));
+    }
+
     pub fn handle_interrupt(&self) {
         let combo_state = self.registers.combo_intr_status.extract();
         let key_interrupt_state = self.registers.key_intr_status.extract();
         let input_pin_state = self.get_input_state();
+        let ulp_wakeup = self.ulp_wakeup_detected();
+        let wokeup = self.wakeup_detected();
 
-        // clear COMBO_INTR_STATUS register
-        // self.registers.combo_intr_status.write(
-        //     COMBO_INTR_STATUS::COMBO0_H2L.val(1)
-        //         + COMBO_INTR_STATUS::COMBO1_H2L.val(1)
-        //         + COMBO_INTR_STATUS::COMBO2_H2L.val(1)
-        //         + COMBO_INTR_STATUS::COMBO3_H2L.val(1),
-        // );
+        // 1st phase of ULP wakeup reset
+        if ulp_wakeup {
+            self.clear_ulp_wakeup();
+        }
 
-        // // clear KEY_INTR_STATUS register
-        // self.registers.key_intr_status.write(
-        //     KEY_INTR_STATUS::PWRB_H2L.val(1)
-        //         + KEY_INTR_STATUS::KEY0_IN_H2L.val(1)
-        //         + KEY_INTR_STATUS::KEY1_IN_H2L.val(1)
-        //         + KEY_INTR_STATUS::KEY2_IN_H2L.val(1)
-        //         + KEY_INTR_STATUS::AC_PRESENT_H2L.val(1)
-        //         + KEY_INTR_STATUS::EC_RST_L_H2L.val(1)
-        //         + KEY_INTR_STATUS::FLASH_WP_L_H2L.val(1)
-        //         + KEY_INTR_STATUS::PWRB_L2H.val(1)
-        //         + KEY_INTR_STATUS::KEY0_IN_L2H.val(1)
-        //         + KEY_INTR_STATUS::KEY1_IN_L2H.val(1)
-        //         + KEY_INTR_STATUS::KEY2_IN_L2H.val(1)
-        //         + KEY_INTR_STATUS::AC_PRESENT_L2H.val(1)
-        //         + KEY_INTR_STATUS::EC_RST_L_L2H.val(1)
-        //         + KEY_INTR_STATUS::FLASH_WP_L_L2H.val(1),
-        // );
-
-        // // clear peripheral's central interrupt flag
-        self.registers.intr_state.write(INTR::EVENT_DETECTED.val(1));
+        self.clear_interrupt_flags();
 
         self.client.map(|client| {
             // if a combo detector's interrupt triggered then notify client
@@ -238,7 +264,15 @@ impl<'a> SysRstCtrl<'a> {
     );
                 client.key_interrupt(l2h.extract(), h2l.extract())
             }
+            if wokeup {
+                client.wokeup(ulp_wakeup);
+            }
         });
+
+        // 2nd phase of ULP wakeup reset
+        if ulp_wakeup {
+            self.reset_ulp_wakeup();
+        }
     }
 
     /* PIN INPUT VALUE */
@@ -254,11 +288,6 @@ impl<'a> SysRstCtrl<'a> {
             SRCInputPin::EcReset => state.is_set(PIN_IN_VALUE::EC_RST_L),
             SRCInputPin::FlashWP => state.is_set(PIN_IN_VALUE::FLASH_WP_L),
         }
-    }
-
-    pub fn get_all_input_pins_state(&self) -> u32 {
-        //TODO: convert u32 to u8 another way
-        self.registers.pin_in_value.get()
     }
 
     /* PIN OVERRIDE and ALLOWED state */
@@ -935,8 +964,12 @@ pub mod tests {
             "another interrupt flag is set"
         );
 
+        // check that a wakeup trigger was detected
+        assert!(sysrst_ctrl.wakeup_detected());
+
         // clear state for next test
         sysrst_ctrl.key_interrupt_clear(KeyInterruptState::key0_in_l2h);
+        sysrst_ctrl.clear_wakeup();
 
         // force a L2H transition on PwrB pin and a H2L transition on Key0 pin
         key0_force.clear();
@@ -986,6 +1019,7 @@ pub mod tests {
             .expect("peripheral is locked");
         sysrst_ctrl.key_interrupt_clear(KeyInterruptState::key0_in_h2l);
         sysrst_ctrl.key_interrupt_clear(KeyInterruptState::pwrb_l2h);
+        sysrst_ctrl.clear_wakeup();
         key0_force.clear();
         pwrb_force.clear();
     }

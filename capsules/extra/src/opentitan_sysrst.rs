@@ -32,12 +32,15 @@ pub const DRIVER_NUM: usize = capsules_core::driver::NUM::OpenTitanSysRst as usi
 ///
 /// - `0`: Subscribe to SysRst_Ctrl's combo detector triggers
 ///        The callback signature is `fn(detector_id, input_pin_state)`
-/// - `1`: Subsscibe to SysRstr_Ctrl's key interrupt trigger
+/// - `1`: Subsccibe to SysRstr_Ctrl's key interrupt trigger
 ///        The callback signature is `fn(keys_l2h, keys_h2l)`
+/// - `2`: Subscribe to SysRstr_Ctrl's wakuep trigger
+///        The callback signature is fn(ulp_wakeup)
 mod upcall {
     pub const COMBO_DETECTED: usize = 0;
     pub const KEY_INTERRUPT: usize = 1;
-    pub const COUNT: u8 = 2;
+    pub const WOKEUP: usize = 2;
+    pub const COUNT: u8 = 3;
 }
 
 pub struct SystemReset<'a, Driver: OpenTitanSysRstr> {
@@ -153,6 +156,29 @@ impl<'a, Driver: OpenTitanSysRstr> OpenTitanSysRstrClient for SystemReset<'a, Dr
                     upcall::KEY_INTERRUPT,
                     (l2h.get() as usize, h2l.get() as usize, 0),
                 )
+            })
+        });
+
+        // no error handling, upcall scheduling will not be retried if an issue appears
+        match result {
+            // when the upcall was successful
+            Some(Ok(Ok(()))) => {}
+            // if the upcall coudln't be made (the owning process is registered) (`.schedule upcall`` failed)
+            Some(Ok(Err(_err))) => {}
+            // if the grant is not available (`.enter` failed)
+            Some(Err(_err)) => {}
+            // if the owning process is not registered
+            None => {}
+        }
+    }
+
+    fn wokeup(&self, ulp_wakeup: bool) {
+        // schedule a WAKEUP upcall with
+        // * r0 = did a ulp_wakeup happen,
+        // * r1, r2 = 0
+        let result = self.owning_process.map(|pid| {
+            self.grants.enter(pid, |_app, upcalls| {
+                upcalls.schedule_upcall(upcall::WOKEUP, (ulp_wakeup as usize, 0, 0))
             })
         });
 

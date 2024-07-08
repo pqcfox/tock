@@ -282,6 +282,7 @@ pub trait OpenTitanSysRstrClient {
         combodetector_id: SRCComboDetectorId,
     );
     fn key_interrupt(&self, l2h: SRCInputPinStatus, h2l: SRCInputPinStatus);
+    fn wokeup(&self, ulp_wakeup: bool);
 }
 
 pub trait OpenTitanSysRstr {
