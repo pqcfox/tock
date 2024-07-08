@@ -33,6 +33,7 @@ pub mod plic;
 pub mod pwrmgr;
 pub mod registers;
 pub mod spi_host;
+pub mod sram_ret;
 pub mod timer;
 pub mod uart;
 pub mod usbdev;

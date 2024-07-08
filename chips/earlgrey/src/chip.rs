@@ -9,8 +9,8 @@ use core::marker::PhantomData;
 use core::num::NonZeroU32;
 use core::ptr::addr_of;
 use kernel::platform::chip::{Chip, InterruptService};
-use kernel::utilities::registers::interfaces::{ReadWriteable, Readable, Writeable};
 use kernel::utilities::helpers::create_non_zero_u32;
+use kernel::utilities::registers::interfaces::{ReadWriteable, Readable, Writeable};
 use rv32i::csr::{mcause, mie::mie, mtvec::mtvec, CSR};
 use rv32i::pmp::{PMPUserMPU, TORUserPMP};
 use rv32i::syscall::SysCall;
@@ -40,6 +40,7 @@ pub struct EarlGrey<
 }
 
 pub struct EarlGreyDefaultPeripherals<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig> {
+    pub sram_ret: crate::sram_ret::SramCtrl,
     pub aes: crate::aes::Aes<'a>,
     pub hmac: lowrisc::hmac::Hmac<'a>,
     pub usb: lowrisc::usb::Usb<'a>,
@@ -63,6 +64,7 @@ impl<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig>
 {
     pub fn new() -> Self {
         Self {
+            sram_ret: crate::sram_ret::SramCtrl::new(),
             aes: crate::aes::Aes::new(),
             hmac: lowrisc::hmac::Hmac::new(crate::hmac::HMAC0_BASE),
             usb: lowrisc::usb::Usb::new(crate::usbdev::USB0_BASE),

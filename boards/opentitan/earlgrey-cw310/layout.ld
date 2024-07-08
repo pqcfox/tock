@@ -10,6 +10,11 @@ MEMORY
    */
   prog  (rx)  : ORIGIN = 0x20030000, LENGTH = 0x60000
   fs (r)      : ORIGIN = 0x20090000, LENGTH = 0x70000
+
+  /* Retention sram that survives reset operations */
+  rram_rom(r) : ORIGIN = 0x40600000, LENGTH = 0x800
+  rram  (wx)  : ORIGIN = 0x40600800, LENGTH = 0x800
+
   /* The first 0x650 bytes of RAM are reserved for the boot
    * ROM, so we have to ignore that space.
    * See https://github.com/lowRISC/opentitan/blob/master/sw/device/silicon_creator/lib/base/static_critical.ld
@@ -29,6 +34,10 @@ SECTIONS {
 
     _ssram  = ORIGIN(ram) - 0x650;
     _esram  = ORIGIN(ram) + LENGTH(ram);
+
+
+    .rram_rom (NOLOAD): {} > rram_rom
+    .rram (NOLOAD): {} > rram
 
     .manifest ORIGIN(rom):
     {
@@ -61,6 +70,7 @@ SECTIONS {
         /* sizeof(manifest_ext_table_entry) = 8 */
         . += 120; /* manifest_ext_table */
     } > rom
+
 }
 ASSERT (((_etext - _manifest) > 0), "Error: PMP and Flash protection setup assumes _etext follows _manifest");
 INCLUDE ../../kernel_layout.ld
