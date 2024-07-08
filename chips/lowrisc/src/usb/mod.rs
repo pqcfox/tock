@@ -12,6 +12,7 @@ mod chunk_index;
 mod chunk_index_iterator;
 mod endpoint;
 mod endpoint_index;
+mod endpoint_index_iterator;
 mod endpoint_state;
 mod interrupt;
 mod packet_received;
