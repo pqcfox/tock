@@ -144,14 +144,14 @@ impl<'a, C: hil::usb::UsbController<'a>> Client<'a, C> {
 
     fn alert_full(&'a self) {
         // Alert the controller that we now have data to send on the Bulk IN endpoint 1
-        self.controller().endpoint_resume_in(1);
+        self.controller().endpoint_resume_in(1).unwrap();
     }
 
     fn alert_empty(&'a self) {
         // In case we reported Delay before, alert the controller
         // that we can now receive data on the Bulk OUT endpoint 2
         if self.delayed_out.take() {
-            self.controller().endpoint_resume_out(2);
+            self.controller().endpoint_resume_out(2).unwrap();
         }
     }
 
@@ -172,18 +172,18 @@ impl<'a, C: hil::usb::UsbController<'a>> hil::usb::Client<'a> for Client<'a, C> 
         self.client_ctrl.enable();
 
         // Set up a bulk-in endpoint for debugging
-        self.controller().endpoint_set_in_buffer(1, self.buffer(1));
-        self.controller().endpoint_in_enable(TransferType::Bulk, 1);
+        self.controller().endpoint_set_in_buffer(1, self.buffer(1)).unwrap();
+        self.controller().endpoint_in_enable(TransferType::Bulk, 1).unwrap();
 
         // Set up a bulk-out endpoint for debugging
-        self.controller().endpoint_set_out_buffer(2, self.buffer(2));
-        self.controller().endpoint_out_enable(TransferType::Bulk, 2);
+        self.controller().endpoint_set_out_buffer(2, self.buffer(2)).unwrap();
+        self.controller().endpoint_out_enable(TransferType::Bulk, 2).unwrap();
 
         // Set up transfer endpoints
-        self.controller().endpoint_set_in_buffer(3, self.buffer(3));
-        self.controller().endpoint_in_enable(TransferType::Interrupt, 3);
-        self.controller().endpoint_set_out_buffer(4, self.buffer(4));
-        self.controller().endpoint_out_enable(TransferType::Interrupt, 4);
+        self.controller().endpoint_set_in_buffer(3, self.buffer(3)).unwrap();
+        self.controller().endpoint_in_enable(TransferType::Interrupt, 3).unwrap();
+        self.controller().endpoint_set_out_buffer(4, self.buffer(4)).unwrap();
+        self.controller().endpoint_out_enable(TransferType::Interrupt, 4).unwrap();
     }
 
     fn attach(&'a self) {

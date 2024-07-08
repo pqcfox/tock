@@ -187,7 +187,7 @@ impl<'a, U: hil::usb::UsbController<'a>> hil::usb_hid::UsbHid<'a, [u8; 64]> for 
         let len = send.len();
 
         self.send_buffer.replace(send);
-        self.controller().endpoint_resume_in(ENDPOINT_NUM);
+        self.controller().endpoint_resume_in(ENDPOINT_NUM).unwrap();
 
         Ok(len)
     }
@@ -220,9 +220,9 @@ impl<'a, U: hil::usb::UsbController<'a>> hil::usb::Client<'a> for KeyboardHid<'a
 
         // Setup buffers for IN data transfer.
         self.controller()
-            .endpoint_set_in_buffer(ENDPOINT_NUM, &self.buffers[IN_BUFFER].buf);
+            .endpoint_set_in_buffer(ENDPOINT_NUM, &self.buffers[IN_BUFFER].buf).unwrap();
         self.controller()
-            .endpoint_in_out_enable(TransferType::Interrupt, ENDPOINT_NUM);
+            .endpoint_in_out_enable(TransferType::Interrupt, ENDPOINT_NUM).unwrap();
     }
 
     fn attach(&'a self) {
