@@ -43,3 +43,9 @@ impl PacketSize {
         self.0
     }
 }
+
+/// Size of an empty packet
+pub(super) const EMPTY_PACKET_SIZE: PacketSize = match PacketSize::try_from_usize(0) {
+    Ok(packet_size) => packet_size,
+    Err(()) => unreachable!(),
+};

@@ -15,7 +15,8 @@ use super::endpoint_state::{
 };
 use super::interrupt::UsbInterrupt;
 use super::packet_received::{OutPacket, PacketReceived, SetupPacket};
-use super::packet_size::PacketSize;
+use super::packet_size::{EMPTY_PACKET_SIZE, PacketSize};
+use super::usb_address::UsbAddress;
 use super::utils;
 
 use crate::registers::usbdev_regs::{
@@ -30,6 +31,7 @@ use kernel::utilities::registers::interfaces::{ReadWriteable, Readable, Writeabl
 use kernel::utilities::registers::ReadWrite;
 use kernel::utilities::StaticRef;
 
+use core::cell::Cell;
 use core::num::NonZeroUsize;
 
 /// Default endpoint index.
@@ -45,6 +47,7 @@ pub struct Usb<'a> {
     client: OptionalCell<&'a dyn Client<'a>>,
     endpoints: [Endpoint<'a>; NUMBER_ENDPOINTS.get()],
     available_buffer_list: AvailableBufferList,
+    address: Cell<UsbAddress>,
 }
 
 impl<'a> Usb<'a> {
@@ -82,6 +85,7 @@ impl<'a> Usb<'a> {
                 Endpoint::new(),
             ],
             available_buffer_list: AvailableBufferList::new(),
+            address: Cell::new(UsbAddress::default()),
         }
     }
 
@@ -369,6 +373,20 @@ impl<'a> Usb<'a> {
         self.configure_in_buffer(endpoint_index, buffer_index, size);
     }
 
+    /// Sends an empty packet
+    ///
+    /// # Parameters
+    ///
+    /// + `endpoint_index`: the index of the endpoint whose IN interface will be used
+    /// + `buffer_index`: the index of the buffer that will store the packet to be transmitted
+    fn send_empty_packet(
+        &self,
+        endpoint_index: EndpointIndex,
+        buffer_index: BufferIndex,
+    ) {
+        self.configure_in_buffer(endpoint_index, buffer_index, EMPTY_PACKET_SIZE);
+    }
+
     /// Handler for a valid SETUP packet
     ///
     /// This method copies the received data to the endpoint's out buffer, informs the client about
@@ -418,7 +436,19 @@ impl<'a> Usb<'a> {
                         }
                     }
                     CtrlSetupResult::OkSetAddress => {
-                        unimplemented!();
+                        // There is no data stage, so the endpoint passes in status stage. Also,
+                        // when the data stage is missing, the status stage is from device to host
+                        // as specified by section 9.4.6 in USB2.0 specification.
+                        client.ctrl_status(endpoint_index.to_usize());
+                        endpoint.set_state(EndpointState::Ctrl(
+                            CtrlEndpointState::Transmit(
+                                TransmitCtrlEndpointState::Status,
+                            ),
+                        ));
+                        self.send_empty_packet(
+                            endpoint_index,
+                            buffer_index,
+                        );
                     }
                     // In case of an error, don't do anything and wait for another SETUP packet.
                     _ => {}
@@ -806,10 +836,19 @@ impl<'a> Usb<'a> {
     /// + `endpoint`: the endpoint whose IN buffer has been transmitted
     fn handle_status_transmit_ctrl_in_packet(
         &self,
-        _endpoint_index: EndpointIndex,
-        _endpoint: &Endpoint<'a>,
+        endpoint_index: EndpointIndex,
+        endpoint: &Endpoint<'a>,
     ) {
-        unimplemented!()
+        self.client.map(|client| {
+            client.ctrl_status_complete(endpoint_index.to_usize());
+        });
+
+        endpoint.set_state(EndpointState::Ctrl(
+            CtrlEndpointState::Receive(ReceiveCtrlEndpointState::Setup)
+        ));
+
+        self.free_transmit_buffer(endpoint_index);
+        self.fill_available_buffer_fifo();
     }
 
     /// Handler for a control IN packet successfully transmitted.
@@ -1067,12 +1106,18 @@ impl<'a> UsbController<'a> for Usb<'a> {
         self.disable_interrupts();
     }
 
-    fn set_address(&self, _address: u16) {
-        unimplemented!()
+    fn set_address(&self, address: u16) {
+        // PANIC: ̀`try_from_u8()` can panic only if the upper layer attempts to set an invalid USB
+        // address.
+        // CAST: a USB address is 7-bit long, so the upper byte can be ignored
+        let usb_address = UsbAddress::try_from_u8(address as u8).unwrap();
+        self.address.set(usb_address);
     }
 
     fn enable_address(&self) {
-        unimplemented!()
+        let usb_address = self.address.get();
+        // CAST: size_of(u32) > size_of(u8)
+        self.registers.usbctrl.modify(USBCTRL::DEVICE_ADDRESS.val(usb_address.to_u8() as u32));
     }
 
     fn endpoint_in_enable(&self, _transfer_type: TransferType, raw_endpoint_index: usize) {
