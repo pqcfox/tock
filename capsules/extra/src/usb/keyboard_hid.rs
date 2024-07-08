@@ -231,6 +231,16 @@ impl<'a, U: hil::usb::UsbController<'a>> hil::usb::Client<'a> for KeyboardHid<'a
 
     fn bus_reset(&'a self) {}
 
+    fn link_suspended(&'a self) {}
+
+    fn link_resume(&'a self) {}
+
+    fn disconnected(&'a self) {}
+
+    fn host_lost(&'a self) {}
+
+    fn bus_powered(&'a self) {}
+
     /// Handle a Control Setup transaction.
     fn ctrl_setup(&'a self, endpoint: usize) -> hil::usb::CtrlSetupResult {
         self.client_ctrl.ctrl_setup(endpoint)

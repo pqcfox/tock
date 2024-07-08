@@ -63,6 +63,11 @@ pub trait Client<'a> {
     fn enable(&'a self);
     fn attach(&'a self);
     fn bus_reset(&'a self);
+    fn link_suspended(&'a self);
+    fn link_resume(&'a self);
+    fn disconnected(&'a self);
+    fn host_lost(&'a self);
+    fn bus_powered(&'a self);
 
     fn ctrl_setup(&'a self, endpoint: usize) -> CtrlSetupResult;
     fn ctrl_in(&'a self, endpoint: usize) -> CtrlInResult;

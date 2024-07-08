@@ -201,6 +201,16 @@ impl<'a, C: hil::usb::UsbController<'a>> hil::usb::Client<'a> for Client<'a, C> 
         self.delayed_out.set(false);
     }
 
+    fn link_suspended(&'a self) {}
+
+    fn link_resume(&'a self) {}
+
+    fn disconnected(&'a self) {}
+
+    fn host_lost(&'a self) {}
+
+    fn bus_powered(&'a self) {}
+
     /// Handle a Control Setup transaction
     fn ctrl_setup(&'a self, endpoint: usize) -> hil::usb::CtrlSetupResult {
         self.client_ctrl.ctrl_setup(endpoint)

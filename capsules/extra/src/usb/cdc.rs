@@ -402,6 +402,16 @@ impl<'a, U: hil::usb::UsbController<'a>, A: 'a + Alarm<'a>> hil::usb::Client<'a>
         self.state.set(State::Enumerated);
     }
 
+    fn link_suspended(&'a self) {}
+
+    fn link_resume(&'a self) {}
+
+    fn disconnected(&'a self) {}
+
+    fn host_lost(&'a self) {}
+
+    fn bus_powered(&'a self) {}
+
     /// Handle a Control Setup transaction.
     ///
     /// CDC uses special values here, and we can use these to know when a CDC
