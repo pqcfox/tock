@@ -41,6 +41,12 @@ pub const MAX_CTRL_PACKET_SIZE_NRF52840: u8 = 64;
 pub const MAX_CTRL_PACKET_SIZE_EARLGREY: u8 = 64;
 
 const N_ENDPOINTS: usize = 6;
+const BULK_IN_ENDPOINT: usize = 1;
+const BULK_OUT_ENDPOINT: usize = 2;
+const INTERRUPT_IN_ENDPOINT: usize = 3;
+const INTERRUPT_OUT_ENDPOINT: usize = 4;
+const ISO_IN_ENDPOINT: usize = 5;
+const ISO_OUT_ENDPOINT: usize = 6;
 
 pub struct Client<'a, C: 'a> {
     client_ctrl: ClientCtrl<'a, 'static, C>,
@@ -71,37 +77,37 @@ impl<'a, C: hil::usb::UsbController<'a>> Client<'a, C> {
 
         let endpoints: &[&[EndpointDescriptor]] = &mut [&[
             EndpointDescriptor {
-                endpoint_address: EndpointAddress::new_const(1, TransferDirection::DeviceToHost),
+                endpoint_address: EndpointAddress::new_const(BULK_IN_ENDPOINT, TransferDirection::DeviceToHost),
                 transfer_type: TransferType::Bulk,
                 max_packet_size: 8,
                 interval: 0,
             },
             EndpointDescriptor {
-                endpoint_address: EndpointAddress::new_const(2, TransferDirection::HostToDevice),
+                endpoint_address: EndpointAddress::new_const(BULK_OUT_ENDPOINT, TransferDirection::HostToDevice),
                 transfer_type: TransferType::Bulk,
                 max_packet_size: 8,
                 interval: 0,
             },
             EndpointDescriptor {
-                endpoint_address: EndpointAddress::new_const(3, TransferDirection::DeviceToHost),
+                endpoint_address: EndpointAddress::new_const(INTERRUPT_IN_ENDPOINT, TransferDirection::DeviceToHost),
                 transfer_type: TransferType::Interrupt,
                 max_packet_size: 8,
                 interval: 1,
             },
             EndpointDescriptor {
-                endpoint_address: EndpointAddress::new_const(4, TransferDirection::HostToDevice),
+                endpoint_address: EndpointAddress::new_const(INTERRUPT_OUT_ENDPOINT, TransferDirection::HostToDevice),
                 transfer_type: TransferType::Interrupt,
                 max_packet_size: 8,
                 interval: 1,
             },
             EndpointDescriptor {
-                endpoint_address: EndpointAddress::new_const(5, TransferDirection::DeviceToHost),
+                endpoint_address: EndpointAddress::new_const(ISO_IN_ENDPOINT, TransferDirection::DeviceToHost),
                 transfer_type: TransferType::Isochronous,
                 max_packet_size: 8,
                 interval: 1,
             },
             EndpointDescriptor {
-                endpoint_address: EndpointAddress::new_const(6, TransferDirection::HostToDevice),
+                endpoint_address: EndpointAddress::new_const(ISO_OUT_ENDPOINT, TransferDirection::HostToDevice),
                 transfer_type: TransferType::Isochronous,
                 max_packet_size: 8,
                 interval: 1,
@@ -146,14 +152,14 @@ impl<'a, C: hil::usb::UsbController<'a>> Client<'a, C> {
 
     fn alert_full(&'a self) {
         // Alert the controller that we now have data to send on the Bulk IN endpoint 1
-        self.controller().endpoint_resume_in(1).unwrap();
+        self.controller().endpoint_resume_in(BULK_IN_ENDPOINT).unwrap();
     }
 
     fn alert_empty(&'a self) {
         // In case we reported Delay before, alert the controller
         // that we can now receive data on the Bulk OUT endpoint 2
         if self.delayed_out.take() {
-            self.controller().endpoint_resume_out(2).unwrap();
+            self.controller().endpoint_resume_out(BULK_OUT_ENDPOINT).unwrap();
         }
     }
 
@@ -174,24 +180,24 @@ impl<'a, C: hil::usb::UsbController<'a>> hil::usb::Client<'a> for Client<'a, C> 
         self.client_ctrl.enable();
 
         // Set up a bulk-in endpoint for debugging
-        self.controller().endpoint_set_in_buffer(1, self.buffer(1)).unwrap();
-        self.controller().endpoint_in_enable(TransferType::Bulk, 1).unwrap();
+        self.controller().endpoint_set_in_buffer(BULK_IN_ENDPOINT, self.buffer(BULK_IN_ENDPOINT)).unwrap();
+        self.controller().endpoint_in_enable(TransferType::Bulk, BULK_IN_ENDPOINT).unwrap();
 
         // Set up a bulk-out endpoint for debugging
-        self.controller().endpoint_set_out_buffer(2, self.buffer(2)).unwrap();
-        self.controller().endpoint_out_enable(TransferType::Bulk, 2).unwrap();
+        self.controller().endpoint_set_out_buffer(BULK_OUT_ENDPOINT, self.buffer(BULK_OUT_ENDPOINT)).unwrap();
+        self.controller().endpoint_out_enable(TransferType::Bulk, BULK_OUT_ENDPOINT).unwrap();
 
         // Set up interrupt endpoints
-        self.controller().endpoint_set_in_buffer(3, self.buffer(3)).unwrap();
-        self.controller().endpoint_in_enable(TransferType::Interrupt, 3).unwrap();
-        self.controller().endpoint_set_out_buffer(4, self.buffer(4)).unwrap();
-        self.controller().endpoint_out_enable(TransferType::Interrupt, 4).unwrap();
+        self.controller().endpoint_set_in_buffer(INTERRUPT_IN_ENDPOINT, self.buffer(INTERRUPT_IN_ENDPOINT)).unwrap();
+        self.controller().endpoint_in_enable(TransferType::Interrupt, INTERRUPT_IN_ENDPOINT).unwrap();
+        self.controller().endpoint_set_out_buffer(INTERRUPT_OUT_ENDPOINT, self.buffer(INTERRUPT_OUT_ENDPOINT)).unwrap();
+        self.controller().endpoint_out_enable(TransferType::Interrupt, INTERRUPT_OUT_ENDPOINT).unwrap();
 
         // Set up iso endpoints
-        self.controller().endpoint_set_in_buffer(5, self.buffer(5)).unwrap();
-        self.controller().endpoint_in_enable(TransferType::Isochronous, 5).unwrap();
-        self.controller().endpoint_set_out_buffer(6, self.buffer(6)).unwrap();
-        self.controller().endpoint_out_enable(TransferType::Isochronous, 6).unwrap();
+        self.controller().endpoint_set_in_buffer(ISO_IN_ENDPOINT, self.buffer(ISO_IN_ENDPOINT)).unwrap();
+        self.controller().endpoint_in_enable(TransferType::Isochronous, ISO_IN_ENDPOINT).unwrap();
+        self.controller().endpoint_set_out_buffer(ISO_OUT_ENDPOINT, self.buffer(ISO_OUT_ENDPOINT)).unwrap();
+        self.controller().endpoint_out_enable(TransferType::Isochronous, ISO_OUT_ENDPOINT).unwrap();
     }
 
     fn attach(&'a self) {
@@ -298,7 +304,7 @@ impl<'a, C: hil::usb::UsbController<'a>> hil::usb::Client<'a> for Client<'a, C> 
         match transfer_type {
             TransferType::Interrupt => {
                 let packet_out = self.buffer(endpoint);
-                let packet_in = self.buffer(3);
+                let packet_in = self.buffer(INTERRUPT_IN_ENDPOINT);
                 for index in 0..packet_bytes {
                     packet_in[index as usize].set(packet_out[index as usize].get());
                 }
@@ -334,7 +340,7 @@ impl<'a, C: hil::usb::UsbController<'a>> hil::usb::Client<'a> for Client<'a, C> 
             }
             TransferType::Isochronous => {
                 let packet_out = self.buffer(endpoint);
-                let packet_in = self.buffer(5);
+                let packet_in = self.buffer(ISO_IN_ENDPOINT);
                 for index in 0..packet_bytes {
                     packet_in[index as usize].set(packet_out[index as usize].get());
                 }
