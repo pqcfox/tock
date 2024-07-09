@@ -30,6 +30,7 @@ pub mod pattgen;
 pub mod public_key_crypto;
 pub mod pwm;
 pub mod radio;
+pub mod reset_managment;
 pub mod rng;
 pub mod screen;
 pub mod sensors;

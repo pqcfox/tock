@@ -32,6 +32,7 @@ pub mod pinmux;
 pub mod plic;
 pub mod pwrmgr;
 pub mod registers;
+pub mod rstmgr;
 pub mod spi_host;
 pub mod timer;
 pub mod uart;

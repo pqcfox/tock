@@ -18,12 +18,14 @@ use crate::hil::symmetric_encryption::AES128_BLOCK_SIZE;
 use crate::otbn::OtbnComponent;
 use crate::pinmux_layout::BoardPinmuxLayout;
 use capsules_aes_gcm::aes_gcm;
+use capsules_core::reset_manager::ResetManager;
 use capsules_core::virtualizers::virtual_aes_ccm;
 use capsules_core::virtualizers::virtual_alarm::{MuxAlarm, VirtualMuxAlarm};
 use core::ptr::{addr_of, addr_of_mut};
 use earlgrey::chip::EarlGreyDefaultPeripherals;
 use earlgrey::chip_config::EarlGreyConfig;
 use earlgrey::pinmux_config::EarlGreyPinmuxConfig;
+
 use kernel::capabilities;
 use kernel::component::Component;
 use kernel::hil;
@@ -32,6 +34,7 @@ use kernel::hil::hasher::Hasher;
 use kernel::hil::i2c::I2CMaster;
 use kernel::hil::led::LedHigh;
 use kernel::hil::pattgen::PattGen;
+use kernel::hil::reset_managment::ResetManagment;
 use kernel::hil::rng::Rng;
 use kernel::hil::symmetric_encryption::AES128;
 use kernel::hil::usb::Client;
@@ -242,6 +245,7 @@ struct EarlGrey {
         VirtualMuxAlarm<'static, earlgrey::timer::RvTimer<'static, ChipConfig>>,
     >,
     watchdog: &'static lowrisc::aon_timer::AonTimer,
+    reset_manager: &'static ResetManager<'static, earlgrey::rstmgr::RstMgr>,
 }
 
 /// Mapping of integer syscalls to objects that implement syscalls.
@@ -263,6 +267,7 @@ impl SyscallDriverLookup for EarlGrey {
             capsules_extra::symmetric_encryption::aes::DRIVER_NUM => f(Some(self.aes)),
             //capsules_extra::kv_driver::DRIVER_NUM => f(Some(self.kv_driver)),
             capsules_extra::pattgen::DRIVER_NUM => f(Some(self.pattgen)),
+            capsules_core::reset_manager::DRIVER_NUM => f(Some(self.reset_manager)),
             _ => f(None),
         }
     }
@@ -397,6 +402,26 @@ unsafe fn setup() -> (
         EarlGreyDefaultPeripherals::new()
     );
     peripherals.init();
+
+    // retrieve reset reason
+    // RSTMGR::reset_reason might get cleared by ROM code that runs before Tock and cached in RetentionRAM
+    // if reset_reason in HW peripheral is cleared, attempt to read it from RRAM
+    // TODO replace unsafe fn `get_rr_from_rram()` with RRAM function call when RRAM is ready
+    let reset_reason = peripherals
+        .rst_mgmt
+        .reset_reason()
+        .or(earlgrey::rstmgr::RstMgr::get_rr_from_rram());
+
+    let reset_manager = kernel::static_init!(
+        capsules_core::reset_manager::ResetManager<'static, earlgrey::rstmgr::RstMgr>,
+        ResetManager::new(
+            &peripherals.rst_mgmt,
+            board_kernel.create_grant(
+                capsules_core::reset_manager::DRIVER_NUM,
+                &memory_allocation_cap
+            )
+        )
+    );
 
     // Configure kernel debug gpios as early as possible
     kernel::debug::assign_gpios(
@@ -904,6 +929,7 @@ unsafe fn setup() -> (
             scheduler,
             scheduler_timer,
             watchdog,
+            reset_manager
         }
     );
 
@@ -915,6 +941,9 @@ unsafe fn setup() -> (
     );
     lowrisc::pattgen::tests::run_all(pattgen_test);
     */
+
+    earlgrey.reset_manager.startup();
+    earlgrey.reset_manager.populate_reset_reason(reset_reason);
 
     kernel::process::load_processes(
         board_kernel,
