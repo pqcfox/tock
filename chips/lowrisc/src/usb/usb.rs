@@ -896,8 +896,6 @@ impl<'a> Usb<'a> {
         buffer_index: BufferIndex,
         packet_size: PacketSize,
     ) {
-        kernel::debug!("OUT interrupt");
-
         self.client.map(|client| {
             match client.packet_out(TransferType::Interrupt, endpoint_index.to_usize(), packet_size.to_usize() as u32) {
                 OutResult::Ok => {
@@ -919,8 +917,6 @@ impl<'a> Usb<'a> {
         buffer_index: BufferIndex,
         packet_size: PacketSize,
     ) {
-        kernel::debug!("OUT isochronous");
-
         self.client.map(|client| {
             match client.packet_out(TransferType::Isochronous, endpoint_index.to_usize(), packet_size.to_usize() as u32) {
                 OutResult::Ok => {
@@ -1097,7 +1093,6 @@ impl<'a> Usb<'a> {
         )));
 
         self.free_transmit_buffer(endpoint_index);
-        self.fill_available_buffer_fifo();
     }
 
     /// Handler for non-last data control IN packet successfully transmitted.
@@ -1170,7 +1165,6 @@ impl<'a> Usb<'a> {
         )));
 
         self.free_transmit_buffer(endpoint_index);
-        self.fill_available_buffer_fifo();
     }
 
     /// Handler for a control IN packet successfully transmitted.
@@ -1255,8 +1249,7 @@ impl<'a> Usb<'a> {
                     });
                 }
                 InResult::Delay => {
-                    self.free_buffer(buffer_index);
-                    self.fill_available_buffer_fifo();
+                    self.free_transmit_buffer(endpoint_index);
                 }
                 // Normally, this should delay the endpoint. However, the upper layer responds with
                 // InResult::Error only when the host misbehaves. Reproducing and testing this is
@@ -1267,10 +1260,7 @@ impl<'a> Usb<'a> {
     }
 
     fn handle_interrupt_in_packet(&self, endpoint_index: EndpointIndex) {
-        kernel::debug!("IN interrupt");
-        let buffer_index = self.get_transmit_buffer(endpoint_index);
-        self.free_buffer(buffer_index);
-        self.fill_available_buffer_fifo();
+        self.free_transmit_buffer(endpoint_index);
 
         self.client.map(|client| {
             client.packet_transmitted(endpoint_index.to_usize());
@@ -1278,10 +1268,7 @@ impl<'a> Usb<'a> {
     }
 
     fn handle_isochronous_in_packet(&self, endpoint_index: EndpointIndex) {
-        kernel::debug!("IN isochronous") ;
-        let buffer_index = self.get_transmit_buffer(endpoint_index);
-        self.free_buffer(buffer_index);
-        self.fill_available_buffer_fifo();
+        self.free_transmit_buffer(endpoint_index);
 
         self.client.map(|client| {
             client.packet_transmitted(endpoint_index.to_usize());
@@ -1308,7 +1295,11 @@ impl<'a> Usb<'a> {
     }
 
     fn internal_endpoint_resume_in(&self, endpoint_index: EndpointIndex, packet_size: PacketSize, endpoint: &Endpoint<'a>) {
-        let buffer_index = self.available_buffer_list.next_and_occupy();
+        let buffer_index = if self.is_transmit_pending(endpoint_index) {
+            self.get_transmit_buffer(endpoint_index)
+        } else {
+            self.available_buffer_list.next_and_occupy()
+        };
         let endpoint_buffer_in = endpoint.get_buffer_in();
 
         endpoint_buffer_in.map(|buffer_in| {
