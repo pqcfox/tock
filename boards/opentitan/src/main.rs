@@ -234,6 +234,7 @@ struct EarlGrey {
         >,
     >,
     */
+    usb: &'static capsules_extra::usb::usb_user2::UsbSyscallDriver,
     syscall_filter: &'static TbfHeaderFilterDefaultAllow,
     scheduler: &'static PrioritySched,
     scheduler_timer: &'static VirtualSchedulerTimer<
@@ -260,6 +261,7 @@ impl SyscallDriverLookup for EarlGrey {
             capsules_core::rng::DRIVER_NUM => f(Some(self.rng)),
             capsules_extra::symmetric_encryption::aes::DRIVER_NUM => f(Some(self.aes)),
             //capsules_extra::kv_driver::DRIVER_NUM => f(Some(self.kv_driver)),
+            capsules_extra::usb::usb_user2::DRIVER_NUM => f(Some(self.usb)),
             _ => f(None),
         }
     }
@@ -573,6 +575,7 @@ unsafe fn setup() -> (
     // )
     // .finalize(components::usb_component_static!(earlgrey::usbdev::Usb));
 
+    /*
     let usb_client = static_init!(
         capsules_extra::usb::usbc_client::Client<lowrisc::usb::Usb>,
         capsules_extra::usb::usbc_client::Client::new(&peripherals.usb, 64),
@@ -582,6 +585,17 @@ unsafe fn setup() -> (
     peripherals.usb.set_client(usb_client);
     usb_client.enable();
     usb_client.attach();
+    */
+
+    let usb = static_init!(
+        capsules_extra::usb::usb_user2::UsbSyscallDriver,
+        capsules_extra::usb::usb_user2::UsbSyscallDriver::new(
+            board_kernel.create_grant(
+                capsules_extra::usb::usb_user2::DRIVER_NUM,
+                &memory_allocation_cap
+            )
+        ),
+    );
 
     // Kernel storage region, allocated with the storage_volume!
     // macro in common/utils.rs
@@ -870,6 +884,7 @@ unsafe fn setup() -> (
             spi_controller,
             aes,
             //kv_driver,
+            usb,
             syscall_filter,
             scheduler,
             scheduler_timer,
