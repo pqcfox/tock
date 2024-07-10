@@ -262,13 +262,16 @@ impl<'a, C: hil::usb::UsbController<'a>> hil::usb::Client<'a> for Client<'a, C> 
     /// Handle a Bulk/Interrupt IN transaction
     fn packet_in(&'a self, transfer_type: TransferType, endpoint: usize) -> hil::usb::InResult {
         match transfer_type {
-            TransferType::Interrupt | TransferType::Isochronous => {
+            TransferType::Interrupt => {
                 if self.interrupt_ready.get() {
                     self.interrupt_ready.set(false);
                     hil::usb::InResult::Packet(8)
                 } else {
                     hil::usb::InResult::Packet(0)
                 }
+            }
+            TransferType::Isochronous => {
+                hil::usb::InResult::Packet(8)
             }
             TransferType::Bulk => {
                 // Write a packet into the endpoint buffer
@@ -344,7 +347,6 @@ impl<'a, C: hil::usb::UsbController<'a>> hil::usb::Client<'a> for Client<'a, C> 
                 for index in 0..packet_bytes {
                     packet_in[index as usize].set(packet_out[index as usize].get());
                 }
-                self.interrupt_ready.set(true);
                 hil::usb::OutResult::Ok
             }
             TransferType::Control => unreachable!(),

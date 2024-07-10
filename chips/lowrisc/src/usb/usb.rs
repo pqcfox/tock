@@ -43,6 +43,8 @@ const DEFAULT_ENDPOINT_INDEX: EndpointIndex = EndpointIndex::Endpoint0;
 /// Number of endpoints.
 pub(super) const NUMBER_ENDPOINTS: NonZeroUsize = utils::create_non_zero_usize(12);
 
+const WORD_SIZE: NonZeroUsize = utils::create_non_zero_usize(core::mem::size_of::<usize>());
+
 /// USB driver
 pub struct Usb<'a> {
     registers: StaticRef<UsbdevRegisters>,
@@ -1071,6 +1073,21 @@ impl<'a> Usb<'a> {
         let buffer_index = self.get_transmit_buffer(endpoint_index);
 
         self.free_buffer(buffer_index);
+    }
+
+    /// Checks if transmit is pending on the given endpoint
+    ///
+    /// # Parameters
+    ///
+    /// + `endpoint_index`: the endpoint to be checked
+    ///
+    /// # Return value
+    ///
+    /// + `false`: there is no pending transmit on the given endpoint
+    /// + `true`: there is a pending transmit on the given endpoint
+    fn is_transmit_pending(&self, endpoint_index: EndpointIndex) -> bool {
+        let configin_register = self.get_configin_register(endpoint_index);
+        configin_register.is_set(CONFIGIN::RDY_0)
     }
 
     /// Handler for the last data control IN packet successfully transmitted.

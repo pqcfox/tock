@@ -640,23 +640,29 @@ impl<'a, U: hil::usb::UsbController<'a>, A: 'a + Alarm<'a>> hil::usb::Client<'a>
     }
 
     fn packet_transmitted(&'a self, _endpoint: usize, result: Result<(), ()>) {
-        result.expect("Transmission error");
         // Check if more to send.
         self.tx_buffer.take().map(|tx_buf| {
             // Check if we have any bytes to send.
             let remaining = self.tx_len.get() - self.tx_offset.get();
-            if remaining > 0 {
-                // We do, so ask to send again.
-                self.tx_buffer.replace(tx_buf);
-                self.controller().endpoint_resume_in(ENDPOINT_IN_NUM).unwrap();
-            } else {
-                // We don't have anything to send, so that means we are
-                // ok to signal the callback.
-
-                // Signal the callback and pass back the TX buffer.
+            // Check for any errors
+            if let Err(()) = result {
                 self.tx_client.map(move |tx_client| {
-                    tx_client.transmitted_buffer(tx_buf, self.tx_len.get(), Ok(()))
+                    tx_client.transmitted_buffer(tx_buf, remaining, Err(ErrorCode::FAIL));
                 });
+            } else {
+                if remaining > 0 {
+                    // We do, so ask to send again.
+                    self.tx_buffer.replace(tx_buf);
+                    self.controller().endpoint_resume_in(ENDPOINT_IN_NUM).unwrap();
+                } else {
+                    // We don't have anything to send, so that means we are
+                    // ok to signal the callback.
+
+                    // Signal the callback and pass back the TX buffer.
+                    self.tx_client.map(move |tx_client| {
+                        tx_client.transmitted_buffer(tx_buf, self.tx_len.get(), Ok(()))
+                    });
+                }
             }
         });
     }

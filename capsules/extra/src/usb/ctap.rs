@@ -411,10 +411,10 @@ impl<'a, U: hil::usb::UsbController<'a>> hil::usb::Client<'a> for CtapHid<'a, U>
     }
 
     fn packet_transmitted(&'a self, endpoint: usize, result: Result<(), ()>) {
-        result.expect("Transmission error");
         self.send_buffer.take().map(|buf| {
             self.client.map(move |client| {
-                client.packet_transmitted(Ok(()), buf, endpoint);
+                let result = result.map_err(|()| ErrorCode::FAIL);
+                client.packet_transmitted(result, buf, endpoint);
             });
         });
     }
