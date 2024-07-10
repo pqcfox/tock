@@ -1822,7 +1822,7 @@ impl<'a> UsbCtrl<'a> {
             BulkInState::InData => {
                 // Totally expected state. Nothing to do.
                 self.client
-                    .map(|client| client.packet_transmitted(endpoint));
+                    .map(|client| client.packet_transmitted(endpoint, Ok(())));
                 self.descriptors[endpoint].state.set(EndpointState::Bulk(
                     transfer_type,
                     Some(BulkInState::Init),

@@ -351,7 +351,7 @@ impl<'a, C: hil::usb::UsbController<'a>> hil::usb::Client<'a> for Client<'a, C> 
         }
     }
 
-    fn packet_transmitted(&'a self, _endpoint: usize) {
+    fn packet_transmitted(&'a self, _endpoint: usize, _result: Result<(), ()>) {
         // Nothing to do.
     }
 }

@@ -1231,6 +1231,8 @@ impl<'a> Usb<'a> {
         let buffer_index = self.get_transmit_buffer(endpoint_index);
 
         self.client.map(|client| {
+            client.packet_transmitted(endpoint_index.to_usize(), Ok(()));
+
             match client.packet_in(transfer_type, endpoint_index.to_usize()) {
                 InResult::Packet(raw_packet_size) => {
                     let packet_size = match PacketSize::try_from_usize(raw_packet_size) {
@@ -1263,7 +1265,7 @@ impl<'a> Usb<'a> {
         self.free_transmit_buffer(endpoint_index);
 
         self.client.map(|client| {
-            client.packet_transmitted(endpoint_index.to_usize());
+            client.packet_transmitted(endpoint_index.to_usize(), Ok(()));
         });
     }
 
@@ -1271,7 +1273,7 @@ impl<'a> Usb<'a> {
         self.free_transmit_buffer(endpoint_index);
 
         self.client.map(|client| {
-            client.packet_transmitted(endpoint_index.to_usize());
+            client.packet_transmitted(endpoint_index.to_usize(), Ok(()));
         });
     }
 

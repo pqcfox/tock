@@ -639,7 +639,8 @@ impl<'a, U: hil::usb::UsbController<'a>, A: 'a + Alarm<'a>> hil::usb::Client<'a>
         }
     }
 
-    fn packet_transmitted(&'a self, _endpoint: usize) {
+    fn packet_transmitted(&'a self, _endpoint: usize, result: Result<(), ()>) {
+        result.expect("Transmission error");
         // Check if more to send.
         self.tx_buffer.take().map(|tx_buf| {
             // Check if we have any bytes to send.

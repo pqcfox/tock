@@ -38,10 +38,10 @@ pub(super) enum CtrlEndpointState {
 pub(super) enum EndpointState {
     /// The endpoint is configured as a control endpoint
     Ctrl(CtrlEndpointState),
-    /// The endpoint is configured as a bulk endpoint
+    /// The endpoint is configured as a bulk endpoint.
     Bulk,
-    /// The endpoint is configured as an interrupt endpoint
+    /// The endpoint is configured as an interrupt endpoint.
     Interrupt,
-    /// The endpoint is configured as an isochronous endpoint
+    /// The endpoint is configured as an isochronous endpoint.
     Isochronous,
 }
