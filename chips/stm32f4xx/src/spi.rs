@@ -15,9 +15,9 @@ use kernel::utilities::registers::interfaces::{ReadWriteable, Readable};
 use kernel::utilities::registers::{register_bitfields, ReadOnly, ReadWrite};
 use kernel::utilities::StaticRef;
 
+use crate::clocks::phclk;
 use crate::dma;
 use crate::dma::{Dma1, Dma1Peripheral};
-use crate::rcc;
 
 /// Serial peripheral interface
 #[repr(C)]
@@ -143,7 +143,7 @@ register_bitfields![u32,
 
 // for use by dma1
 pub(crate) fn get_address_dr(regs: StaticRef<SpiRegisters>) -> u32 {
-    &regs.dr as *const ReadWrite<u32, DR::Register> as u32
+    core::ptr::addr_of!(regs.dr) as u32
 }
 
 pub const SPI3_BASE: StaticRef<SpiRegisters> =
@@ -510,7 +510,7 @@ impl<'a> dma::StreamClient<'a, Dma1<'a>> for Spi<'a> {
     }
 }
 
-pub struct SpiClock<'a>(pub rcc::PeripheralClock<'a>);
+pub struct SpiClock<'a>(pub phclk::PeripheralClock<'a>);
 
 impl ClockInterface for SpiClock<'_> {
     fn is_enabled(&self) -> bool {

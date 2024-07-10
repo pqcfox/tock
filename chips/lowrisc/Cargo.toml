@@ -13,4 +13,6 @@ rv32i = { path = "../../arch/rv32i" }
 kernel = { path = "../../kernel" }
 
 [features]
+test_alerthandler = []
 test_sysrst_ctrl = []
+tests = []

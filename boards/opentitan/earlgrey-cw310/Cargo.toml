@@ -13,18 +13,20 @@ edition.workspace = true
 components = { path = "../../components" }
 rv32i = { path = "../../../arch/rv32i" }
 kernel = { path = "../../../kernel" }
-earlgrey = { path = "../../../chips/earlgrey" }
+earlgrey = { path = "../../../chips/earlgrey"}
 lowrisc = { path = "../../../chips/lowrisc" }
 tock-tbf = { path = "../../../libraries/tock-tbf" }
 
 capsules-core = { path = "../../../capsules/core" }
 capsules-extra = { path = "../../../capsules/extra" }
 capsules-aes-gcm = { path = "../../../capsules/aes_gcm" }
+capsules-system = { path = "../../../capsules/system" }
 
 
 [features]
 default = ["fpga_cw310"]
 test_sysrst_ctrl = ["lowrisc/test_sysrst_ctrl"]
+test_alerthandler = ["earlgrey/test_alerthandler", "lowrisc/test_alerthandler"]
 
 # OpenTitan SoC design can be synthesized or compiled for different targets. A
 # target can be a specific FPGA board, an ASIC technology, or a simulation tool.

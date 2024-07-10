@@ -43,6 +43,7 @@ use capsules_extra::net::sixlowpan::sixlowpan_state::{
 };
 use capsules_extra::net::udp::UDPHeader;
 use core::cell::Cell;
+use core::ptr::addr_of_mut;
 use kernel::debug;
 use kernel::hil::radio;
 use kernel::hil::time::{self, Alarm, ConvertTicks};
@@ -119,6 +120,16 @@ static mut UDP_DGRAM: [u8; PAYLOAD_LEN - UDP_HDR_SIZE] = [0; PAYLOAD_LEN - UDP_H
 static mut IP6_DG_OPT: Option<IP6Packet> = None;
 //END changes
 
+type Rf233 = capsules_extra::rf233::RF233<
+    'static,
+    capsules_core::virtualizers::virtual_spi::VirtualSpiMasterDevice<
+        'static,
+        sam4l::spi::SpiHw<'static>,
+    >,
+>;
+type Ieee802154MacDevice =
+    components::ieee802154::Ieee802154ComponentMacDeviceType<Rf233, sam4l::aes::Aes<'static>>;
+
 pub struct LowpanTest<'a, A: time::Alarm<'a>> {
     alarm: &'a A,
     sixlowpan_tx: TxState<'a>,
@@ -127,18 +138,21 @@ pub struct LowpanTest<'a, A: time::Alarm<'a>> {
 }
 
 pub unsafe fn initialize_all(
-    mux_mac: &'static capsules_extra::ieee802154::virtual_mac::MuxMac<'static>,
+    mux_mac: &'static capsules_extra::ieee802154::virtual_mac::MuxMac<'static, Ieee802154MacDevice>,
     mux_alarm: &'static MuxAlarm<'static, sam4l::ast::Ast>,
 ) -> &'static LowpanTest<
     'static,
     capsules_core::virtualizers::virtual_alarm::VirtualMuxAlarm<'static, sam4l::ast::Ast<'static>>,
 > {
     let radio_mac = static_init!(
-        capsules_extra::ieee802154::virtual_mac::MacUser<'static>,
+        capsules_extra::ieee802154::virtual_mac::MacUser<'static, Ieee802154MacDevice>,
         capsules_extra::ieee802154::virtual_mac::MacUser::new(mux_mac)
     );
     mux_mac.add_user(radio_mac);
-    let default_rx_state = static_init!(RxState<'static>, RxState::new(&mut RX_STATE_BUF));
+    let default_rx_state = static_init!(
+        RxState<'static>,
+        RxState::new(&mut *addr_of_mut!(RX_STATE_BUF))
+    );
 
     let sixlo_alarm = static_init!(
         VirtualMuxAlarm<sam4l::ast::Ast>,
@@ -202,7 +216,7 @@ pub unsafe fn initialize_all(
 
     let ip_pyld: IPPayload = IPPayload {
         header: tr_hdr,
-        payload: &mut UDP_DGRAM,
+        payload: &mut *addr_of_mut!(UDP_DGRAM),
     };
 
     let mut ip6_dg: IP6Packet = IP6Packet {
@@ -408,7 +422,7 @@ impl<'a, A: time::Alarm<'a>> LowpanTest<'a, A> {
     }
 
     unsafe fn send_ipv6_packet(&self, _: &[u8]) {
-        self.send_next(&mut RF233_BUF);
+        self.send_next(&mut *addr_of_mut!(RF233_BUF));
     }
 
     fn send_next(&self, tx_buf: &'static mut [u8]) {

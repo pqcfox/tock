@@ -14,17 +14,24 @@
 #![test_runner(test_runner)]
 #![reexport_test_harness_main = "test_main"]
 
+use core::ptr::addr_of;
+
 use crate::hil::symmetric_encryption::AES128_BLOCK_SIZE;
 use crate::otbn::OtbnComponent;
 use crate::pinmux_layout::BoardPinmuxLayout;
 use capsules_aes_gcm::aes_gcm;
 use capsules_core::driver;
+use capsules_core::reset_manager::ResetManager;
 use capsules_core::virtualizers::virtual_aes_ccm;
 use capsules_core::virtualizers::virtual_alarm::{MuxAlarm, VirtualMuxAlarm};
+use capsules_extra::opentitan_alerthandler::AlertHandlerCapsule;
 use capsules_extra::opentitan_sysrst::SystemReset;
+use earlgrey::alert_handler;
 use earlgrey::chip::EarlGreyDefaultPeripherals;
 use earlgrey::chip_config::EarlGreyConfig;
 use earlgrey::pinmux_config::EarlGreyPinmuxConfig;
+use earlgrey::timer::RvTimer;
+
 use kernel::capabilities;
 use kernel::component::Component;
 use kernel::hil;
@@ -32,8 +39,11 @@ use kernel::hil::entropy::Entropy32;
 use kernel::hil::hasher::Hasher;
 use kernel::hil::i2c::I2CMaster;
 use kernel::hil::led::LedHigh;
+use kernel::hil::pattgen::PattGen;
+use kernel::hil::reset_managment::ResetManagment;
 use kernel::hil::rng::Rng;
 use kernel::hil::symmetric_encryption::AES128;
+use kernel::hil::usb::Client;
 use kernel::platform::scheduler_timer::VirtualSchedulerTimer;
 use kernel::platform::{KernelResources, SyscallDriverLookup, TbfHeaderFilterDefaultAllow};
 use kernel::scheduler::priority::PrioritySched;
@@ -157,10 +167,12 @@ static mut RSA_HARDWARE: Option<&lowrisc::rsa::OtbnRsa<'static>> = None;
 static mut SHA256SOFT: Option<&capsules_extra::sha256::Sha256Software<'static>> = None;
 
 static mut CHIP: Option<&'static EarlGreyChip> = None;
-static mut PROCESS_PRINTER: Option<&'static kernel::process::ProcessPrinterText> = None;
+static mut PROCESS_PRINTER: Option<&'static capsules_system::process_printer::ProcessPrinterText> =
+    None;
 
 // How should the kernel respond when a process faults.
-const FAULT_RESPONSE: kernel::process::PanicFaultPolicy = kernel::process::PanicFaultPolicy {};
+const FAULT_RESPONSE: capsules_system::process_policies::PanicFaultPolicy =
+    capsules_system::process_policies::PanicFaultPolicy {};
 
 /// Dummy buffer that causes the linker to reserve enough space for the stack.
 #[no_mangle]
@@ -198,7 +210,10 @@ struct EarlGrey {
             lowrisc::spi_host::SpiHost<'static>,
         >,
     >,
-    rng: &'static capsules_core::rng::RngDriver<'static>,
+    rng: &'static capsules_core::rng::RngDriver<
+        'static,
+        capsules_core::rng::Entropy32ToRandom<'static, lowrisc::csrng::CsRng<'static>>,
+    >,
     aes: &'static capsules_extra::symmetric_encryption::aes::AesDriver<
         'static,
         aes_gcm::Aes128Gcm<
@@ -206,6 +221,8 @@ struct EarlGrey {
             virtual_aes_ccm::VirtualAES128CCM<'static, earlgrey::aes::Aes<'static>>,
         >,
     >,
+    pattgen: &'static capsules_extra::pattgen::PattGen<'static, lowrisc::pattgen::PattGen<'static>>,
+    /*
     kv_driver: &'static capsules_extra::kv_driver::KVStoreDriver<
         'static,
         capsules_extra::virtual_kv::VirtualKVPermissions<
@@ -228,6 +245,7 @@ struct EarlGrey {
             >,
         >,
     >,
+    */
     opentitan_sysrst: &'static SystemReset<'static, SysRstCtrl<'static>>,
     syscall_filter: &'static TbfHeaderFilterDefaultAllow,
     scheduler: &'static PrioritySched,
@@ -235,6 +253,8 @@ struct EarlGrey {
         VirtualMuxAlarm<'static, earlgrey::timer::RvTimer<'static, ChipConfig>>,
     >,
     watchdog: &'static lowrisc::aon_timer::AonTimer,
+    opentitan_alerthandler: &'static AlertHandlerCapsule,
+    reset_manager: &'static ResetManager<'static, earlgrey::rstmgr::RstMgr>,
 }
 
 /// Mapping of integer syscalls to objects that implement syscalls.
@@ -255,6 +275,12 @@ impl SyscallDriverLookup for EarlGrey {
             capsules_core::rng::DRIVER_NUM => f(Some(self.rng)),
             capsules_extra::symmetric_encryption::aes::DRIVER_NUM => f(Some(self.aes)),
             capsules_extra::kv_driver::DRIVER_NUM => f(Some(self.kv_driver)),
+            //capsules_extra::kv_driver::DRIVER_NUM => f(Some(self.kv_driver)),
+            capsules_extra::pattgen::DRIVER_NUM => f(Some(self.pattgen)),
+            capsules_extra::opentitan_alerthandler::DRIVER_NUM => {
+                f(Some(self.opentitan_alerthandler))
+            }
+            capsules_core::reset_manager::DRIVER_NUM => f(Some(self.reset_manager)),
             capsules_extra::opentitan_sysrst::DRIVER_NUM => f(Some(self.opentitan_sysrst)),
             _ => f(None),
         }
@@ -265,11 +291,9 @@ impl KernelResources<EarlGreyChip> for EarlGrey {
     type SyscallDriverLookup = Self;
     type SyscallFilter = TbfHeaderFilterDefaultAllow;
     type ProcessFault = ();
-    type CredentialsCheckingPolicy = ();
     type Scheduler = PrioritySched;
-    type SchedulerTimer = VirtualSchedulerTimer<
-        VirtualMuxAlarm<'static, earlgrey::timer::RvTimer<'static, ChipConfig>>,
-    >;
+    type SchedulerTimer =
+        VirtualSchedulerTimer<VirtualMuxAlarm<'static, RvTimer<'static, ChipConfig>>>;
     type WatchDog = lowrisc::aon_timer::AonTimer;
     type ContextSwitchCallback = ();
 
@@ -280,9 +304,6 @@ impl KernelResources<EarlGreyChip> for EarlGrey {
         self.syscall_filter
     }
     fn process_fault(&self) -> &Self::ProcessFault {
-        &()
-    }
-    fn credentials_checking_policy(&self) -> &'static Self::CredentialsCheckingPolicy {
         &()
     }
     fn scheduler(&self) -> &Self::Scheduler {
@@ -340,15 +361,15 @@ unsafe fn setup() -> (
     let earlgrey_epmp = earlgrey::epmp::EarlGreyEPMP::new_debug(
         earlgrey::epmp::FlashRegion(
             rv32i::pmp::NAPOTRegionSpec::new(
-                &_sflash as *const u8,                                           // start
-                &_eflash as *const u8 as usize - &_sflash as *const u8 as usize, // size
+                core::ptr::addr_of!(_sflash),
+                core::ptr::addr_of!(_eflash) as usize - core::ptr::addr_of!(_sflash) as usize,
             )
             .unwrap(),
         ),
         earlgrey::epmp::RAMRegion(
             rv32i::pmp::NAPOTRegionSpec::new(
-                &_ssram as *const u8,                                          // start
-                &_esram as *const u8 as usize - &_ssram as *const u8 as usize, // size
+                core::ptr::addr_of!(_ssram),
+                core::ptr::addr_of!(_esram) as usize - core::ptr::addr_of!(_ssram) as usize,
             )
             .unwrap(),
         ),
@@ -361,8 +382,8 @@ unsafe fn setup() -> (
         ),
         earlgrey::epmp::KernelTextRegion(
             rv32i::pmp::TORRegionSpec::new(
-                &_stext as *const u8, // start
-                &_etext as *const u8, // end
+                core::ptr::addr_of!(_stext),
+                core::ptr::addr_of!(_etext),
             )
             .unwrap(),
         ),
@@ -387,13 +408,33 @@ unsafe fn setup() -> (
     let process_mgmt_cap = create_capability!(capabilities::ProcessManagementCapability);
     let memory_allocation_cap = create_capability!(capabilities::MemoryAllocationCapability);
 
-    let board_kernel = static_init!(kernel::Kernel, kernel::Kernel::new(&PROCESSES));
+    let board_kernel = static_init!(kernel::Kernel, kernel::Kernel::new(&*addr_of!(PROCESSES)));
 
     let peripherals = static_init!(
         EarlGreyDefaultPeripherals<ChipConfig, BoardPinmuxLayout>,
         EarlGreyDefaultPeripherals::new()
     );
     peripherals.init();
+
+    // retrieve reset reason
+    // RSTMGR::reset_reason might get cleared by ROM code that runs before Tock and cached in RetentionRAM
+    // if reset_reason in HW peripheral is cleared, attempt to read it from RRAM
+    // TODO replace unsafe fn `get_rr_from_rram()` with RRAM function call when RRAM is ready
+    let reset_reason = peripherals
+        .rst_mgmt
+        .reset_reason()
+        .or(earlgrey::rstmgr::RstMgr::get_rr_from_rram());
+
+    let reset_manager = kernel::static_init!(
+        capsules_core::reset_manager::ResetManager<'static, earlgrey::rstmgr::RstMgr>,
+        ResetManager::new(
+            &peripherals.rst_mgmt,
+            board_kernel.create_grant(
+                capsules_core::reset_manager::DRIVER_NUM,
+                &memory_allocation_cap
+            )
+        )
+    );
 
     // Configure kernel debug gpios as early as possible
     kernel::debug::assign_gpios(
@@ -440,19 +481,15 @@ unsafe fn setup() -> (
         earlgrey::gpio::GpioPin<earlgrey::pinmux::PadConfig>
     ));
 
-    let hardware_alarm = static_init!(
-        earlgrey::timer::RvTimer<ChipConfig>,
-        earlgrey::timer::RvTimer::new()
-    );
-    hardware_alarm.setup();
+    peripherals.timer.setup();
 
     // Create a shared virtualization mux layer on top of a single hardware
     // alarm.
     let mux_alarm = static_init!(
         MuxAlarm<'static, earlgrey::timer::RvTimer<ChipConfig>>,
-        MuxAlarm::new(hardware_alarm)
+        MuxAlarm::new(&peripherals.timer)
     );
-    hil::time::Alarm::set_alarm_client(hardware_alarm, mux_alarm);
+    hil::time::Alarm::set_alarm_client(&peripherals.timer, mux_alarm);
 
     ALARM = Some(mux_alarm);
 
@@ -490,7 +527,7 @@ unsafe fn setup() -> (
 
     let chip = static_init!(
         EarlGreyChip,
-        earlgrey::chip::EarlGrey::new(peripherals, hardware_alarm, earlgrey_epmp)
+        earlgrey::chip::EarlGrey::new(peripherals, earlgrey_epmp)
     );
     CHIP = Some(chip);
 
@@ -573,6 +610,33 @@ unsafe fn setup() -> (
     // )
     // .finalize(components::usb_component_static!(earlgrey::usbdev::Usb));
 
+    // CDC
+    let strings = static_init!(
+        [&str; 3],
+        [
+            "NewAE Technology",             // Manufacturer
+            "ChipWhisperer CW310 - TockOS", // Product
+            "00000000000000000",            // Serial number
+        ]
+    );
+
+    let cdc = components::cdc::CdcAcmComponent::new(
+        &peripherals.usb,
+        capsules_extra::usb::cdc::MAX_CTRL_PACKET_SIZE_EARLGREY,
+        0,
+        0,
+        strings,
+        mux_alarm,
+        None,
+    )
+    .finalize(components::cdc_acm_component_static!(
+        lowrisc::usb::Usb,
+        earlgrey::timer::RvTimer<ChipConfig>,
+    ));
+
+    cdc.enable();
+    cdc.attach();
+
     // Kernel storage region, allocated with the storage_volume!
     // macro in common/utils.rs
     extern "C" {
@@ -581,6 +645,7 @@ unsafe fn setup() -> (
         static _estorage: u8;
     }
 
+    /*
     // Flash setup memory protection for the ROM/Kernel
     // Only allow reads for this region, any other ops will cause an MP fault
     let mp_cfg = FlashMPConfig {
@@ -594,8 +659,8 @@ unsafe fn setup() -> (
 
     // Allocate a flash protection region (associated cfg number: 0), for the code section.
     if let Err(e) = peripherals.flash_ctrl.mp_set_region_perms(
-        &_manifest as *const u8 as usize,
-        &_etext as *const u8 as usize,
+        core::ptr::addr_of!(_manifest) as usize,
+        core::ptr::addr_of!(_etext) as usize,
         0,
         &mp_cfg,
     ) {
@@ -606,7 +671,9 @@ unsafe fn setup() -> (
             debug!("Failed to lock memory protection config: {:?}", e);
         }
     }
+    */
 
+    /*
     // Flash
     let flash_ctrl_read_buf = static_init!(
         [u8; lowrisc::flash_ctrl::PAGE_SIZE],
@@ -731,6 +798,7 @@ unsafe fn setup() -> (
             >,
         >
     ));
+    */
 
     let mux_otbn = crate::otbn::AccelMuxComponent::new(&peripherals.otbn)
         .finalize(otbn_mux_component_static!());
@@ -744,8 +812,8 @@ unsafe fn setup() -> (
         crate::otbn::find_app(
             "otbn-rsa",
             core::slice::from_raw_parts(
-                &_sapps as *const u8,
-                &_eapps as *const u8 as usize - &_sapps as *const u8 as usize,
+                core::ptr::addr_of!(_sapps),
+                core::ptr::addr_of!(_eapps) as usize - core::ptr::addr_of!(_sapps) as usize,
             ),
         )
     {
@@ -770,13 +838,16 @@ unsafe fn setup() -> (
 
     // Convert hardware RNG to the Random interface.
     let entropy_to_random = static_init!(
-        capsules_core::rng::Entropy32ToRandom<'static>,
+        capsules_core::rng::Entropy32ToRandom<'static, lowrisc::csrng::CsRng<'static>>,
         capsules_core::rng::Entropy32ToRandom::new(&peripherals.rng)
     );
     peripherals.rng.set_client(entropy_to_random);
     // Setup RNG for userspace
     let rng = static_init!(
-        capsules_core::rng::RngDriver<'static>,
+        capsules_core::rng::RngDriver<
+            'static,
+            capsules_core::rng::Entropy32ToRandom<'static, lowrisc::csrng::CsRng<'static>>,
+        >,
         capsules_core::rng::RngDriver::new(
             entropy_to_random,
             board_kernel.create_grant(capsules_core::rng::DRIVER_NUM, &memory_allocation_cap)
@@ -834,10 +905,28 @@ unsafe fn setup() -> (
     hil::symmetric_encryption::AES128GCM::set_client(gcm_client, aes);
     hil::symmetric_encryption::AES128::set_client(gcm_client, ccm_client);
 
+    let pattgen = static_init!(
+        capsules_extra::pattgen::PattGen<lowrisc::pattgen::PattGen<'static>>,
+        capsules_extra::pattgen::PattGen::new(
+            &peripherals.pattgen,
+            board_kernel.create_grant(capsules_extra::pattgen::DRIVER_NUM, &memory_allocation_cap)
+        )
+    );
+    peripherals.pattgen.set_client(pattgen);
+
     let syscall_filter = static_init!(TbfHeaderFilterDefaultAllow, TbfHeaderFilterDefaultAllow {});
     let scheduler = components::sched::priority::PriorityComponent::new(board_kernel)
         .finalize(components::priority_component_static!());
     let watchdog = &peripherals.watchdog;
+  
+    let alert_handler_capsule = static_init!(
+        AlertHandlerCapsule,
+        AlertHandlerCapsule::new(board_kernel.create_grant(
+            capsules_extra::opentitan_alerthandler::DRIVER_NUM,
+            &memory_allocation_cap
+        ))
+    );
+    peripherals.alert_handler.set_client(alert_handler_capsule);
 
     let opentitan_sysrst = static_init!(
         SystemReset<'static, SysRstCtrl>,
@@ -849,14 +938,7 @@ unsafe fn setup() -> (
             ),
         )
     );
-
-    /* TESTs */
-
-    #[cfg(feature = "test_sysrst_ctrl")]
-    {
-        test_sysrst_ctrl(peripherals);
-    }
-
+    
     let earlgrey = static_init!(
         EarlGrey,
         EarlGrey {
@@ -870,27 +952,54 @@ unsafe fn setup() -> (
             i2c_master,
             spi_controller,
             aes,
-            kv_driver,
+            //kv_driver,
+            pattgen,
             syscall_filter,
             scheduler,
             scheduler_timer,
             opentitan_sysrst,
             watchdog,
+            reset_manager,
+            opentitan_alerthandler: alert_handler_capsule,
         }
     );
+
+    // Pattern generation tests
+    /*
+    let pattgen_test = static_init!(
+        lowrisc::pattgen::tests::PattGenTest,
+        lowrisc::pattgen::tests::PattGenTest::new(&peripherals.pattgen),
+    );
+    lowrisc::pattgen::tests::run_all(pattgen_test);
+    */
+
+    earlgrey.reset_manager.startup();
+    earlgrey.reset_manager.populate_reset_reason(reset_reason);
+  
+    /* TESTs */
+
+    #[cfg(feature = "test_alerthandler")]
+    {
+        test_alerthandler(peripherals, mux_alarm);
+    }
+  
+    #[cfg(feature = "test_sysrst_ctrl")]
+    {
+        test_sysrst_ctrl(peripherals);
+    }
 
     kernel::process::load_processes(
         board_kernel,
         chip,
         core::slice::from_raw_parts(
-            &_sapps as *const u8,
-            &_eapps as *const u8 as usize - &_sapps as *const u8 as usize,
+            core::ptr::addr_of!(_sapps),
+            core::ptr::addr_of!(_eapps) as usize - core::ptr::addr_of!(_sapps) as usize,
         ),
         core::slice::from_raw_parts_mut(
-            &mut _sappmem as *mut u8,
-            &_eappmem as *const u8 as usize - &_sappmem as *const u8 as usize,
+            core::ptr::addr_of_mut!(_sappmem),
+            core::ptr::addr_of!(_eappmem) as usize - core::ptr::addr_of!(_sappmem) as usize,
         ),
-        &mut PROCESSES,
+        &mut *addr_of_mut!(PROCESSES),
         &FAULT_RESPONSE,
         &process_mgmt_cap,
     )
@@ -903,6 +1012,7 @@ unsafe fn setup() -> (
     (board_kernel, earlgrey, chip, peripherals)
 }
 
+
 #[cfg(feature = "test_sysrst_ctrl")]
 fn test_sysrst_ctrl(peripherals: &EarlGreyDefaultPeripherals<ChipConfig, BoardPinmuxLayout>) {
     pinmux_layout::prepare_wiring_sysrst_ctrl_tests();
@@ -912,6 +1022,31 @@ fn test_sysrst_ctrl(peripherals: &EarlGreyDefaultPeripherals<ChipConfig, BoardPi
         &peripherals.gpio_port[2],
         &peripherals.gpio_port[20],
     );
+
+#[cfg(feature = "test_alerthandler")]
+unsafe fn test_alerthandler(
+    peripherals: &'static EarlGreyDefaultPeripherals<ChipConfig, BoardPinmuxLayout>,
+    mux_alarm: &'static MuxAlarm<'static, RvTimer<ChipConfig>>,
+) {
+    // an Alarm is needed for some of the tests as alert handling works using interrupts
+    let virtual_alarm_tests = static_init!(
+        VirtualMuxAlarm<'static, earlgrey::timer::RvTimer<ChipConfig>>,
+        VirtualMuxAlarm::new(mux_alarm)
+    );
+    virtual_alarm_tests.setup();
+
+    let alert_handler_tests = static_init!(
+        alert_handler::tests::Tests<VirtualMuxAlarm<'static, RvTimer<ChipConfig>>>,
+        alert_handler::tests::Tests::new(
+            &peripherals.alert_handler,
+            virtual_alarm_tests,
+            &peripherals.uart0
+        )
+    );
+
+    hil::time::Alarm::set_alarm_client(virtual_alarm_tests, alert_handler_tests);
+
+    alert_handler_tests.run_tests();
 }
 
 /// Main function.

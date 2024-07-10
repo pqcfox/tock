@@ -110,9 +110,17 @@ pub trait RxClient {
     /// - `header`: A fully-parsed representation of the MAC header, with the
     /// caveat that the auxiliary security header is still included if the frame
     /// was previously secured.
+    /// - `lqi`: The link quality indicator of the received frame.
     /// - `data_offset`: Offset of the data payload relative to
     /// `buf`, so that the payload of the frame is contained in
     /// `buf[data_offset..data_offset + data_len]`.
     /// - `data_len`: Length of the data payload
-    fn receive<'a>(&self, buf: &'a [u8], header: Header<'a>, data_offset: usize, data_len: usize);
+    fn receive<'a>(
+        &self,
+        buf: &'a [u8],
+        header: Header<'a>,
+        lqi: u8,
+        data_offset: usize,
+        data_len: usize,
+    );
 }

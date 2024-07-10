@@ -9,7 +9,7 @@
 //!
 //! Right now, the stack looks like this:
 //!
-//! ```
+//! ```text
 //!                  Client
 //!                  |   ^
 //!             |-----   |
@@ -178,7 +178,7 @@ impl<'a, 'b, U: hil::usb::UsbController<'a>> ClientCtrl<'a, 'b, U> {
         self.controller
             .enable_as_device(hil::usb::DeviceSpeed::Full); // must be Full for Bulk transfers
         self.controller
-            .endpoint_out_enable(TransferType::Control, 0);
+            .endpoint_in_out_enable(TransferType::Control, 0);
     }
 
     pub fn attach(&'a self) {

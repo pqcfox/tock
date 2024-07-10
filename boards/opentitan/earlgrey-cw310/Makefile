@@ -18,24 +18,7 @@ QEMU_ENTRY_POINT=0x20000400
 # Earlgrey chip.
 OPENTITAN_SUPPORTED_SHA := edf5e35f5d50a5377641c90a315109a351de7635
 # Disable virtual function elimination
-#VFUNC_ELIM=0
-
-# Enable LTO (for this board, for debug build too)
-# Can't build debug profile with VFUNC_ELIM=1. Without LTO the code doesn't fit in ROM space
-# By overwriting RUSTC_FLAGS here, Makefile.common will not add some flags (link-args..symbol-mangling-version)
-RUSTC_FLAGS = \
-  -C link-arg=-Tlayout.ld \
-  -C linker=rust-lld \
-  -C linker-flavor=ld.lld \
-  -C relocation-model=static \
-  -C link-arg=-nmagic \
-  -C link-arg=-icf=all \
-  -C symbol-mangling-version=v0 \
-  -C lto \
-  -C embed-bitcode=yes \
-
-
-REMOTE_SERV=192.168.88.82
+VFUNC_ELIM=1
 
 
 include ../../Makefile.common
