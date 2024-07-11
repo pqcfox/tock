@@ -33,7 +33,7 @@ use kernel::hil::i2c::I2CMaster;
 use kernel::hil::led::LedHigh;
 use kernel::hil::rng::Rng;
 use kernel::hil::symmetric_encryption::AES128;
-use kernel::hil::usb::Client;
+use kernel::hil::usb::UsbController;
 use kernel::platform::scheduler_timer::VirtualSchedulerTimer;
 use kernel::platform::{KernelResources, SyscallDriverLookup, TbfHeaderFilterDefaultAllow};
 use kernel::scheduler::priority::PrioritySched;
@@ -234,7 +234,7 @@ struct EarlGrey {
         >,
     >,
     */
-    usb: &'static capsules_extra::usb::usb_user2::UsbSyscallDriver,
+    usb: &'static capsules_extra::usb::usb_user2::UsbSyscallDriver<'static, lowrisc::usb::Usb<'static>>,
     syscall_filter: &'static TbfHeaderFilterDefaultAllow,
     scheduler: &'static PrioritySched,
     scheduler_timer: &'static VirtualSchedulerTimer<
@@ -587,9 +587,19 @@ unsafe fn setup() -> (
     usb_client.attach();
     */
 
+    let usb_client = static_init!(
+        capsules_extra::usb::usb_user2::UsbClient<'static, lowrisc::usb::Usb>,
+        capsules_extra::usb::usb_user2::UsbClient::new(
+            &peripherals.usb
+        )
+    );
+
+    peripherals.usb.set_client(usb_client);
+
     let usb = static_init!(
-        capsules_extra::usb::usb_user2::UsbSyscallDriver,
+        capsules_extra::usb::usb_user2::UsbSyscallDriver<'static, lowrisc::usb::Usb>,
         capsules_extra::usb::usb_user2::UsbSyscallDriver::new(
+            usb_client,
             board_kernel.create_grant(
                 capsules_extra::usb::usb_user2::DRIVER_NUM,
                 &memory_allocation_cap
