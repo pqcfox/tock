@@ -19,7 +19,12 @@ use kernel::ErrorCode;
 use kernel::ProcessId;
 use kernel::grant::{Grant, AllowRoCount, AllowRwCount, UpcallCount};
 use kernel::hil::usb::{self, Client};
+use kernel::process;
+use kernel::processbuffer::{ReadOnlyProcessBufferRef, ReadableProcessBuffer};
 use kernel::syscall::{CommandReturn, SyscallDriver};
+use kernel::utilities::cells::VolatileCell;
+
+use core::cell::Cell;
 
 pub const DRIVER_NUM: usize = capsules_core::driver::NUM::UsbUser2 as usize;
 
@@ -29,7 +34,21 @@ pub struct AppData {
 }
 
 const UPCALL_COUNT: u8 = 2;
+
+#[repr(usize)]
+enum ReadOnlyBuffer {
+    Transmit = 0,
+}
+
+impl ReadOnlyBuffer {
+    const fn to_usize(self) -> usize {
+        // CAST: ReadOnlyBuffer is marked repr(usize)
+        self as usize
+    }
+}
+
 const ALLOW_RO_COUNT: u8 = 1;
+
 const ALLOW_RW_COUNT: u8 = 1;
 
 type UsbGrant = Grant<
@@ -53,11 +72,13 @@ static STRINGS: &[&str] = &[
 ];
 
 const BULK_IN_ENDPOINT: usize = 1;
-const BULK_OUT_ENDPOINT: usize = 1;
+const BULK_OUT_ENDPOINT: usize = 2;
 
 pub struct UsbClient<'a, Usb: usb::UsbController<'a>> {
     usb: &'a Usb,
     usb_ctrl: ClientCtrl<'a, 'static, Usb>,
+    // TODO: Remove hard constant
+    transmit_chunk: [VolatileCell<u8>; 64],
 }
 
 impl<'a, Usb: usb::UsbController<'a>> UsbClient<'a, Usb> {
@@ -76,13 +97,15 @@ impl<'a, Usb: usb::UsbController<'a>> UsbClient<'a, Usb> {
             EndpointDescriptor {
                 endpoint_address: EndpointAddress::new_const(BULK_IN_ENDPOINT, TransferDirection::DeviceToHost),
                 transfer_type: usb::TransferType::Bulk,
-                max_packet_size: 8,
+                // TODO: Remove hard constant
+                max_packet_size: 64,
                 interval: 0,
             },
             EndpointDescriptor {
                 endpoint_address: EndpointAddress::new_const(BULK_OUT_ENDPOINT, TransferDirection::HostToDevice),
                 transfer_type: usb::TransferType::Bulk,
-                max_packet_size: 8,
+                // TODO: Remove hard constant
+                max_packet_size: 64,
                 interval: 0,
             },
         ]];
@@ -95,6 +118,7 @@ impl<'a, Usb: usb::UsbController<'a>> UsbClient<'a, Usb> {
                     manufacturer_string: 1,
                     product_string: 2,
                     serial_number_string: 3,
+                    // TODO: Remove hard constant
                     max_packet_size_ep0: 64,
                     ..DeviceDescriptor::default()
                 },
@@ -104,6 +128,8 @@ impl<'a, Usb: usb::UsbController<'a>> UsbClient<'a, Usb> {
                 None,
                 None,
             );
+
+        const DEFAULT_VOLATILE_CELL: VolatileCell<u8> = VolatileCell::new(0);
 
         Self {
             usb,
@@ -116,6 +142,25 @@ impl<'a, Usb: usb::UsbController<'a>> UsbClient<'a, Usb> {
                 LANGUAGES,
                 STRINGS,
             ),
+            // TODO: Remove hard coded value
+            transmit_chunk: [DEFAULT_VOLATILE_CELL; 64]
+        }
+    }
+
+    pub fn transmit_chunk(
+        &self,
+        buffer: ReadOnlyProcessBufferRef,
+        start: usize,
+        end: usize,
+    ) -> Result<(), process::Error> {
+        match buffer.enter(|buffer| {
+            for (index, byte) in buffer[start..end].iter().enumerate() {
+                self.transmit_chunk[index].set(byte.get());
+            }
+            self.usb.endpoint_resume_in(BULK_IN_ENDPOINT).unwrap();
+        }) {
+            Ok(_) => Ok(()),
+            Err(_) => Err(process::Error::KernelError)
         }
     }
 }
@@ -126,6 +171,9 @@ pub struct UsbSyscallDriver<
 > {
     usb_client: &'a UsbClient<'a, Usb>,
     grant: UsbGrant,
+    current_owner: Cell<Option<ProcessId>>,
+    transmit_length: Cell<usize>,
+    transmit_position: Cell<usize>,
 }
 
 impl<'a, Usb: usb::UsbController<'a>> UsbSyscallDriver<'a, Usb> {
@@ -133,6 +181,9 @@ impl<'a, Usb: usb::UsbController<'a>> UsbSyscallDriver<'a, Usb> {
         Self {
             usb_client,
             grant,
+            current_owner: Cell::new(None),
+            transmit_length: Cell::new(0),
+            transmit_position: Cell::new(0),
         }
     }
 
@@ -145,12 +196,70 @@ impl<'a, Usb: usb::UsbController<'a>> UsbSyscallDriver<'a, Usb> {
         self.usb_client.attach();
         CommandReturn::success()
     }
+
+    fn is_busy(&self) -> bool {
+        match self.current_owner.get() {
+            None => false,
+            Some(process_id) => Err(process::Error::NoSuchApp) == self.grant.enter(process_id, |_, _| {}),
+        }
+    }
+
+    fn update_owner(&self, owner: ProcessId) {
+        self.current_owner.set(Some(owner));
+    }
+
+    fn get_owner_panic(&self) -> ProcessId {
+        self.current_owner.get().unwrap()
+    }
+
+    fn transmit_chunk(&self) -> Result<(), ()> {
+        let owner = self.get_owner_panic();
+
+        self.grant.enter(owner, |_, kernel_data| {
+            kernel_data.get_readonly_processbuffer(ReadOnlyBuffer::Transmit.to_usize()).and_then(|buffer| {
+                let start = self.transmit_position.get();
+                let transmit_length = self.transmit_length.get();
+                // TODO: Remove hard coded value
+                let end = core::cmp::min(start + 64, transmit_length);
+                self.transmit_position.set(end);
+                self.usb_client.transmit_chunk(buffer, start, end)
+            })
+        }).map(|result: Result<(), process::Error>| result.map_err(|_| ())).unwrap_or(Err(()))
+    }
+
+    fn transmit_command(&self, process_id: ProcessId) -> CommandReturn {
+        if self.is_busy() {
+            return CommandReturn::failure(ErrorCode::BUSY);
+        }
+
+        let length = self.grant.enter(process_id, |_, kernel_data| {
+            match kernel_data.get_readonly_processbuffer(ReadOnlyBuffer::Transmit.to_usize()) {
+                Ok(buffer) => buffer.len(),
+                Err(_) => 0,
+            }
+        }).unwrap_or(0);
+
+        if length == 0 {
+            return CommandReturn::failure(ErrorCode::NOMEM);
+        }
+
+        self.update_owner(process_id);
+        self.transmit_position.set(0);
+        self.transmit_length.set(length);
+
+        if let Err(()) = self.transmit_chunk() {
+            return CommandReturn::failure(ErrorCode::FAIL);
+        }
+
+        CommandReturn::success()
+    }
 }
 
 enum Command {
     DriverExists = 0,
     Enable = 1,
     Attach = 2,
+    Transmit = 3,
 }
 
 impl Command {
@@ -158,10 +267,12 @@ impl Command {
         const DRIVER_EXISTS_NUMBER: usize = Command::DriverExists as usize;
         const ENABLE_NUMBER: usize = Command::Enable as usize;
         const ATTACH_NUMBER: usize = Command::Attach as usize;
+        const TRANSMIT_NUMBER: usize = Command::Transmit as usize;
         match command_number {
             DRIVER_EXISTS_NUMBER => Ok(Command::DriverExists),
             ENABLE_NUMBER => Ok(Command::Enable),
             ATTACH_NUMBER => Ok(Command::Attach),
+            TRANSMIT_NUMBER => Ok(Command::Transmit),
             _ => Err(()),
         }
     }
@@ -173,6 +284,7 @@ impl<'a, Usb: usb::UsbController<'a>> usb::Client<'a> for UsbClient<'a, Usb> {
 
         // IN endpoint
         self.usb.endpoint_in_enable(usb::TransferType::Bulk, BULK_IN_ENDPOINT).unwrap();
+        self.usb.endpoint_set_in_buffer(BULK_IN_ENDPOINT, &self.transmit_chunk).unwrap();
 
         // OUT endpoint
         self.usb.endpoint_out_enable(usb::TransferType::Bulk, BULK_OUT_ENDPOINT).unwrap();
@@ -226,8 +338,12 @@ impl<'a, Usb: usb::UsbController<'a>> usb::Client<'a> for UsbClient<'a, Usb> {
         self.usb_ctrl.ctrl_status_complete(endpoint)
     }
 
-    fn packet_in(&'a self, _transfer_type: usb::TransferType, _endpoint: usize) -> usb::InResult {
-        todo!();
+    fn packet_in(&'a self, _transfer_type: usb::TransferType, endpoint: usize) -> usb::InResult {
+        match endpoint {
+            // TODO: Remove hard coded value
+            BULK_IN_ENDPOINT => usb::InResult::Packet(64),
+            _ => usb::InResult::Delay,
+        }
     }
 
     fn packet_out(
@@ -239,7 +355,7 @@ impl<'a, Usb: usb::UsbController<'a>> usb::Client<'a> for UsbClient<'a, Usb> {
         todo!();
     }
 
-    fn packet_transmitted(&'a self, _endpoint: usize, _result: Result<(), ()>) {
+    fn packet_transmitted(&'a self, endpoint: usize, _result: Result<(), ()>) {
         todo!();
     }
 }
@@ -250,7 +366,7 @@ impl<'a, Usb: usb::UsbController<'a>> SyscallDriver for UsbSyscallDriver<'a, Usb
         command_number: usize,
         _argument1: usize,
         _argument2: usize,
-        _process_id: ProcessId
+        process_id: ProcessId
     ) -> CommandReturn {
         let command = match Command::new(command_number) {
             Ok(command) => command,
@@ -261,6 +377,7 @@ impl<'a, Usb: usb::UsbController<'a>> SyscallDriver for UsbSyscallDriver<'a, Usb
             Command::DriverExists => CommandReturn::success(),
             Command::Enable => self.enable_command(),
             Command::Attach => self.attach_command(),
+            Command::Transmit => self.transmit_command(process_id),
         }
     }
 
