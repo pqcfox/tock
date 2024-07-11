@@ -22,7 +22,7 @@ use kernel::hil::usb::{self, Client};
 use kernel::process;
 use kernel::processbuffer::{ReadOnlyProcessBufferRef, ReadableProcessBuffer};
 use kernel::syscall::{CommandReturn, SyscallDriver};
-use kernel::utilities::cells::VolatileCell;
+use kernel::utilities::cells::{OptionalCell, VolatileCell};
 
 use core::cell::Cell;
 
@@ -33,23 +33,35 @@ pub struct AppData {
 
 }
 
-const UPCALL_COUNT: u8 = 2;
+const UPCALL_COUNT: u8 = 1;
 
 #[repr(usize)]
-enum ReadOnlyBuffer {
+enum UpcallId {
     Transmit = 0,
 }
 
-impl ReadOnlyBuffer {
+impl UpcallId {
     const fn to_usize(self) -> usize {
-        // CAST: ReadOnlyBuffer is marked repr(usize)
+        // CAST: UpcallId is marked repr(usize)
+        self as usize
+    }
+}
+
+#[repr(usize)]
+enum ReadOnlyBufferId {
+    Transmit = 0,
+}
+
+impl ReadOnlyBufferId {
+    const fn to_usize(self) -> usize {
+        // CAST: ReadOnlyBufferId is marked repr(usize)
         self as usize
     }
 }
 
 const ALLOW_RO_COUNT: u8 = 1;
 
-const ALLOW_RW_COUNT: u8 = 1;
+const ALLOW_RW_COUNT: u8 = 0;
 
 type UsbGrant = Grant<
     AppData,
@@ -77,8 +89,10 @@ const BULK_OUT_ENDPOINT: usize = 2;
 pub struct UsbClient<'a, Usb: usb::UsbController<'a>> {
     usb: &'a Usb,
     usb_ctrl: ClientCtrl<'a, 'static, Usb>,
+    usb_syscall_driver: OptionalCell<&'a UsbSyscallDriver<'a, Usb>>,
     // TODO: Remove hard constant
     transmit_chunk: [VolatileCell<u8>; 64],
+    transmit_length: Cell<usize>,
 }
 
 impl<'a, Usb: usb::UsbController<'a>> UsbClient<'a, Usb> {
@@ -142,9 +156,15 @@ impl<'a, Usb: usb::UsbController<'a>> UsbClient<'a, Usb> {
                 LANGUAGES,
                 STRINGS,
             ),
+            usb_syscall_driver: OptionalCell::empty(),
             // TODO: Remove hard coded value
-            transmit_chunk: [DEFAULT_VOLATILE_CELL; 64]
+            transmit_chunk: [DEFAULT_VOLATILE_CELL; 64],
+            transmit_length: Cell::new(0),
         }
+    }
+
+    fn set_usb_syscall_driver(&self, usb_syscall_driver: &'a UsbSyscallDriver<'a, Usb>) {
+        self.usb_syscall_driver.set(usb_syscall_driver);
     }
 
     pub fn transmit_chunk(
@@ -157,6 +177,7 @@ impl<'a, Usb: usb::UsbController<'a>> UsbClient<'a, Usb> {
             for (index, byte) in buffer[start..end].iter().enumerate() {
                 self.transmit_chunk[index].set(byte.get());
             }
+            self.transmit_length.set(end - start);
             self.usb.endpoint_resume_in(BULK_IN_ENDPOINT).unwrap();
         }) {
             Ok(_) => Ok(()),
@@ -185,6 +206,10 @@ impl<'a, Usb: usb::UsbController<'a>> UsbSyscallDriver<'a, Usb> {
             transmit_length: Cell::new(0),
             transmit_position: Cell::new(0),
         }
+    }
+
+    pub fn init(&'a self) {
+        self.usb_client.set_usb_syscall_driver(self);
     }
 
     fn enable_command(&self) -> CommandReturn {
@@ -216,15 +241,34 @@ impl<'a, Usb: usb::UsbController<'a>> UsbSyscallDriver<'a, Usb> {
         let owner = self.get_owner_panic();
 
         self.grant.enter(owner, |_, kernel_data| {
-            kernel_data.get_readonly_processbuffer(ReadOnlyBuffer::Transmit.to_usize()).and_then(|buffer| {
+            kernel_data.get_readonly_processbuffer(ReadOnlyBufferId::Transmit.to_usize()).and_then(|buffer| {
                 let start = self.transmit_position.get();
                 let transmit_length = self.transmit_length.get();
-                // TODO: Remove hard coded value
-                let end = core::cmp::min(start + 64, transmit_length);
-                self.transmit_position.set(end);
-                self.usb_client.transmit_chunk(buffer, start, end)
+                if transmit_length == start {
+                    // The capsule can't do anything if the upcall fails to be scheduled, so the
+                    // result is ignored.
+                    let _ = kernel_data.schedule_upcall(UpcallId::Transmit.to_usize(), (transmit_length, 0, 0));
+
+                    Ok(())
+                } else {
+                    // TODO: Remove hard coded value
+                    let end = core::cmp::min(start + 64, transmit_length);
+                    self.transmit_position.set(end);
+                    self.usb_client.transmit_chunk(buffer, start, end)
+                }
             })
         }).map(|result: Result<(), process::Error>| result.map_err(|_| ())).unwrap_or(Err(()))
+    }
+
+    fn transmit_failed(&self) {
+        let owner = self.get_owner_panic();
+
+        self.grant.enter(owner, |_, kernel_data| {
+            let transmit_length = self.transmit_length.get();
+            // The capsule can't do anything if the upcall fails to be scheduled, so the
+            // result is ignored.
+            let _ = kernel_data.schedule_upcall(UpcallId::Transmit.to_usize(), (transmit_length, 0, 0));
+        }).unwrap();
     }
 
     fn transmit_command(&self, process_id: ProcessId) -> CommandReturn {
@@ -233,7 +277,7 @@ impl<'a, Usb: usb::UsbController<'a>> UsbSyscallDriver<'a, Usb> {
         }
 
         let length = self.grant.enter(process_id, |_, kernel_data| {
-            match kernel_data.get_readonly_processbuffer(ReadOnlyBuffer::Transmit.to_usize()) {
+            match kernel_data.get_readonly_processbuffer(ReadOnlyBufferId::Transmit.to_usize()) {
                 Ok(buffer) => buffer.len(),
                 Err(_) => 0,
             }
@@ -340,8 +384,11 @@ impl<'a, Usb: usb::UsbController<'a>> usb::Client<'a> for UsbClient<'a, Usb> {
 
     fn packet_in(&'a self, _transfer_type: usb::TransferType, endpoint: usize) -> usb::InResult {
         match endpoint {
-            // TODO: Remove hard coded value
-            BULK_IN_ENDPOINT => usb::InResult::Packet(64),
+            BULK_IN_ENDPOINT => {
+                let transmit_length = self.transmit_length.get();
+                self.transmit_length.set(0);
+                usb::InResult::Packet(transmit_length)
+            }
             _ => usb::InResult::Delay,
         }
     }
@@ -355,8 +402,20 @@ impl<'a, Usb: usb::UsbController<'a>> usb::Client<'a> for UsbClient<'a, Usb> {
         todo!();
     }
 
-    fn packet_transmitted(&'a self, endpoint: usize, _result: Result<(), ()>) {
-        todo!();
+    fn packet_transmitted(&'a self, endpoint: usize, result: Result<(), ()>) {
+        self.usb_syscall_driver.map(|usb_syscall_driver| {
+            match result {
+                Err(()) => usb_syscall_driver.transmit_failed(),
+                Ok(()) => match endpoint {
+                    BULK_IN_ENDPOINT => {
+                        // The process may have terminated before the transmit ended. In this case,
+                        // the capsule can't do anything about it, so the result is simply ignored.
+                        let _ = usb_syscall_driver.transmit_chunk();
+                    }
+                    _ => unreachable!(),
+                }
+            }
+        });
     }
 }
 
