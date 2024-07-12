@@ -24,6 +24,18 @@ impl TestRunner {
         self.execution_id = id;
     }
 
+    pub fn assert(&mut self, test_info: &str, test: bool) -> bool {
+        self.execution_id += 1;
+        if test {
+            // Keep test success silent, we don't want to fill the buffer if everything is OK!
+            self.is_test_failed = true;
+            true
+        } else {
+            debug!("*   Test No. {} Failed! : {}", self.execution_id, test_info);
+            false
+        }
+    }
+
     /// Assert that takes a function as an argument. The return of the function tells us if the test passed or not.
     /// The test_info tells us the test text.
     ///

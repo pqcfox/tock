@@ -48,7 +48,7 @@ impl SramCtrl {
     }
     /// This function _forces_ the reinitialization of the init. Normally,this should not be necessary, but
     /// in case it is, we copy the rram data, we init and then restore the rram data.
-    pub fn forced_safe_init(&self) -> Result<(), ErrorCode> {
+    pub fn forced_safe_init(&mut self) -> Result<(), ErrorCode> {
         unsafe {
             let ram_creator_backup = RET_RAM_CREATOR;
             let ram_owner_backup = RET_RAM_OWNER;
@@ -67,7 +67,7 @@ impl SramCtrl {
     /// This WILL delete all ret sram data.
     ///
     /// The return is a Result<(), ErrorCode> because it can fail depending on the regwen state.
-    pub fn reinit_ram(&self) -> Result<(), ErrorCode> {
+    pub fn reinit_ram(&mut self) -> Result<(), ErrorCode> {
         if self.is_locked_ctrl() {
             return Err(ErrorCode::FAIL);
         }
@@ -94,6 +94,7 @@ impl SramCtrl {
         {
             // Wait for the key to be valid before proceeding
         }
+        self.cached_state = self.get_state();
         Ok(())
     }
 
@@ -212,7 +213,7 @@ impl SramCtrl {
     }
 
     /// Test function. It runs on target self-test, returns if the test suite failed or passed.
-    pub fn test(&self) -> bool {
+    pub fn test(&mut self) -> bool {
         let mut test_runner = target_test::TestRunner::new();
         debug!("Starting sram_ret self-test");
         match self.get_creator_rram_data(1) {
@@ -296,11 +297,12 @@ impl SramCtrl {
                     self.set_owner_rram_data(10, 0x5A);
                     self.get_owner_rram_data(10).unwrap() == 0x5A
                 });
-                test_runner.assert_function("Test forced Safe Init!", || {
+                test_runner.assert(
+                    "Test forced Safe Init!",
                     self.forced_safe_init() == Ok(())
                         && (self.get_state() == DrvState::InitializedScrambled)
-                        && (self.get_owner_rram_data(10).unwrap() == 0x5A)
-                });
+                        && (self.get_owner_rram_data(10).unwrap() == 0x5A),
+                );
                 test_runner.assert_function("Test rram data survived!", || {
                     self.get_owner_rram_data(10).unwrap() == 0x5A
                 });
@@ -313,9 +315,10 @@ impl SramCtrl {
                             .read(sram_ctrl_regs::CTRL_REGWEN::CTRL_REGWEN)
                             == 0x0)
                 });
-                test_runner.assert_function("Test fail Safe Init because we're locked", || {
-                    self.forced_safe_init() == Err(ErrorCode::FAIL)
-                });
+                test_runner.assert(
+                    "Test fail Safe Init because we're locked",
+                    self.forced_safe_init() == Err(ErrorCode::FAIL),
+                );
                 test_runner.assert_function("Test rram data setters ID 10 before reset!", || {
                     self.set_owner_rram_data(10, 0x5A);
                     self.get_owner_rram_data(10).unwrap() == 0x5A
