@@ -30,6 +30,7 @@ const MULTI_BIT_BOOL_4FALSE: u32 = 0x9;
 
 pub struct SramCtrl {
     registers: StaticRef<SramCtrlRegisters>,
+    cached_state: DrvState,
 }
 
 pub const SRAM_RET_BASE: StaticRef<SramCtrlRegisters> =
@@ -38,9 +39,12 @@ pub const SRAM_RET_BASE: StaticRef<SramCtrlRegisters> =
 impl SramCtrl {
     pub fn new() -> Self {
         // Initialize the SRAM controller
-        Self {
+        let mut local_self = Self {
             registers: SRAM_RET_BASE,
-        }
+            cached_state: DrvState::Uninitialized,
+        };
+        local_self.cached_state = local_self.get_state();
+        local_self
     }
     /// This function _forces_ the reinitialization of the init. Normally,this should not be necessary, but
     /// in case it is, we copy the rram data, we init and then restore the rram data.
@@ -54,7 +58,7 @@ impl SramCtrl {
                     RET_RAM_OWNER = ram_owner_backup;
                     Ok(())
                 }
-                _ => Err(ErrorCode::FAIL),
+                _ => Err(ErrorCode::OFF),
             }
         }
     }
@@ -94,18 +98,46 @@ impl SramCtrl {
     }
 
     /// Interface to read rram data from the creator area. Addressed through ID's and returning u32 data.
-    pub fn get_creator_rram_data(&self, id: usize) -> u32 {
-        unsafe { RET_RAM_CREATOR[id] }
+    pub fn get_creator_rram_data(&self, id: usize) -> Result<u32, ErrorCode> {
+        // Only attempt memory accesses if we have our cached state confirmed to be initialized.
+        match self.cached_state {
+            DrvState::InitializedScrambled | DrvState::InitializedScrambledDefault => unsafe {
+                if id <= RET_RAM_OWNER.len() {
+                    Ok(RET_RAM_CREATOR[id])
+                } else {
+                    Err(ErrorCode::SIZE)
+                }
+            },
+            _ => Err(ErrorCode::FAIL),
+        }
     }
     /// Interface to read rram data from the owner area. Addressed through ID's and returning u32 data.
-    pub fn get_owner_rram_data(&self, id: usize) -> u32 {
-        unsafe { RET_RAM_OWNER[id] }
+    pub fn get_owner_rram_data(&self, id: usize) -> Result<u32, ErrorCode> {
+        // Only attempt read memory accesses if we have our cached state confirmed to be initialized.
+        match self.cached_state {
+            DrvState::InitializedScrambled | DrvState::InitializedScrambledDefault => unsafe {
+                if id <= RET_RAM_OWNER.len() {
+                    Ok(RET_RAM_OWNER[id])
+                } else {
+                    Err(ErrorCode::SIZE)
+                }
+            },
+            _ => Err(ErrorCode::FAIL),
+        }
     }
 
     /// Interface to read rram data from the owner area. Addressed through ID's and returning u32 data.
-    pub fn set_owner_rram_data(&self, id: usize, val: u32) {
-        unsafe {
-            RET_RAM_OWNER[id] = val;
+    pub fn set_owner_rram_data(&self, id: usize, val: u32) -> Result<(), ErrorCode> {
+        match self.cached_state {
+            DrvState::InitializedScrambled | DrvState::InitializedScrambledDefault => unsafe {
+                if id <= RET_RAM_OWNER.len() {
+                    RET_RAM_OWNER[id] = val;
+                    Ok(())
+                } else {
+                    Err(ErrorCode::SIZE)
+                }
+            },
+            _ => Err(ErrorCode::FAIL),
         }
     }
 
@@ -183,15 +215,36 @@ impl SramCtrl {
     pub fn test(&self) -> bool {
         let mut test_runner = target_test::TestRunner::new();
         debug!("Starting sram_ret self-test");
-        debug!("Reset reason from API is {}", self.get_creator_rram_data(1));
-
-        if (self.get_creator_rram_data(1) == 1) || (self.get_owner_rram_data(5) > 100) {
-            self.set_owner_rram_data(5, 0);
-            debug!("Force reset test cycles");
+        match self.get_creator_rram_data(1) {
+            Ok(x) => debug!("Reset reason from API is {}", x),
+            _ => debug!("Wrong init state, can't read reset reason yet! "),
         }
-        let test_cycle = self.get_owner_rram_data(5);
-        debug!("Reset Count is {}", test_cycle);
-        self.set_owner_rram_data(5, test_cycle + 1);
+
+        let mut test_cycle: u32;
+        let mut boot_from_rom_ext: bool;
+        match self.get_state() {
+            DrvState::InitializedScrambled | DrvState::InitializedScrambledDefault => {
+                if (self.get_creator_rram_data(1).unwrap() == 1)
+                    || (self.get_owner_rram_data(5).unwrap() > 100)
+                {
+                    self.set_owner_rram_data(5, 0);
+                    test_cycle = 0;
+                    debug!("Force reset test cycles");
+                } else {
+                    test_cycle = self.get_owner_rram_data(5).unwrap();
+                    debug!("Reset Count is {}", test_cycle);
+
+                    self.set_owner_rram_data(5, test_cycle + 1);
+                }
+                boot_from_rom_ext = true;
+            }
+            _ => {
+                test_cycle = 0;
+                debug!("Driver is not initialized, we're probably coming in from test ROM");
+                boot_from_rom_ext = false;
+            }
+        }
+
         match test_cycle {
             0 => {
                 test_runner.assert_function("Test init status!", || {
@@ -237,19 +290,19 @@ impl SramCtrl {
                 });
                 test_runner.assert_function("Test setter for rram id's!", || {
                     self.set_owner_rram_data(10, 0xFF);
-                    self.get_owner_rram_data(10) == 0xFF
+                    self.get_owner_rram_data(10).unwrap() == 0xFF
                 });
                 test_runner.assert_function("Test 2nd setter for rram id's!", || {
                     self.set_owner_rram_data(10, 0x5A);
-                    self.get_owner_rram_data(10) == 0x5A
+                    self.get_owner_rram_data(10).unwrap() == 0x5A
                 });
                 test_runner.assert_function("Test forced Safe Init!", || {
                     self.forced_safe_init() == Ok(())
                         && (self.get_state() == DrvState::InitializedScrambled)
-                        && (self.get_owner_rram_data(10) == 0x5A)
+                        && (self.get_owner_rram_data(10).unwrap() == 0x5A)
                 });
                 test_runner.assert_function("Test rram data survived!", || {
-                    self.get_owner_rram_data(10) == 0x5A
+                    self.get_owner_rram_data(10).unwrap() == 0x5A
                 });
                 test_runner.assert_function("Test lock execution!", || {
                     self.lock_ctrl();
@@ -265,26 +318,26 @@ impl SramCtrl {
                 });
                 test_runner.assert_function("Test rram data setters ID 10 before reset!", || {
                     self.set_owner_rram_data(10, 0x5A);
-                    self.get_owner_rram_data(10) == 0x5A
+                    self.get_owner_rram_data(10).unwrap() == 0x5A
                 });
                 test_runner.assert_function("Test rram data setters ID 11 before reset!", || {
                     self.set_owner_rram_data(11, 0xFEEDBEEF);
-                    self.get_owner_rram_data(11) == 0xFEEDBEEF
+                    self.get_owner_rram_data(11).unwrap() == 0xFEEDBEEF
                 });
                 test_runner.assert_function("Test rram data setters ID 12 before reset!", || {
                     self.set_owner_rram_data(12, 0x5A5A5A5A);
-                    self.get_owner_rram_data(12) == 0x5A5A5A5A
+                    self.get_owner_rram_data(12).unwrap() == 0x5A5A5A5A
                 });
             }
             1 => {
                 test_runner.assert_function("Test rram data ID 10 survived!", || {
-                    self.get_owner_rram_data(10) == 0x5A
+                    self.get_owner_rram_data(10).unwrap() == 0x5A
                 });
                 test_runner.assert_function("Test rram data ID 11 survived!", || {
-                    self.get_owner_rram_data(10) == 0xFEEDBEEF
+                    self.get_owner_rram_data(10).unwrap() == 0xFEEDBEEF
                 });
                 test_runner.assert_function("Test rram data ID 12 survived!", || {
-                    self.get_owner_rram_data(10) == 0x5A5A5A5A
+                    self.get_owner_rram_data(10).unwrap() == 0x5A5A5A5A
                 });
             }
             _ => {}
