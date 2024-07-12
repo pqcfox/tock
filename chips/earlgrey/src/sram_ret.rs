@@ -18,11 +18,11 @@ pub enum DrvState {
 }
 
 #[used]
-#[link_section = ".rram_rom"]
+#[link_section = ".rram_creator"]
 static mut RET_RAM_CREATOR: [u32; 512] = [0; 512];
 
 #[used]
-#[link_section = ".rram"]
+#[link_section = ".rram_owner"]
 static mut RET_RAM_OWNER: [u32; 512] = [0; 512];
 
 const MULTI_BIT_BOOL_4TRUE: u32 = 0x6;
@@ -32,14 +32,14 @@ pub struct SramCtrl {
     registers: StaticRef<SramCtrlRegisters>,
 }
 
-pub const SRAM_BASE: StaticRef<SramCtrlRegisters> =
+pub const SRAM_RET_BASE: StaticRef<SramCtrlRegisters> =
     unsafe { StaticRef::new(SRAM_CTRL_RET_AON_REGS_BASE_ADDR as *const SramCtrlRegisters) };
 
 impl SramCtrl {
     pub fn new() -> Self {
         // Initialize the SRAM controller
         Self {
-            registers: SRAM_BASE,
+            registers: SRAM_RET_BASE,
         }
     }
     /// This function _forces_ the reinitialization of the init. Normally,this should not be necessary, but
