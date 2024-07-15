@@ -219,10 +219,10 @@ impl<'a> SysRstCtrl<'a> {
                 client.combo_detected(input_pin_state, SRCComboDetectorId::One);
             }
             if combo_state.is_set(COMBO_INTR_STATUS::COMBO2_H2L) {
-                client.combo_detected(input_pin_state, SRCComboDetectorId::One);
+                client.combo_detected(input_pin_state, SRCComboDetectorId::Two);
             }
             if combo_state.is_set(COMBO_INTR_STATUS::COMBO3_H2L) {
-                client.combo_detected(input_pin_state, SRCComboDetectorId::One);
+                client.combo_detected(input_pin_state, SRCComboDetectorId::Three);
             }
             // if any key interrupt triggered, notify client
             if key_interrupt_state.get() != 0 {

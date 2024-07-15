@@ -43,6 +43,11 @@ mod upcall {
     pub const COUNT: u8 = 3;
 }
 
+mod command {
+    pub const EXISTENCE_CHECK: usize = 0;
+    pub const INPUT_PIN_STATE: usize = 1;
+}
+
 pub struct SystemReset<'a, Driver: OpenTitanSysRstr> {
     driver: &'a Driver,
     grants: Grant<(), UpcallCount<{ upcall::COUNT }>, AllowRoCount<0>, AllowRwCount<0>>,
@@ -70,20 +75,20 @@ impl<'a, Driver: OpenTitanSysRstr> SyscallDriver for SystemReset<'a, Driver> {
         _data2: usize,
         calling_process: ProcessId,
     ) -> CommandReturn {
-        // Check existance (regardless if which process asks)
-        if command_num == 0 {
+        // Check existence (regardless of which process2 asks)
+        if command_num == command::EXISTENCE_CHECK {
             return CommandReturn::success();
         }
 
         // determine if `owning_process` is set and it exists
         // determine if the owning process matches the calling process
-        let same_proceess_or_empty = self.owning_process.map_or(None, |current_process| {
+        let same_procees_or_empty = self.owning_process.map_or(None, |current_process| {
             self.grants
                 .enter(current_process, |_, _| current_process == calling_process)
                 .ok()
         });
 
-        match same_proceess_or_empty {
+        match same_procees_or_empty {
             // the `calling_process` and the `owning_process` are not the same
             Some(false) => return CommandReturn::failure(ErrorCode::RESERVE),
             // the `owning_process` isn't set/doesn't exist, continue execution
@@ -94,7 +99,7 @@ impl<'a, Driver: OpenTitanSysRstr> SyscallDriver for SystemReset<'a, Driver> {
 
         match command_num {
             // get input pins state
-            1 => {
+            command::INPUT_PIN_STATE => {
                 let pin_state = self.driver.get_input_state();
                 CommandReturn::success_u32(pin_state.get())
             }
@@ -132,7 +137,7 @@ impl<'a, Driver: OpenTitanSysRstr> OpenTitanSysRstrClient for SystemReset<'a, Dr
         match result {
             // when the upcall was successful
             Some(Ok(Ok(()))) => {}
-            // if the upcall coudln't be made (the owning process is registered) (`.schedule upcall`` failed)
+            // if the upcall coudln't be made (the owning process is registered) (`.schedule upcall` failed)
             Some(Ok(Err(_err))) => {}
             // if the grant is not available (`.enter` failed)
             Some(Err(_err)) => {}

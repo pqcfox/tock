@@ -14,7 +14,7 @@
 #![test_runner(test_runner)]
 #![reexport_test_harness_main = "test_main"]
 
-use core::ptr::addr_of;
+use core::ptr::{addr_of, addr_of_mut};
 
 use crate::hil::symmetric_encryption::AES128_BLOCK_SIZE;
 use crate::otbn::OtbnComponent;
@@ -274,7 +274,6 @@ impl SyscallDriverLookup for EarlGrey {
             capsules_core::spi_controller::DRIVER_NUM => f(Some(self.spi_controller)),
             capsules_core::rng::DRIVER_NUM => f(Some(self.rng)),
             capsules_extra::symmetric_encryption::aes::DRIVER_NUM => f(Some(self.aes)),
-            capsules_extra::kv_driver::DRIVER_NUM => f(Some(self.kv_driver)),
             //capsules_extra::kv_driver::DRIVER_NUM => f(Some(self.kv_driver)),
             capsules_extra::pattgen::DRIVER_NUM => f(Some(self.pattgen)),
             capsules_extra::opentitan_alerthandler::DRIVER_NUM => {
@@ -918,7 +917,7 @@ unsafe fn setup() -> (
     let scheduler = components::sched::priority::PriorityComponent::new(board_kernel)
         .finalize(components::priority_component_static!());
     let watchdog = &peripherals.watchdog;
-  
+
     let alert_handler_capsule = static_init!(
         AlertHandlerCapsule,
         AlertHandlerCapsule::new(board_kernel.create_grant(
@@ -938,7 +937,7 @@ unsafe fn setup() -> (
             ),
         )
     );
-    
+
     let earlgrey = static_init!(
         EarlGrey,
         EarlGrey {
@@ -975,14 +974,14 @@ unsafe fn setup() -> (
 
     earlgrey.reset_manager.startup();
     earlgrey.reset_manager.populate_reset_reason(reset_reason);
-  
+
     /* TESTs */
 
     #[cfg(feature = "test_alerthandler")]
     {
         test_alerthandler(peripherals, mux_alarm);
     }
-  
+
     #[cfg(feature = "test_sysrst_ctrl")]
     {
         test_sysrst_ctrl(peripherals);
@@ -1012,7 +1011,6 @@ unsafe fn setup() -> (
     (board_kernel, earlgrey, chip, peripherals)
 }
 
-
 #[cfg(feature = "test_sysrst_ctrl")]
 fn test_sysrst_ctrl(peripherals: &EarlGreyDefaultPeripherals<ChipConfig, BoardPinmuxLayout>) {
     pinmux_layout::prepare_wiring_sysrst_ctrl_tests();
@@ -1022,6 +1020,7 @@ fn test_sysrst_ctrl(peripherals: &EarlGreyDefaultPeripherals<ChipConfig, BoardPi
         &peripherals.gpio_port[2],
         &peripherals.gpio_port[20],
     );
+}
 
 #[cfg(feature = "test_alerthandler")]
 unsafe fn test_alerthandler(

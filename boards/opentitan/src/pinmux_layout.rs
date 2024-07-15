@@ -2,11 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // Copyright Tock Contributors 2023.
 
-use earlgrey::pinmux::{PadConfig, SelectInput, SelectOutput};
 use earlgrey::pinmux_config::{EarlGreyPinmuxConfig, INPUT_NUM, OUTPUT_NUM};
-use earlgrey::registers::top_earlgrey::{MuxedPads, PinmuxInsel, PinmuxOutsel, PinmuxPeripheralIn};
-use kernel::hil::gpio::Configure;
-use lowrisc::gpio::{pins, GpioPin};
+use earlgrey::registers::top_earlgrey::{PinmuxInsel, PinmuxOutsel};
 
 type In = PinmuxInsel;
 type Out = PinmuxOutsel;
@@ -73,7 +70,7 @@ impl EarlGreyPinmuxConfig for BoardPinmuxLayout {
         In::ConstantZero, // FlashCtrlTms
         In::ConstantZero, // FlashCtrlTdi
         In::ConstantZero, // SysrstCtrlAonAcPresent
-        In::ConstantZero,         // SysrstCtrlAonKey0In
+        In::ConstantZero, // SysrstCtrlAonKey0In
         In::ConstantZero, // SysrstCtrlAonKey1In
         In::ConstantZero, // SysrstCtrlAonKey2In
         In::ConstantZero, // SysrstCtrlAonPwrbIn
@@ -140,9 +137,16 @@ impl EarlGreyPinmuxConfig for BoardPinmuxLayout {
 }
 
 #[cfg(feature = "test_sysrst_ctrl")]
+/// prepare pinmux and gpio registers for testing of SysRstr_Ctrl
 pub fn prepare_wiring_sysrst_ctrl_tests() {
+    use earlgrey::pinmux::{PadConfig, SelectInput, SelectOutput};
+    use earlgrey::registers::top_earlgrey::MuxedPads;
+    use earlgrey::registers::top_earlgrey::PinmuxPeripheralIn;
+    use kernel::hil::gpio::Configure;
+    use lowrisc::gpio::GpioPin;
     // in order to test sysrst_ctrl 3 wires need to be connected on CW310 board
     // these 3 wires will connect GPIO Outputs to SysRst_Ctrl's inputs and a GPIO Input to one of SysRstr's output such that the test functions are able to trigger various input combinations and observe one of the output signals
+
     kernel::debug!("SystemReset_Ctrl wiring setup: ");
     kernel::debug!("  Connect PMOD1_1 to PMOD1_5 using a wire");
     kernel::debug!("  Connect PMOD1_2 to PMOD1_6 using a wire");
