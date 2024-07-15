@@ -20,6 +20,7 @@ pub mod aes;
 pub mod alert_handler;
 pub mod aon_timer;
 pub mod chip;
+pub mod clkmgr;
 pub mod csrng;
 pub mod epmp;
 pub mod flash_ctrl;
