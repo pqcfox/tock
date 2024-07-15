@@ -21,7 +21,7 @@ use crate::interrupts;
 use crate::pinmux_config::EarlGreyPinmuxConfig;
 use crate::plic::Plic;
 use crate::plic::PLIC;
-use crate::registers::top_earlgrey::AlertId;
+use crate::registers::top_earlgrey::{AlertId, SYSRST_CTRL_AON_BASE_ADDR};
 use crate::rstmgr::RstMgr;
 
 pub struct EarlGrey<
@@ -96,7 +96,7 @@ impl<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig>
                 crate::aon_timer::AON_TIMER_BASE,
                 CFG::CPU_FREQ,
             ),
-            sysreset: lowrisc::sysrst_ctrl::SysRstCtrl::new(),
+            sysreset: lowrisc::sysrst_ctrl::SysRstCtrl::new(SYSRST_CTRL_AON_BASE_ADDR),
             timer: crate::timer::RvTimer::new(),
             alert_handler: AlertHandler::new(),
             pattgen: lowrisc::pattgen::PattGen::new(crate::pattgen::PATTGEN_BASE),

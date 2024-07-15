@@ -29,21 +29,15 @@ use kernel::{
     },
 };
 
-// can't get reference from earlgrey's crate
-pub const SYSRST_CTRL_AON_BASE_ADDR: usize = 0x40430000;
-
-pub const SYSRST_CTRL_AON_BASE: StaticRef<SysrstCtrlRegisters> =
-    unsafe { StaticRef::new(SYSRST_CTRL_AON_BASE_ADDR as *const SysrstCtrlRegisters) };
-
 pub struct SysRstCtrl<'a> {
     registers: StaticRef<SysrstCtrlRegisters>,
     client: OptionalCell<&'a dyn OpenTitanSysRstrClient>,
 }
 
 impl<'a> SysRstCtrl<'a> {
-    pub fn new() -> Self {
+    pub fn new(register_base: usize) -> Self {
         Self {
-            registers: SYSRST_CTRL_AON_BASE,
+            registers: unsafe { StaticRef::new(register_base as *const SysrstCtrlRegisters) },
             client: OptionalCell::empty(),
         }
     }
