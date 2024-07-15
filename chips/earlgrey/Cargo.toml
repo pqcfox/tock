@@ -15,3 +15,4 @@ kernel = { path = "../../kernel" }
 
 [features]
 clkmgr_tests = []
+test_alerthandler = ["lowrisc/test_alerthandler"]

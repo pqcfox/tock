@@ -17,6 +17,7 @@ pub mod pinmux_config;
 mod interrupts;
 
 pub mod aes;
+pub mod alert_handler;
 pub mod aon_timer;
 pub mod chip;
 pub mod clkmgr;
@@ -33,6 +34,7 @@ pub mod pinmux;
 pub mod plic;
 pub mod pwrmgr;
 pub mod registers;
+pub mod rstmgr;
 pub mod spi_host;
 pub mod timer;
 pub mod uart;

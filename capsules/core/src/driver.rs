@@ -94,5 +94,7 @@ pub enum NUM {
     DateTime              = 0x90007,
     CycleCount            = 0x90008,
     Pattgen               = 0x90009,
+    ResetManager          = 0x9000A,
+    OpenTitanAlertHandler = 0x9000B,
 }
 }

@@ -14,16 +14,22 @@
 #![test_runner(test_runner)]
 #![reexport_test_harness_main = "test_main"]
 
+use core::ptr::addr_of;
+
 use crate::hil::symmetric_encryption::AES128_BLOCK_SIZE;
 use crate::otbn::OtbnComponent;
 use crate::pinmux_layout::BoardPinmuxLayout;
 use capsules_aes_gcm::aes_gcm;
+use capsules_core::reset_manager::ResetManager;
 use capsules_core::virtualizers::virtual_aes_ccm;
 use capsules_core::virtualizers::virtual_alarm::{MuxAlarm, VirtualMuxAlarm};
-use core::ptr::{addr_of, addr_of_mut};
+use capsules_extra::opentitan_alerthandler::AlertHandlerCapsule;
+use earlgrey::alert_handler;
 use earlgrey::chip::EarlGreyDefaultPeripherals;
 use earlgrey::chip_config::EarlGreyConfig;
 use earlgrey::pinmux_config::EarlGreyPinmuxConfig;
+use earlgrey::timer::RvTimer;
+
 use kernel::capabilities;
 use kernel::component::Component;
 use kernel::hil;
@@ -32,6 +38,7 @@ use kernel::hil::hasher::Hasher;
 use kernel::hil::i2c::I2CMaster;
 use kernel::hil::led::LedHigh;
 use kernel::hil::pattgen::PattGen;
+use kernel::hil::reset_managment::ResetManagment;
 use kernel::hil::rng::Rng;
 use kernel::hil::symmetric_encryption::AES128;
 use kernel::hil::usb::Client;
@@ -242,6 +249,8 @@ struct EarlGrey {
         VirtualMuxAlarm<'static, earlgrey::timer::RvTimer<'static, ChipConfig>>,
     >,
     watchdog: &'static lowrisc::aon_timer::AonTimer,
+    opentitan_alerthandler: &'static AlertHandlerCapsule,
+    reset_manager: &'static ResetManager<'static, earlgrey::rstmgr::RstMgr>,
 }
 
 /// Mapping of integer syscalls to objects that implement syscalls.
@@ -263,6 +272,10 @@ impl SyscallDriverLookup for EarlGrey {
             capsules_extra::symmetric_encryption::aes::DRIVER_NUM => f(Some(self.aes)),
             //capsules_extra::kv_driver::DRIVER_NUM => f(Some(self.kv_driver)),
             capsules_extra::pattgen::DRIVER_NUM => f(Some(self.pattgen)),
+            capsules_extra::opentitan_alerthandler::DRIVER_NUM => {
+                f(Some(self.opentitan_alerthandler))
+            }
+            capsules_core::reset_manager::DRIVER_NUM => f(Some(self.reset_manager)),
             _ => f(None),
         }
     }
@@ -273,9 +286,8 @@ impl KernelResources<EarlGreyChip> for EarlGrey {
     type SyscallFilter = TbfHeaderFilterDefaultAllow;
     type ProcessFault = ();
     type Scheduler = PrioritySched;
-    type SchedulerTimer = VirtualSchedulerTimer<
-        VirtualMuxAlarm<'static, earlgrey::timer::RvTimer<'static, ChipConfig>>,
-    >;
+    type SchedulerTimer =
+        VirtualSchedulerTimer<VirtualMuxAlarm<'static, RvTimer<'static, ChipConfig>>>;
     type WatchDog = lowrisc::aon_timer::AonTimer;
     type ContextSwitchCallback = ();
 
@@ -398,6 +410,26 @@ unsafe fn setup() -> (
     );
     peripherals.init();
 
+    // retrieve reset reason
+    // RSTMGR::reset_reason might get cleared by ROM code that runs before Tock and cached in RetentionRAM
+    // if reset_reason in HW peripheral is cleared, attempt to read it from RRAM
+    // TODO replace unsafe fn `get_rr_from_rram()` with RRAM function call when RRAM is ready
+    let reset_reason = peripherals
+        .rst_mgmt
+        .reset_reason()
+        .or(earlgrey::rstmgr::RstMgr::get_rr_from_rram());
+
+    let reset_manager = kernel::static_init!(
+        capsules_core::reset_manager::ResetManager<'static, earlgrey::rstmgr::RstMgr>,
+        ResetManager::new(
+            &peripherals.rst_mgmt,
+            board_kernel.create_grant(
+                capsules_core::reset_manager::DRIVER_NUM,
+                &memory_allocation_cap
+            )
+        )
+    );
+
     // Configure kernel debug gpios as early as possible
     kernel::debug::assign_gpios(
         Some(&peripherals.gpio_port[7]), // First LED
@@ -443,19 +475,15 @@ unsafe fn setup() -> (
         earlgrey::gpio::GpioPin<earlgrey::pinmux::PadConfig>
     ));
 
-    let hardware_alarm = static_init!(
-        earlgrey::timer::RvTimer<ChipConfig>,
-        earlgrey::timer::RvTimer::new()
-    );
-    hardware_alarm.setup();
+    peripherals.timer.setup();
 
     // Create a shared virtualization mux layer on top of a single hardware
     // alarm.
     let mux_alarm = static_init!(
         MuxAlarm<'static, earlgrey::timer::RvTimer<ChipConfig>>,
-        MuxAlarm::new(hardware_alarm)
+        MuxAlarm::new(&peripherals.timer)
     );
-    hil::time::Alarm::set_alarm_client(hardware_alarm, mux_alarm);
+    hil::time::Alarm::set_alarm_client(&peripherals.timer, mux_alarm);
 
     ALARM = Some(mux_alarm);
 
@@ -493,7 +521,7 @@ unsafe fn setup() -> (
 
     let chip = static_init!(
         EarlGreyChip,
-        earlgrey::chip::EarlGrey::new(peripherals, hardware_alarm, earlgrey_epmp)
+        earlgrey::chip::EarlGrey::new(peripherals, earlgrey_epmp)
     );
     CHIP = Some(chip);
 
@@ -885,6 +913,15 @@ unsafe fn setup() -> (
         .finalize(components::priority_component_static!());
     let watchdog = &peripherals.watchdog;
 
+    let alert_handler_capsule = static_init!(
+        AlertHandlerCapsule,
+        AlertHandlerCapsule::new(board_kernel.create_grant(
+            capsules_extra::opentitan_alerthandler::DRIVER_NUM,
+            &memory_allocation_cap
+        ))
+    );
+    peripherals.alert_handler.set_client(alert_handler_capsule);
+
     let earlgrey = static_init!(
         EarlGrey,
         EarlGrey {
@@ -904,6 +941,8 @@ unsafe fn setup() -> (
             scheduler,
             scheduler_timer,
             watchdog,
+            reset_manager,
+            opentitan_alerthandler: alert_handler_capsule,
         }
     );
 
@@ -915,6 +954,14 @@ unsafe fn setup() -> (
     );
     lowrisc::pattgen::tests::run_all(pattgen_test);
     */
+
+    earlgrey.reset_manager.startup();
+    earlgrey.reset_manager.populate_reset_reason(reset_reason);
+
+    #[cfg(feature = "test_alerthandler")]
+    {
+        test_alerthandler(peripherals, mux_alarm);
+    }
 
     kernel::process::load_processes(
         board_kernel,
@@ -938,6 +985,32 @@ unsafe fn setup() -> (
     debug!("OpenTitan initialisation complete. Entering main loop");
 
     (board_kernel, earlgrey, chip, peripherals)
+}
+
+#[cfg(feature = "test_alerthandler")]
+unsafe fn test_alerthandler(
+    peripherals: &'static EarlGreyDefaultPeripherals<ChipConfig, BoardPinmuxLayout>,
+    mux_alarm: &'static MuxAlarm<'static, RvTimer<ChipConfig>>,
+) {
+    // an Alarm is needed for some of the tests as alert handling works using interrupts
+    let virtual_alarm_tests = static_init!(
+        VirtualMuxAlarm<'static, earlgrey::timer::RvTimer<ChipConfig>>,
+        VirtualMuxAlarm::new(mux_alarm)
+    );
+    virtual_alarm_tests.setup();
+
+    let alert_handler_tests = static_init!(
+        alert_handler::tests::Tests<VirtualMuxAlarm<'static, RvTimer<ChipConfig>>>,
+        alert_handler::tests::Tests::new(
+            &peripherals.alert_handler,
+            virtual_alarm_tests,
+            &peripherals.uart0
+        )
+    );
+
+    hil::time::Alarm::set_alarm_client(virtual_alarm_tests, alert_handler_tests);
+
+    alert_handler_tests.run_tests();
 }
 
 /// Main function.

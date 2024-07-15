@@ -3,23 +3,26 @@
 // Copyright Tock Contributors 2022.
 
 //! High-level setup and interrupt mapping for the chip.
-
 use core::fmt::{Display, Write};
 use core::marker::PhantomData;
 use core::num::NonZeroU32;
 use core::ptr::addr_of;
 use kernel::platform::chip::{Chip, InterruptService};
-use kernel::utilities::registers::interfaces::{ReadWriteable, Readable, Writeable};
 use kernel::utilities::helpers::create_non_zero_u32;
+use kernel::utilities::registers::interfaces::{ReadWriteable, Readable, Writeable};
 use rv32i::csr::{mcause, mie::mie, mtvec::mtvec, CSR};
 use rv32i::pmp::{PMPUserMPU, TORUserPMP};
 use rv32i::syscall::SysCall;
 
+use crate::alert_handler::{AlertBitfield, AlertClass, LocalAlertFlags, LocalAlertId};
+use crate::alert_handler::{AlertFlags, AlertHandler};
 use crate::chip_config::EarlGreyConfig;
 use crate::interrupts;
 use crate::pinmux_config::EarlGreyPinmuxConfig;
 use crate::plic::Plic;
 use crate::plic::PLIC;
+use crate::registers::top_earlgrey::AlertId;
+use crate::rstmgr::RstMgr;
 
 pub struct EarlGrey<
     'a,
@@ -32,7 +35,6 @@ pub struct EarlGrey<
     userspace_kernel_boundary: SysCall,
     pub mpu: PMPUserMPU<MPU_REGIONS, PMP>,
     plic: &'a Plic,
-    timer: &'static crate::timer::RvTimer<'static, CFG>,
     pwrmgr: lowrisc::pwrmgr::PwrMgr,
     plic_interrupt_service: &'a I,
     _cfg: PhantomData<CFG>,
@@ -54,7 +56,10 @@ pub struct EarlGreyDefaultPeripherals<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyP
     //pub flash_ctrl: lowrisc::flash_ctrl::FlashCtrl<'a>,
     pub rng: lowrisc::csrng::CsRng<'a>,
     pub watchdog: lowrisc::aon_timer::AonTimer,
+    pub timer: crate::timer::RvTimer<'static, CFG>,
+    pub alert_handler: AlertHandler,
     pub pattgen: lowrisc::pattgen::PattGen<'a>,
+    pub rst_mgmt: RstMgr,
     _cfg: PhantomData<CFG>,
     _pinmux: PhantomData<PINMUX>,
 }
@@ -92,7 +97,10 @@ impl<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig>
                 crate::aon_timer::AON_TIMER_BASE,
                 CFG::CPU_FREQ,
             ),
+            timer: crate::timer::RvTimer::new(),
+            alert_handler: AlertHandler::new(),
             pattgen: lowrisc::pattgen::PattGen::new(crate::pattgen::PATTGEN_BASE),
+            rst_mgmt: RstMgr::new(),
             _cfg: PhantomData,
             _pinmux: PhantomData,
         }
@@ -114,6 +122,66 @@ impl<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig>
                 Some(CHECK_TIMEOUT),
             )
             .expect("Failed to initialize OTP");
+    }
+
+    #[inline]
+    pub fn handle_alert_interrupt(&self, class: AlertClass) {
+        // retrieve alert state for this class and (try to) stop HW escalation
+        let class_state = self.alert_handler.class_state(class);
+        self.alert_handler.clear_esclation(class);
+
+        // HANDLE LOCAL ALERTS
+        // iterate multiple times through the local alerts, only handled once each alert (mark the alerts that have been handled in `handled_alerts` and don't reconsider them).
+        let mut handled_alerts = LocalAlertFlags::empty();
+        loop {
+            // check which local alerts are still set
+            let local_alerts = self.alert_handler.snapshot_local_alert_causes();
+
+            // iterate through all of the set local alerts that have not been handled since the start of the interrupt
+            let anything_new = handled_alerts.for_each_new(&local_alerts, |alert| {
+                // send each alert to `alert_handler`
+                let should_clear = self.alert_handler.handle_alert(alert, class_state);
+                if should_clear {
+                    self.alert_handler.clear_local_alert_cause(alert);
+                }
+            });
+
+            // if no new alerts have been raised consider that all of the alert have been handled
+            if !anything_new {
+                break;
+            }
+        }
+
+        // HANDLE ALERTS FROM ALL PERIPHEREALS
+        // alerts could be triggered while inside the interrupt handler,
+        // alerts flags could remain set until the underlying issue is solved
+        let mut handled_alerts = AlertFlags::empty();
+        loop {
+            // snapshot alert flags
+            let alerts = self.alert_handler.snapshot_alert_causes();
+            // iterate over current alert flags that have not previously been handled (and marked as such in `handled_alerts`)
+            let anything_new =
+                handled_alerts.for_each_new(&alerts, |alert| self.handle_alert(alert));
+
+            // break the loop when no new alert flags have been raised
+            if !anything_new {
+                break;
+            }
+        }
+
+        // clear interrupt flag
+        self.alert_handler.clear_interrupt(class);
+    }
+
+    fn handle_alert(&self, alert: AlertId) {
+        let should_clear = match alert {
+            AlertId::Uart0FatalFault => self.uart0.handle_alert(),
+            _ => panic!("alert with no handle was triggered"),
+        };
+        self.alert_handler.notify_userspace(alert);
+        if should_clear {
+            self.alert_handler.clear_alert_cause(alert);
+        }
     }
 }
 
@@ -157,6 +225,19 @@ impl<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig> InterruptService
             interrupts::SPIHOST1_ERROR..=interrupts::SPIHOST1_SPIEVENT => {
                 self.spi_host1.handle_interrupt()
             }
+            interrupts::ALERTHANDLER_CLASSA => {
+                self.handle_alert_interrupt(AlertClass::ClassA);
+            }
+            interrupts::ALERTHANDLER_CLASSB => {
+                self.handle_alert_interrupt(AlertClass::ClassB);
+            }
+            interrupts::ALERTHANDLER_CLASSC => {
+                self.handle_alert_interrupt(AlertClass::ClassC);
+            }
+            interrupts::ALERTHANDLER_CLASSD => {
+                self.handle_alert_interrupt(AlertClass::ClassD);
+            }
+            interrupts::RVTIMERTIMEREXPIRED0_0 => self.timer.service_interrupt(),
             raw_pattgen_interrupt @ interrupts::PATTGENDONECH0..=interrupts::PATTGENDONECH1 => {
                 // PANIC: raw_pattgen_interrupt is a valid interrupt because of the match arm
                 // CAST: u32 == usize on RV32I
@@ -182,17 +263,12 @@ impl<
         PMP: TORUserPMP<{ MPU_REGIONS }> + Display + 'static,
     > EarlGrey<'a, MPU_REGIONS, I, CFG, PINMUX, PMP>
 {
-    pub unsafe fn new(
-        plic_interrupt_service: &'a I,
-        timer: &'static crate::timer::RvTimer<CFG>,
-        pmp: PMP,
-    ) -> Self {
+    pub unsafe fn new(plic_interrupt_service: &'a I, pmp: PMP) -> Self {
         Self {
             userspace_kernel_boundary: SysCall::new(),
             mpu: PMPUserMPU::new(pmp),
             plic: &*addr_of!(PLIC),
             pwrmgr: lowrisc::pwrmgr::PwrMgr::new(crate::pwrmgr::PWRMGR_BASE),
-            timer,
             plic_interrupt_service,
             _cfg: PhantomData,
             _pinmux: PhantomData,
@@ -214,7 +290,6 @@ impl<
                         None,
                     );
                 }
-                interrupts::RVTIMERTIMEREXPIRED0_0 => self.timer.service_interrupt(),
                 _ => {
                     if interrupt >= interrupts::HMAC_HMACDONE
                         && interrupt <= interrupts::HMAC_HMACERR

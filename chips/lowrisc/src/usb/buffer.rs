@@ -7,7 +7,10 @@
 
 //! Buffer
 
+use super::utils;
+
 use core::cell::Cell;
+use core::num::NonZeroUsize;
 
 /// A hardware buffer.
 ///
@@ -37,7 +40,7 @@ impl Buffer {
         self.available.set(true);
     }
 
-    /// Occupied the buffer.
+    /// Occupies the buffer.
     ///
     /// Occupies the buffer, marking it unavailable.
     pub(super) fn occupy(&self) {
@@ -49,3 +52,6 @@ impl Buffer {
 pub(super) const AVAILABLE_BUFFER: Buffer = Buffer {
     available: Cell::new(true),
 };
+
+/// Number of hardware buffers
+pub(super) const BUFFER_SIZE: NonZeroUsize = utils::create_non_zero_usize(64);
