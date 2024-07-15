@@ -606,6 +606,7 @@ unsafe fn setup() -> (
             )
         ),
     );
+    usb.init();
 
     // Kernel storage region, allocated with the storage_volume!
     // macro in common/utils.rs

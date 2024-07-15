@@ -222,10 +222,16 @@ impl<'a, Usb: usb::UsbController<'a>> UsbSyscallDriver<'a, Usb> {
         CommandReturn::success()
     }
 
-    fn is_busy(&self) -> bool {
-        match self.current_owner.get() {
+    fn is_owner(&self, process_id: ProcessId) -> bool {
+        match self.get_owner() {
             None => false,
-            Some(process_id) => Err(process::Error::NoSuchApp) == self.grant.enter(process_id, |_, _| {}),
+            Some(other_process_id) => {
+                if let Err(process::Error::NoSuchApp) = self.grant.enter(process_id, |_, _| {}) {
+                    return false;
+                }
+
+                other_process_id == process_id
+            }
         }
     }
 
@@ -233,12 +239,44 @@ impl<'a, Usb: usb::UsbController<'a>> UsbSyscallDriver<'a, Usb> {
         self.current_owner.set(Some(owner));
     }
 
-    fn get_owner_panic(&self) -> ProcessId {
-        self.current_owner.get().unwrap()
+    fn clear_owner(&self) {
+        self.current_owner.set(None);
+    }
+
+    fn get_owner(&self) -> Option<ProcessId> {
+        self.current_owner.get()
+    }
+
+    fn lock_command(&self, process_id: ProcessId) -> CommandReturn {
+        match self.get_owner() {
+            None => {
+                self.update_owner(process_id);
+                CommandReturn::success()
+            }
+            Some(other_process_id) => {
+                if other_process_id == process_id {
+                    CommandReturn::failure(ErrorCode::ALREADY)
+                } else {
+                    CommandReturn::failure(ErrorCode::BUSY)
+                }
+            }
+        }
+    }
+
+    fn unlock_command(&self, process_id: ProcessId) -> CommandReturn {
+        if self.is_owner(process_id) {
+            self.clear_owner();
+            CommandReturn::success()
+        } else {
+            CommandReturn::failure(ErrorCode::BUSY)
+        }
     }
 
     fn transmit_chunk(&self) -> Result<(), ()> {
-        let owner = self.get_owner_panic();
+        let owner = match self.get_owner() {
+            None => return Err(()),
+            Some(owner) => owner,
+        };
 
         self.grant.enter(owner, |_, kernel_data| {
             kernel_data.get_readonly_processbuffer(ReadOnlyBufferId::Transmit.to_usize()).and_then(|buffer| {
@@ -261,7 +299,10 @@ impl<'a, Usb: usb::UsbController<'a>> UsbSyscallDriver<'a, Usb> {
     }
 
     fn transmit_failed(&self) {
-        let owner = self.get_owner_panic();
+        let owner = match self.get_owner() {
+            None => unreachable!("Transmit command checks for owner"),
+            Some(owner) => owner,
+        };
 
         self.grant.enter(owner, |_, kernel_data| {
             let transmit_length = self.transmit_length.get();
@@ -272,7 +313,7 @@ impl<'a, Usb: usb::UsbController<'a>> UsbSyscallDriver<'a, Usb> {
     }
 
     fn transmit_command(&self, process_id: ProcessId) -> CommandReturn {
-        if self.is_busy() {
+        if !self.is_owner(process_id) {
             return CommandReturn::failure(ErrorCode::BUSY);
         }
 
@@ -287,7 +328,6 @@ impl<'a, Usb: usb::UsbController<'a>> UsbSyscallDriver<'a, Usb> {
             return CommandReturn::failure(ErrorCode::NOMEM);
         }
 
-        self.update_owner(process_id);
         self.transmit_position.set(0);
         self.transmit_length.set(length);
 
@@ -303,7 +343,9 @@ enum Command {
     DriverExists = 0,
     Enable = 1,
     Attach = 2,
-    Transmit = 3,
+    Lock = 3,
+    Unlock = 4,
+    Transmit = 5,
 }
 
 impl Command {
@@ -311,11 +353,15 @@ impl Command {
         const DRIVER_EXISTS_NUMBER: usize = Command::DriverExists as usize;
         const ENABLE_NUMBER: usize = Command::Enable as usize;
         const ATTACH_NUMBER: usize = Command::Attach as usize;
+        const LOCK_NUMBER: usize = Command::Lock as usize;
+        const UNLOCK_NUMBER: usize = Command::Unlock as usize;
         const TRANSMIT_NUMBER: usize = Command::Transmit as usize;
         match command_number {
             DRIVER_EXISTS_NUMBER => Ok(Command::DriverExists),
             ENABLE_NUMBER => Ok(Command::Enable),
             ATTACH_NUMBER => Ok(Command::Attach),
+            LOCK_NUMBER => Ok(Command::Lock),
+            UNLOCK_NUMBER => Ok(Command::Unlock),
             TRANSMIT_NUMBER => Ok(Command::Transmit),
             _ => Err(()),
         }
@@ -436,6 +482,8 @@ impl<'a, Usb: usb::UsbController<'a>> SyscallDriver for UsbSyscallDriver<'a, Usb
             Command::DriverExists => CommandReturn::success(),
             Command::Enable => self.enable_command(),
             Command::Attach => self.attach_command(),
+            Command::Lock => self.lock_command(process_id),
+            Command::Unlock => self.unlock_command(process_id),
             Command::Transmit => self.transmit_command(process_id),
         }
     }
