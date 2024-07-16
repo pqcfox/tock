@@ -37,6 +37,7 @@ pub struct AppData {
 enum UpcallId {
     Transmit = 0,
     Receive = 1,
+    Attached = 2,
 }
 
 impl UpcallId {
@@ -46,7 +47,7 @@ impl UpcallId {
     }
 }
 
-const UPCALL_COUNT: u8 = 2;
+const UPCALL_COUNT: u8 = 3;
 
 #[repr(usize)]
 enum ReadOnlyBufferId {
@@ -217,6 +218,7 @@ pub struct UsbSyscallDriver<
     transmit_position: Cell<usize>,
     receive_length: Cell<usize>,
     receive_position: Cell<usize>,
+    usb_attached: Cell<bool>,
 }
 
 impl<'a, Usb: usb::UsbController<'a>> UsbSyscallDriver<'a, Usb> {
@@ -229,6 +231,7 @@ impl<'a, Usb: usb::UsbController<'a>> UsbSyscallDriver<'a, Usb> {
             transmit_position: Cell::new(0),
             receive_length: Cell::new(0),
             receive_position: Cell::new(0),
+            usb_attached: Cell::new(false),
         }
     }
 
@@ -236,13 +239,26 @@ impl<'a, Usb: usb::UsbController<'a>> UsbSyscallDriver<'a, Usb> {
         self.usb_client.set_usb_syscall_driver(self);
     }
 
-    fn enable_command(&self) -> CommandReturn {
+    fn enable_command(&self, process_id: ProcessId) -> CommandReturn {
+        if !self.is_owner(process_id) {
+            return CommandReturn::failure(ErrorCode::RESERVE);
+        }
+
         self.usb_client.enable();
         CommandReturn::success()
     }
 
-    fn attach_command(&self) -> CommandReturn {
-        self.usb_client.attach();
+    fn attach_command(&self, process_id: ProcessId) -> CommandReturn {
+        if !self.is_owner(process_id) {
+            return CommandReturn::failure(ErrorCode::RESERVE);
+        }
+
+        if self.usb_attached.get() {
+            self.notify_attach(process_id);
+        } else {
+            self.usb_client.attach();
+        }
+
         CommandReturn::success()
     }
 
@@ -292,7 +308,7 @@ impl<'a, Usb: usb::UsbController<'a>> UsbSyscallDriver<'a, Usb> {
             self.clear_owner();
             CommandReturn::success()
         } else {
-            CommandReturn::failure(ErrorCode::BUSY)
+            CommandReturn::failure(ErrorCode::RESERVE)
         }
     }
 
@@ -344,7 +360,7 @@ impl<'a, Usb: usb::UsbController<'a>> UsbSyscallDriver<'a, Usb> {
 
     fn transmit_command(&self, process_id: ProcessId) -> CommandReturn {
         if !self.is_owner(process_id) {
-            return CommandReturn::failure(ErrorCode::BUSY);
+            return CommandReturn::failure(ErrorCode::RESERVE);
         }
 
         let length = self.grant.enter(process_id, |_, kernel_data| {
@@ -435,7 +451,7 @@ impl<'a, Usb: usb::UsbController<'a>> UsbSyscallDriver<'a, Usb> {
 
     fn receive_command(&self, process_id: ProcessId) -> CommandReturn {
         if !self.is_owner(process_id) {
-            return CommandReturn::failure(ErrorCode::BUSY);
+            return CommandReturn::failure(ErrorCode::RESERVE);
         }
 
         let length = self.grant.enter(process_id, |_, kernel_data| {
@@ -455,6 +471,25 @@ impl<'a, Usb: usb::UsbController<'a>> UsbSyscallDriver<'a, Usb> {
         self.usb_client.start_reception();
 
         CommandReturn::success()
+    }
+
+    fn bus_powered(&self) {
+        let owner = match self.get_owner() {
+            None => return,
+            Some(owner) => owner,
+        };
+
+        self.usb_attached.set(true);
+
+        self.notify_attach(owner);
+    }
+
+    fn notify_attach(&self, process_id: ProcessId) {
+        let _ = self.grant.enter(process_id, |_, kernel_data| {
+            // The capsule can't do anything if the upcall fails to be scheduled, so the
+            // result is ignored.
+            let _ = kernel_data.schedule_upcall(UpcallId::Attached.to_usize(), (0, 0, 0));
+        });
     }
 }
 
@@ -528,7 +563,7 @@ impl<'a, Usb: usb::UsbController<'a>> usb::Client<'a> for UsbClient<'a, Usb> {
     }
 
     fn bus_powered(&'a self) {
-        kernel::debug!("Bus powered");
+        self.usb_syscall_driver.map(|usb_syscall_driver| usb_syscall_driver.bus_powered());
     }
 
     fn ctrl_setup(&'a self, endpoint: usize) -> usb::CtrlSetupResult {
@@ -611,8 +646,8 @@ impl<'a, Usb: usb::UsbController<'a>> SyscallDriver for UsbSyscallDriver<'a, Usb
 
         match command {
             Command::DriverExists => CommandReturn::success(),
-            Command::Enable => self.enable_command(),
-            Command::Attach => self.attach_command(),
+            Command::Enable => self.enable_command(process_id),
+            Command::Attach => self.attach_command(process_id),
             Command::Lock => self.lock_command(process_id),
             Command::Unlock => self.unlock_command(process_id),
             Command::Transmit => self.transmit_command(process_id),
