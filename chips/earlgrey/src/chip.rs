@@ -42,6 +42,7 @@ pub struct EarlGrey<
 }
 
 pub struct EarlGreyDefaultPeripherals<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig> {
+    pub sram_ret: crate::sram_ret::SramCtrl,
     pub aes: crate::aes::Aes<'a>,
     pub hmac: lowrisc::hmac::Hmac<'a>,
     pub clkmgr: crate::clkmgr::Clkmgr,
@@ -69,6 +70,7 @@ impl<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig>
 {
     pub fn new() -> Self {
         Self {
+            sram_ret: crate::sram_ret::SramCtrl::new(),
             aes: crate::aes::Aes::new(),
             hmac: lowrisc::hmac::Hmac::new(crate::hmac::HMAC0_BASE),
             clkmgr: crate::clkmgr::Clkmgr::new(),
