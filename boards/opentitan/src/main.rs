@@ -575,7 +575,10 @@ unsafe fn setup() -> (
     // )
     // .finalize(components::usb_component_static!(earlgrey::usbdev::Usb));
 
+    // Uncomment if you want to test the USB client at the kernel level. Don't forget to uncomment
+    // the other USB client a few lines below.
     /*
+    use kernel::hil::usb::Client;
     let usb_client = static_init!(
         capsules_extra::usb::usbc_client::Client<lowrisc::usb::Usb>,
         capsules_extra::usb::usbc_client::Client::new(&peripherals.usb, 64),

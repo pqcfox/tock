@@ -200,6 +200,10 @@ impl<'a, Usb: usb::UsbController<'a>> UsbClient<'a, Usb> {
             Err(_) => Err(process::Error::KernelError)
         }
     }
+
+    fn start_reception(&self) {
+        self.usb.endpoint_resume_out(BULK_OUT_ENDPOINT).unwrap();
+    }
 }
 
 pub struct UsbSyscallDriver<
@@ -374,11 +378,11 @@ impl<'a, Usb: usb::UsbController<'a>> UsbSyscallDriver<'a, Usb> {
         }
 
         if self.receive_length.get() == 0 {
-            return usb::OutResult::Ok;
+            return usb::OutResult::Delay;
         }
 
         let owner = match self.get_owner() {
-            None => return usb::OutResult::Ok,
+            None => return usb::OutResult::Delay,
             Some(owner) => owner,
         };
 
@@ -404,10 +408,11 @@ impl<'a, Usb: usb::UsbController<'a>> UsbSyscallDriver<'a, Usb> {
                             // The capsule can't do anything if the upcall fails to be scheduled, so the
                             // result is ignored.
                             let _ = kernel_data.schedule_upcall(UpcallId::Receive.to_usize(), (receive_length, 0, 0));
+                            Ok(usb::OutResult::Delay)
                         } else {
                             self.receive_position.set(receive_position);
+                            Ok(usb::OutResult::Ok)
                         }
-                        Ok(usb::OutResult::Ok)
                     }
                 }).unwrap_or(usb::OutResult::Error)
         }).unwrap_or(usb::OutResult::Error)
@@ -422,8 +427,6 @@ impl<'a, Usb: usb::UsbController<'a>> UsbSyscallDriver<'a, Usb> {
         match transfer_type {
             usb::TransferType::Control =>
                 unreachable!("The peripheral never invokes packet_out() when a control packet is received"),
-            // CAST: Tock is not supposed to run 16-bit platforms, so usize is always at least as
-            // wide as a u32
             usb::TransferType::Bulk => self.handle_packet_received_bulk(endpoint, packet),
             usb::TransferType::Interrupt => unimplemented!(),
             usb::TransferType::Isochronous => unimplemented!(),
@@ -448,6 +451,8 @@ impl<'a, Usb: usb::UsbController<'a>> UsbSyscallDriver<'a, Usb> {
 
         self.receive_position.set(0);
         self.receive_length.set(length);
+
+        self.usb_client.start_reception();
 
         CommandReturn::success()
     }
@@ -551,7 +556,11 @@ impl<'a, Usb: usb::UsbController<'a>> usb::Client<'a> for UsbClient<'a, Usb> {
             BULK_IN_ENDPOINT => {
                 let transmit_length = self.transmit_length.get();
                 self.transmit_length.set(0);
-                usb::InResult::Packet(transmit_length)
+                if transmit_length != 0 {
+                    usb::InResult::Packet(transmit_length)
+                } else {
+                    usb::InResult::Delay
+                }
             }
             _ => usb::InResult::Delay,
         }

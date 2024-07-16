@@ -164,7 +164,7 @@ impl<'a> Usb<'a> {
                 + INTR::RX_BITSTUFF_ERR::SET
                 + INTR::FRAME::SET
                 + INTR::POWERED::SET
-                + INTR::LINK_OUT_ERR::SET,
+                //+ INTR::LINK_OUT_ERR::SET,
         );
     }
 
@@ -277,6 +277,17 @@ impl<'a> Usb<'a> {
         self.registers
             .rxenable_out
             .modify(endpoint_index.to_set_rxenable_out_field_value());
+    }
+
+    /// Disable OUT packet reception
+    ///
+    /// # Parameters:
+    ///
+    /// + `endpoint_index`: the index of the OUT endpoint interface that must be disabled.
+    fn internal_endpoint_rxdisable_out(&self, endpoint_index: EndpointIndex) {
+        self.registers
+            .rxenable_out
+            .modify(endpoint_index.to_clear_rxenable_out_field_value());
     }
 
     /// Enable SETUP packet reception
@@ -877,16 +888,16 @@ impl<'a> Usb<'a> {
         buffer_index: BufferIndex,
         packet_size: PacketSize,
     ) {
+        self.internal_endpoint_rxdisable_out(endpoint_index);
         self.client.map(|client| {
             match client.packet_out(TransferType::Bulk, endpoint_index.to_usize(), packet_size.to_usize() as u32) {
                 OutResult::Ok => {
                     self.free_buffer(buffer_index);
                     self.fill_available_buffer_fifo();
+                    self.internal_endpoint_rxenable_out(endpoint_index);
                 },
-                OutResult::Delay => unimplemented!(),
-                // Normally, this should delay the endpoint. However, the upper layer responds with
-                // OutResult::Error only when the host misbehaves. Reproducing and testing this is
-                // hard. A future patch may implement proper error handling.
+                // In case of a delay, leave the OUT endpoint disable.
+                OutResult::Delay => {},
                 OutResult::Error => unimplemented!(),
             }
         });
@@ -1494,6 +1505,17 @@ impl<'a> Usb<'a> {
         self.client.map(|client| client.bus_powered());
     }
 
+    /// Clears link out error interrupt
+    fn clear_link_out_err_interrupt(&self) {
+        self.registers.intr_state.modify(INTR::LINK_OUT_ERR::SET);
+    }
+
+    /// Handler for link out error interrupt
+    fn handle_link_out_err_interrupt(&self) {
+        self.clear_link_out_err_interrupt();
+        kernel::debug!("Link out error");
+    }
+
     /// USB driver interrupt handler.
     ///
     /// # Parameters
@@ -1517,7 +1539,7 @@ impl<'a> Usb<'a> {
             UsbInterrupt::RxBitstuffErr => unimplemented!(),
             UsbInterrupt::Frame => self.handle_frame_interrupt(),
             UsbInterrupt::Powered => self.handle_powered_interrupt(),
-            UsbInterrupt::LinkOutErr => unimplemented!(),
+            UsbInterrupt::LinkOutErr => self.handle_link_out_err_interrupt(),
         }
     }
 }
@@ -1622,8 +1644,8 @@ impl<'a> UsbController<'a> for Usb<'a> {
         };
 
         self.internal_endpoint_out_enable(transfer_type, endpoint_index);
-        self.internal_endpoint_rxenable_out(endpoint_index);
         if transfer_type == TransferType::Control {
+            self.internal_endpoint_rxenable_out(endpoint_index);
             self.internal_endpoint_rxenable_setup(endpoint_index);
         } else if transfer_type == TransferType::Isochronous {
             self.internal_enable_out_isochronous(endpoint_index);
@@ -1680,7 +1702,14 @@ impl<'a> UsbController<'a> for Usb<'a> {
         Ok(())
     }
 
-    fn endpoint_resume_out(&self, _endpoint: usize) -> Result<(), usb::Error> {
-        unimplemented!()
+    fn endpoint_resume_out(&self, raw_endpoint_index: usize) -> Result<(), usb::Error> {
+        let endpoint_index = match EndpointIndex::try_from_usize(raw_endpoint_index) {
+            Err(()) => return Err(usb::Error::InvalidEndpoint),
+            Ok(endpoint_index) => endpoint_index,
+        };
+
+        self.internal_endpoint_rxenable_out(endpoint_index);
+
+        Ok(())
     }
 }

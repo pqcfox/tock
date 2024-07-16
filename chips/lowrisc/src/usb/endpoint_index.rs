@@ -142,6 +142,30 @@ impl EndpointIndex {
         }
     }
 
+    /// Converts the endpoint index to `rxenable_out` bitfield set to 0.
+    ///
+    /// # Return value
+    ///
+    /// The corresponding `rxenable_out` bitfield set to 0.
+    pub(super) const fn to_clear_rxenable_out_field_value(
+        self,
+    ) -> FieldValue<u32, RXENABLE_OUT::Register> {
+        match self {
+            EndpointIndex::Endpoint0 => RXENABLE_OUT::OUT_0::CLEAR,
+            EndpointIndex::Endpoint1 => RXENABLE_OUT::OUT_1::CLEAR,
+            EndpointIndex::Endpoint2 => RXENABLE_OUT::OUT_2::CLEAR,
+            EndpointIndex::Endpoint3 => RXENABLE_OUT::OUT_3::CLEAR,
+            EndpointIndex::Endpoint4 => RXENABLE_OUT::OUT_4::CLEAR,
+            EndpointIndex::Endpoint5 => RXENABLE_OUT::OUT_5::CLEAR,
+            EndpointIndex::Endpoint6 => RXENABLE_OUT::OUT_6::CLEAR,
+            EndpointIndex::Endpoint7 => RXENABLE_OUT::OUT_7::CLEAR,
+            EndpointIndex::Endpoint8 => RXENABLE_OUT::OUT_8::CLEAR,
+            EndpointIndex::Endpoint9 => RXENABLE_OUT::OUT_9::CLEAR,
+            EndpointIndex::Endpoint10 => RXENABLE_OUT::OUT_10::CLEAR,
+            EndpointIndex::Endpoint11 => RXENABLE_OUT::OUT_11::CLEAR,
+        }
+    }
+
     /// Converts the endpoint index to `rxenable_setup` bitfield set to 1.
     ///
     /// # Return value
