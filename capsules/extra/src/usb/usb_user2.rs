@@ -20,18 +20,13 @@ use kernel::ProcessId;
 use kernel::grant::{Grant, AllowRoCount, AllowRwCount, UpcallCount};
 use kernel::hil::usb::{self, Client};
 use kernel::process;
-use kernel::processbuffer::{ReadOnlyProcessBufferRef, ReadableProcessBuffer, WriteableProcessBuffer};
+use kernel::processbuffer::{ReadableProcessBuffer, WriteableProcessBuffer};
 use kernel::syscall::{CommandReturn, SyscallDriver};
 use kernel::utilities::cells::{OptionalCell, VolatileCell};
 
 use core::cell::Cell;
 
 pub const DRIVER_NUM: usize = capsules_core::driver::NUM::UsbUser2 as usize;
-
-#[derive(Default)]
-pub struct AppData {
-
-}
 
 #[repr(usize)]
 enum UpcallId {
@@ -78,12 +73,14 @@ impl ReadWriteBufferId {
 const ALLOW_RW_COUNT: u8 = 1;
 
 type UsbGrant = Grant<
-    AppData,
+    (),
     UpcallCount<UPCALL_COUNT>,
     AllowRoCount<ALLOW_RO_COUNT>,
     AllowRwCount<ALLOW_RW_COUNT>,
 >;
 
+// Google product that is recognized as a CDC by a Linux host machine.
+// TODO: this is used for testing, but needs to be changed.
 const VENDOR_ID: u16 = 0x18d1;
 const PRODUCT_ID: u16 = 0x503a;
 
@@ -100,18 +97,20 @@ static STRINGS: &[&str] = &[
 const BULK_IN_ENDPOINT: usize = 1;
 const BULK_OUT_ENDPOINT: usize = 2;
 
-pub struct UsbClient<'a, Usb: usb::UsbController<'a>> {
+pub struct UsbClient<'a, Usb: usb::UsbController<'a>, const MAX_PACKET_SIZE: usize> {
     usb: &'a Usb,
     usb_ctrl: ClientCtrl<'a, 'static, Usb>,
-    usb_syscall_driver: OptionalCell<&'a UsbSyscallDriver<'a, Usb>>,
-    // TODO: Remove hard constant
-    transmit_chunk: [VolatileCell<u8>; 64],
-    transmit_length: Cell<usize>,
-    // TODO: Remove hard constant
-    receive_chunk: [VolatileCell<u8>; 64],
+    usb_syscall_driver: OptionalCell<&'a UsbSyscallDriver<'a, Usb, MAX_PACKET_SIZE>>,
+    transmit_chunk: [VolatileCell<u8>; MAX_PACKET_SIZE],
+    transmit_response: Cell<usb::InResult>,
+    receive_chunk: [VolatileCell<u8>; MAX_PACKET_SIZE],
 }
 
-impl<'a, Usb: usb::UsbController<'a>> UsbClient<'a, Usb> {
+impl<
+    'a,
+    Usb: usb::UsbController<'a>,
+    const MAX_PACKET_SIZE: usize,
+> UsbClient<'a, Usb, MAX_PACKET_SIZE> {
     pub fn new(usb: &'a Usb) -> Self {
         let interfaces: &mut [InterfaceDescriptor] =
             &mut [InterfaceDescriptor {
@@ -127,15 +126,13 @@ impl<'a, Usb: usb::UsbController<'a>> UsbClient<'a, Usb> {
             EndpointDescriptor {
                 endpoint_address: EndpointAddress::new_const(BULK_IN_ENDPOINT, TransferDirection::DeviceToHost),
                 transfer_type: usb::TransferType::Bulk,
-                // TODO: Remove hard constant
-                max_packet_size: 64,
+                max_packet_size: MAX_PACKET_SIZE as u16,
                 interval: 0,
             },
             EndpointDescriptor {
                 endpoint_address: EndpointAddress::new_const(BULK_OUT_ENDPOINT, TransferDirection::HostToDevice),
                 transfer_type: usb::TransferType::Bulk,
-                // TODO: Remove hard constant
-                max_packet_size: 64,
+                max_packet_size: MAX_PACKET_SIZE as u16,
                 interval: 0,
             },
         ]];
@@ -148,8 +145,7 @@ impl<'a, Usb: usb::UsbController<'a>> UsbClient<'a, Usb> {
                     manufacturer_string: 1,
                     product_string: 2,
                     serial_number_string: 3,
-                    // TODO: Remove hard constant
-                    max_packet_size_ep0: 64,
+                    max_packet_size_ep0: MAX_PACKET_SIZE as u8,
                     ..DeviceDescriptor::default()
                 },
                 ConfigurationDescriptor::default(),
@@ -173,33 +169,23 @@ impl<'a, Usb: usb::UsbController<'a>> UsbClient<'a, Usb> {
                 STRINGS,
             ),
             usb_syscall_driver: OptionalCell::empty(),
-            // TODO: Remove hard coded value
-            transmit_chunk: [DEFAULT_VOLATILE_CELL; 64],
-            transmit_length: Cell::new(0),
-            receive_chunk: [DEFAULT_VOLATILE_CELL; 64],
+            transmit_chunk: [DEFAULT_VOLATILE_CELL; MAX_PACKET_SIZE],
+            transmit_response: Cell::new(usb::InResult::Delay),
+            receive_chunk: [DEFAULT_VOLATILE_CELL; MAX_PACKET_SIZE],
         }
     }
 
-    fn set_usb_syscall_driver(&self, usb_syscall_driver: &'a UsbSyscallDriver<'a, Usb>) {
+    fn set_usb_syscall_driver(&self, usb_syscall_driver: &'a UsbSyscallDriver<'a, Usb, MAX_PACKET_SIZE>) {
         self.usb_syscall_driver.set(usb_syscall_driver);
     }
 
-    pub fn transmit_chunk(
-        &self,
-        buffer: ReadOnlyProcessBufferRef,
-        start: usize,
-        end: usize,
-    ) -> Result<(), process::Error> {
-        match buffer.enter(|buffer| {
-            for (index, byte) in buffer[start..end].iter().enumerate() {
-                self.transmit_chunk[index].set(byte.get());
-            }
-            self.transmit_length.set(end - start);
+    fn start_transmission(&self) {
+        self.usb_syscall_driver.map(|usb_syscall_driver| {
+            let packet = &self.transmit_chunk[..];
+            let in_result = usb_syscall_driver.fill_packet(BULK_IN_ENDPOINT, packet);
+            self.transmit_response.set(in_result);
             self.usb.endpoint_resume_in(BULK_IN_ENDPOINT).unwrap();
-        }) {
-            Ok(_) => Ok(()),
-            Err(_) => Err(process::Error::KernelError)
-        }
+        });
     }
 
     fn start_reception(&self) {
@@ -210,10 +196,11 @@ impl<'a, Usb: usb::UsbController<'a>> UsbClient<'a, Usb> {
 pub struct UsbSyscallDriver<
     'a,
     Usb: usb::UsbController<'a>,
+    const MAX_PACKET_SIZE: usize,
 > {
-    usb_client: &'a UsbClient<'a, Usb>,
+    usb_client: &'a UsbClient<'a, Usb, MAX_PACKET_SIZE>,
     grant: UsbGrant,
-    current_owner: Cell<Option<ProcessId>>,
+    current_owner: OptionalCell<ProcessId>,
     transmit_length: Cell<usize>,
     transmit_position: Cell<usize>,
     receive_length: Cell<usize>,
@@ -221,12 +208,16 @@ pub struct UsbSyscallDriver<
     usb_attached: Cell<bool>,
 }
 
-impl<'a, Usb: usb::UsbController<'a>> UsbSyscallDriver<'a, Usb> {
-    pub fn new(usb_client: &'a UsbClient<'a, Usb>, grant: UsbGrant) -> Self {
+impl<
+    'a,
+    Usb: usb::UsbController<'a>,
+    const MAX_PACKET_SIZE: usize,
+> UsbSyscallDriver<'a, Usb, MAX_PACKET_SIZE> {
+    pub fn new(usb_client: &'a UsbClient<'a, Usb, MAX_PACKET_SIZE>, grant: UsbGrant) -> Self {
         Self {
             usb_client,
             grant,
-            current_owner: Cell::new(None),
+            current_owner: OptionalCell::empty(),
             transmit_length: Cell::new(0),
             transmit_position: Cell::new(0),
             receive_length: Cell::new(0),
@@ -276,11 +267,11 @@ impl<'a, Usb: usb::UsbController<'a>> UsbSyscallDriver<'a, Usb> {
     }
 
     fn update_owner(&self, owner: ProcessId) {
-        self.current_owner.set(Some(owner));
+        self.current_owner.replace(owner);
     }
 
     fn clear_owner(&self) {
-        self.current_owner.set(None);
+        self.current_owner.clear();
     }
 
     fn get_owner(&self) -> Option<ProcessId> {
@@ -310,38 +301,6 @@ impl<'a, Usb: usb::UsbController<'a>> UsbSyscallDriver<'a, Usb> {
         } else {
             CommandReturn::failure(ErrorCode::RESERVE)
         }
-    }
-
-    fn transmit_chunk(&self) -> Result<(), ()> {
-        let owner = match self.get_owner() {
-            None => return Err(()),
-            Some(owner) => owner,
-        };
-
-        let transmit_length = self.transmit_length.get();
-
-        if transmit_length == 0 {
-            return Err(());
-        }
-
-        self.grant.enter(owner, |_, kernel_data| {
-            kernel_data.get_readonly_processbuffer(ReadOnlyBufferId::Transmit.to_usize()).and_then(|buffer| {
-                let start = self.transmit_position.get();
-                if transmit_length == start && transmit_length != 0 {
-                    // The capsule can't do anything if the upcall fails to be scheduled, so the
-                    // result is ignored.
-                    let _ = kernel_data.schedule_upcall(UpcallId::Transmit.to_usize(), (transmit_length, 0, 0));
-                    self.transmit_length.set(0);
-
-                    Ok(())
-                } else {
-                    // TODO: Remove hard coded value
-                    let end = core::cmp::min(start + 64, transmit_length);
-                    self.transmit_position.set(end);
-                    self.usb_client.transmit_chunk(buffer, start, end)
-                }
-            })
-        }).map(|result: Result<(), process::Error>| result.map_err(|_| ())).unwrap_or(Err(()))
     }
 
     fn transmit_failed(&self) {
@@ -377,11 +336,65 @@ impl<'a, Usb: usb::UsbController<'a>> UsbSyscallDriver<'a, Usb> {
         self.transmit_position.set(0);
         self.transmit_length.set(length);
 
-        if let Err(()) = self.transmit_chunk() {
-            return CommandReturn::failure(ErrorCode::FAIL);
-        }
+        self.usb_client.start_transmission();
 
         CommandReturn::success()
+    }
+
+    fn internal_fill_packet(
+        &self,
+        packet: &[VolatileCell<u8>]
+    ) -> usb::InResult {
+        if self.transmit_length.get() == 0 {
+            return usb::InResult::Delay;
+        }
+
+        let owner = match self.get_owner() {
+            None => return usb::InResult::Delay,
+            Some(owner) => owner,
+        };
+
+        self.grant.enter(owner, |_, kernel_data| {
+            kernel_data
+                .get_readonly_processbuffer(ReadOnlyBufferId::Transmit.to_usize())
+                .and_then(|buffer| {
+                    let mut transmit_position = self.transmit_position.get();
+                    let transmit_length = self.transmit_length.get();
+                    let copy_length = core::cmp::min(MAX_PACKET_SIZE, transmit_length - transmit_position);
+                    if copy_length == 0 {
+                        // No more data left to be transmitted
+                        // The capsule can't do anything if the upcall fails to be scheduled, so the
+                        // result is ignored.
+                        let _ = kernel_data.schedule_upcall(UpcallId::Transmit.to_usize(), (transmit_length, 0, 0));
+                        return Ok(usb::InResult::Delay);
+                    }
+
+                    if let Err(_) = buffer.enter(|buffer| {
+                        for index in 0..copy_length {
+                            let byte = buffer[transmit_position + index].get();
+                            packet[index].set(byte);
+                        }
+                    }) {
+                        Ok(usb::InResult::Error)
+                    } else {
+                        transmit_position += copy_length;
+                        self.transmit_position.set(transmit_position);
+                        Ok(usb::InResult::Packet(copy_length))
+                    }
+                }).unwrap_or(usb::InResult::Error)
+        }).unwrap_or(usb::InResult::Error)
+    }
+
+    fn fill_packet(
+        &self,
+        endpoint: usize,
+        packet: &[VolatileCell<u8>]
+    ) -> usb::InResult {
+        if endpoint != BULK_IN_ENDPOINT {
+            return usb::InResult::Delay;
+        }
+
+        self.internal_fill_packet(packet)
     }
 
     fn handle_packet_received_bulk(
@@ -525,7 +538,11 @@ impl Command {
     }
 }
 
-impl<'a, Usb: usb::UsbController<'a>> usb::Client<'a> for UsbClient<'a, Usb> {
+impl<
+    'a,
+    Usb: usb::UsbController<'a>,
+    const MAX_PACKET_SIZE: usize,
+> usb::Client<'a> for UsbClient<'a, Usb, MAX_PACKET_SIZE> {
     fn enable(&'a self) {
         self.usb_ctrl.enable();
 
@@ -563,6 +580,7 @@ impl<'a, Usb: usb::UsbController<'a>> usb::Client<'a> for UsbClient<'a, Usb> {
     }
 
     fn bus_powered(&'a self) {
+        kernel::debug!("Bus powered");
         self.usb_syscall_driver.map(|usb_syscall_driver| usb_syscall_driver.bus_powered());
     }
 
@@ -587,17 +605,10 @@ impl<'a, Usb: usb::UsbController<'a>> usb::Client<'a> for UsbClient<'a, Usb> {
     }
 
     fn packet_in(&'a self, _transfer_type: usb::TransferType, endpoint: usize) -> usb::InResult {
-        match endpoint {
-            BULK_IN_ENDPOINT => {
-                let transmit_length = self.transmit_length.get();
-                self.transmit_length.set(0);
-                if transmit_length != 0 {
-                    usb::InResult::Packet(transmit_length)
-                } else {
-                    usb::InResult::Delay
-                }
-            }
-            _ => usb::InResult::Delay,
+        if endpoint != BULK_IN_ENDPOINT {
+            usb::InResult::Delay
+        } else {
+            self.transmit_response.get()
         }
     }
 
@@ -618,20 +629,21 @@ impl<'a, Usb: usb::UsbController<'a>> usb::Client<'a> for UsbClient<'a, Usb> {
         self.usb_syscall_driver.map(|usb_syscall_driver| {
             match result {
                 Err(()) => usb_syscall_driver.transmit_failed(),
-                Ok(()) => match endpoint {
-                    BULK_IN_ENDPOINT => {
-                        // The process may have terminated before the transmit ended. In this case,
-                        // the capsule can't do anything about it, so the result is simply ignored.
-                        let _ = usb_syscall_driver.transmit_chunk();
-                    }
-                    _ => unreachable!(),
+                Ok(()) => {
+                    let packet = &self.transmit_chunk[..];
+                    let in_result = usb_syscall_driver.fill_packet(endpoint, packet);
+                    self.transmit_response.set(in_result);
                 }
             }
         });
     }
 }
 
-impl<'a, Usb: usb::UsbController<'a>> SyscallDriver for UsbSyscallDriver<'a, Usb> {
+impl<
+    'a,
+    Usb: usb::UsbController<'a>,
+    const MAX_PACKET_SIZE: usize,
+> SyscallDriver for UsbSyscallDriver<'a, Usb, MAX_PACKET_SIZE> {
     fn command(
         &self,
         command_number: usize,

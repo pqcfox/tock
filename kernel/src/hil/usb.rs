@@ -133,7 +133,7 @@ pub enum CtrlOutResult {
 }
 
 /// Result for IN packets sent on bulk or interrupt endpoints.
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum InResult {
     /// A packet of the given size was written into the endpoint buffer
     Packet(usize),

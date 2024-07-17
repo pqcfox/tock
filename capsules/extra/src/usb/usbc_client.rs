@@ -186,7 +186,7 @@ impl<'a, C: hil::usb::UsbController<'a>> hil::usb::Client<'a> for Client<'a, C> 
         // Set up a bulk-out endpoint for debugging
         self.controller().endpoint_set_out_buffer(BULK_OUT_ENDPOINT, self.buffer(BULK_OUT_ENDPOINT)).unwrap();
         self.controller().endpoint_out_enable(TransferType::Bulk, BULK_OUT_ENDPOINT).unwrap();
-        self.controller().endpoint_resume_out(BULK_OUT_ENDPOINT);
+        self.controller().endpoint_resume_out(BULK_OUT_ENDPOINT).unwrap();
 
         // Set up interrupt endpoints
         self.controller().endpoint_set_in_buffer(INTERRUPT_IN_ENDPOINT, self.buffer(INTERRUPT_IN_ENDPOINT)).unwrap();

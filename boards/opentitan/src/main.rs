@@ -234,7 +234,11 @@ struct EarlGrey {
         >,
     >,
     */
-    usb: &'static capsules_extra::usb::usb_user2::UsbSyscallDriver<'static, lowrisc::usb::Usb<'static>>,
+    usb: &'static capsules_extra::usb::usb_user2::UsbSyscallDriver<
+        'static,
+        lowrisc::usb::Usb<'static>,
+        { lowrisc::usb::MAXIMUM_PACKET_SIZE.get() },
+    >,
     syscall_filter: &'static TbfHeaderFilterDefaultAllow,
     scheduler: &'static PrioritySched,
     scheduler_timer: &'static VirtualSchedulerTimer<
@@ -591,7 +595,11 @@ unsafe fn setup() -> (
     */
 
     let usb_client = static_init!(
-        capsules_extra::usb::usb_user2::UsbClient<'static, lowrisc::usb::Usb>,
+        capsules_extra::usb::usb_user2::UsbClient<
+            'static,
+            lowrisc::usb::Usb,
+            { lowrisc::usb::MAXIMUM_PACKET_SIZE.get() },
+        >,
         capsules_extra::usb::usb_user2::UsbClient::new(
             &peripherals.usb
         )
@@ -600,7 +608,11 @@ unsafe fn setup() -> (
     peripherals.usb.set_client(usb_client);
 
     let usb = static_init!(
-        capsules_extra::usb::usb_user2::UsbSyscallDriver<'static, lowrisc::usb::Usb>,
+        capsules_extra::usb::usb_user2::UsbSyscallDriver<
+            'static,
+            lowrisc::usb::Usb,
+            { lowrisc::usb::MAXIMUM_PACKET_SIZE.get() },
+        >,
         capsules_extra::usb::usb_user2::UsbSyscallDriver::new(
             usb_client,
             board_kernel.create_grant(

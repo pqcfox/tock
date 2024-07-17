@@ -896,8 +896,10 @@ impl<'a> Usb<'a> {
                     self.fill_available_buffer_fifo();
                     self.internal_endpoint_rxenable_out(endpoint_index);
                 },
-                // In case of a delay, leave the OUT endpoint disable.
-                OutResult::Delay => {},
+                OutResult::Delay => {
+                    self.free_buffer(buffer_index);
+                    self.fill_available_buffer_fifo();
+                },
                 OutResult::Error => unimplemented!(),
             }
         });
