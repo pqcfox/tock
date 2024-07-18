@@ -32,6 +32,7 @@ pub mod public_key_crypto;
 pub mod pwm;
 pub mod radio;
 pub mod reset_managment;
+pub mod retention_ram;
 pub mod rng;
 pub mod screen;
 pub mod sensors;

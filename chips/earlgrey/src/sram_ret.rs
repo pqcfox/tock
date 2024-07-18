@@ -6,6 +6,7 @@ use crate::registers::sram_ctrl_regs;
 use crate::registers::sram_ctrl_regs::SramCtrlRegisters;
 use crate::registers::top_earlgrey::SRAM_CTRL_RET_AON_REGS_BASE_ADDR;
 use core::cell::Cell;
+use kernel::hil::retention_ram;
 use kernel::utilities::registers::interfaces::Readable;
 use kernel::utilities::{registers::interfaces::ReadWriteable, target_test, StaticRef};
 use kernel::{debug, ErrorCode};
@@ -104,8 +105,9 @@ impl SramCtrl {
         // Only attempt memory accesses if we have our cached state confirmed to be initialized.
         match self.cached_state.get() {
             DrvState::InitializedScrambled | DrvState::InitializedScrambledDefault => unsafe {
-                if id <= RET_RAM_OWNER.len() {
-                    Ok(RET_RAM_CREATOR[id])
+                if id <= RET_RAM_CREATOR.len() {
+                    // Use get_unchecked in order to prevent doing a double len check, to make it a bit faster.
+                    Ok(*RET_RAM_CREATOR.get_unchecked(id))
                 } else {
                     Err(ErrorCode::SIZE)
                 }
@@ -119,7 +121,8 @@ impl SramCtrl {
         match self.cached_state.get() {
             DrvState::InitializedScrambled | DrvState::InitializedScrambledDefault => unsafe {
                 if id <= RET_RAM_OWNER.len() {
-                    Ok(RET_RAM_OWNER[id])
+                    // Use get_unchecked in order to prevent doing a double len check, to make it a bit faster.
+                    Ok(*RET_RAM_OWNER.get_unchecked(id))
                 } else {
                     Err(ErrorCode::SIZE)
                 }
@@ -214,7 +217,7 @@ impl SramCtrl {
     }
 
     /// Test function. It runs on target self-test, returns if the test suite failed or passed.
-    pub fn test(&mut self) -> bool {
+    pub fn test(&self) -> bool {
         let mut test_runner = target_test::TestRunner::new();
         debug!("Starting sram_ret self-test");
         match self.get_creator_rram_data(1) {
@@ -349,5 +352,27 @@ impl SramCtrl {
 
         debug!("Ending sram_ret self-test");
         test_runner.is_test_failed
+    }
+}
+
+impl retention_ram::OwnerRetentionRam for SramCtrl {
+    type Data = u32;
+    type ID = usize;
+
+    fn read(&self, id: Self::ID) -> Result<Self::Data, ErrorCode> {
+        self.get_owner_rram_data(id)
+    }
+
+    fn write(&self, id: Self::ID, data: Self::Data) -> Result<(), ErrorCode> {
+        self.set_owner_rram_data(id, data)
+    }
+}
+
+impl retention_ram::CreatorRetentionRam for SramCtrl {
+    type Data = u32;
+    type ID = usize;
+
+    fn read(&self, id: Self::ID) -> Result<Self::Data, ErrorCode> {
+        self.get_owner_rram_data(id)
     }
 }
