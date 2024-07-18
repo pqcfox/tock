@@ -5,6 +5,7 @@
 use crate::registers::sram_ctrl_regs;
 use crate::registers::sram_ctrl_regs::SramCtrlRegisters;
 use crate::registers::top_earlgrey::SRAM_CTRL_RET_AON_REGS_BASE_ADDR;
+use core::cell::Cell;
 use kernel::utilities::registers::interfaces::Readable;
 use kernel::utilities::{registers::interfaces::ReadWriteable, target_test, StaticRef};
 use kernel::{debug, ErrorCode};
@@ -30,7 +31,7 @@ const MULTI_BIT_BOOL_4FALSE: u32 = 0x9;
 
 pub struct SramCtrl {
     registers: StaticRef<SramCtrlRegisters>,
-    cached_state: DrvState,
+    cached_state: Cell<DrvState>,
 }
 
 pub const SRAM_RET_BASE: StaticRef<SramCtrlRegisters> =
@@ -39,16 +40,16 @@ pub const SRAM_RET_BASE: StaticRef<SramCtrlRegisters> =
 impl SramCtrl {
     pub fn new() -> Self {
         // Initialize the SRAM controller
-        let mut local_self = Self {
+        let local_self = Self {
             registers: SRAM_RET_BASE,
-            cached_state: DrvState::Uninitialized,
+            cached_state: Cell::new(DrvState::Uninitialized),
         };
-        local_self.cached_state = local_self.get_state();
+        local_self.cached_state.set(local_self.get_state());
         local_self
     }
     /// This function _forces_ the reinitialization of the init. Normally,this should not be necessary, but
     /// in case it is, we copy the rram data, we init and then restore the rram data.
-    pub fn forced_safe_init(&mut self) -> Result<(), ErrorCode> {
+    pub fn forced_safe_init(&self) -> Result<(), ErrorCode> {
         unsafe {
             let ram_creator_backup = RET_RAM_CREATOR;
             let ram_owner_backup = RET_RAM_OWNER;
@@ -67,7 +68,7 @@ impl SramCtrl {
     /// This WILL delete all ret sram data.
     ///
     /// The return is a Result<(), ErrorCode> because it can fail depending on the regwen state.
-    pub fn reinit_ram(&mut self) -> Result<(), ErrorCode> {
+    pub fn reinit_ram(&self) -> Result<(), ErrorCode> {
         if self.is_locked_ctrl() {
             return Err(ErrorCode::FAIL);
         }
@@ -94,14 +95,14 @@ impl SramCtrl {
         {
             // Wait for the key to be valid before proceeding
         }
-        self.cached_state = self.get_state();
+        self.cached_state.set(self.get_state());
         Ok(())
     }
 
     /// Interface to read rram data from the creator area. Addressed through ID's and returning u32 data.
     pub fn get_creator_rram_data(&self, id: usize) -> Result<u32, ErrorCode> {
         // Only attempt memory accesses if we have our cached state confirmed to be initialized.
-        match self.cached_state {
+        match self.cached_state.get() {
             DrvState::InitializedScrambled | DrvState::InitializedScrambledDefault => unsafe {
                 if id <= RET_RAM_OWNER.len() {
                     Ok(RET_RAM_CREATOR[id])
@@ -115,7 +116,7 @@ impl SramCtrl {
     /// Interface to read rram data from the owner area. Addressed through ID's and returning u32 data.
     pub fn get_owner_rram_data(&self, id: usize) -> Result<u32, ErrorCode> {
         // Only attempt read memory accesses if we have our cached state confirmed to be initialized.
-        match self.cached_state {
+        match self.cached_state.get() {
             DrvState::InitializedScrambled | DrvState::InitializedScrambledDefault => unsafe {
                 if id <= RET_RAM_OWNER.len() {
                     Ok(RET_RAM_OWNER[id])
@@ -129,7 +130,7 @@ impl SramCtrl {
 
     /// Interface to read rram data from the owner area. Addressed through ID's and returning u32 data.
     pub fn set_owner_rram_data(&self, id: usize, val: u32) -> Result<(), ErrorCode> {
-        match self.cached_state {
+        match self.cached_state.get() {
             DrvState::InitializedScrambled | DrvState::InitializedScrambledDefault => unsafe {
                 if id <= RET_RAM_OWNER.len() {
                     RET_RAM_OWNER[id] = val;
