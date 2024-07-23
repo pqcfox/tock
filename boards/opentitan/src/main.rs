@@ -14,7 +14,7 @@
 #![test_runner(test_runner)]
 #![reexport_test_harness_main = "test_main"]
 
-use core::ptr::addr_of;
+use core::ptr::{addr_of, addr_of_mut};
 
 use crate::hil::symmetric_encryption::AES128_BLOCK_SIZE;
 use crate::otbn::OtbnComponent;
