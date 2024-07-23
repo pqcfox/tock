@@ -95,10 +95,7 @@ impl<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig>
             ),
             */
             rng: lowrisc::csrng::CsRng::new(crate::csrng::CSRNG_BASE),
-            watchdog: lowrisc::aon_timer::AonTimer::new(
-                crate::aon_timer::AON_TIMER_BASE,
-                CFG::CPU_FREQ,
-            ),
+            watchdog: lowrisc::aon_timer::AonTimer::new(CFG::AON_TIMER_FREQ),
             timer: crate::timer::RvTimer::new(),
             alert_handler: AlertHandler::new(),
             pattgen: lowrisc::pattgen::PattGen::new(crate::pattgen::PATTGEN_BASE),
