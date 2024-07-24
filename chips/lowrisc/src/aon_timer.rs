@@ -9,8 +9,9 @@ use crate::registers::aon_timer_regs::{
     WDOG_REGWEN, WKUP_COUNT, WKUP_CTRL, WKUP_THOLD,
 };
 use kernel::utilities::registers::interfaces::{Readable, Writeable};
+use kernel::utilities::target_test::TargetTests;
 use kernel::utilities::StaticRef;
-use kernel::{platform, ErrorCode};
+use kernel::{debug, platform, ErrorCode};
 
 /// Peripheral base address for aon_timer_aon in top earlgrey.
 ///
@@ -48,8 +49,13 @@ impl AonTimer {
         self.registers.wkup_ctrl.write(WKUP_CTRL::ENABLE::CLEAR);
     }
 
+    // Enable wakeup after a number of miliseconds. This can fail if the ms number is out of range. 
     pub fn wakeup_enable_after_ms(&self, ms: u32) -> Result<(), ErrorCode> {
         let wakeup_cycles = self.ms_to_cycles(ms);
+
+        self.wakeup_disable();
+
+        self.reset_wkup();
 
         self.registers
             .wkup_thold
@@ -208,5 +214,57 @@ impl platform::watchdog::WatchDog for AonTimer {
 
     fn resume(&self) {
         self.wdog_resume();
+    }
+}
+
+// #[cfg(feature = "target_tests")]
+impl TargetTests for AonTimer {
+    fn test(&self) -> bool {
+        let mut runner = target_test::TestRunner::new();
+
+        debug!("Starting sram_ret self-test");
+        debug!("Reset reason from API is {}", self.get_creator_rram_data(1));
+
+        if (self.get_creator_rram_data(1) == 1) || (self.get_owner_rram_data(5) > 100) {
+            self.set_owner_rram_data(5, 0);
+            debug!("Force reset test cycles");
+        }
+        let test_cycle = self.get_owner_rram_data(5);
+        debug!("Reset Count is {}", test_cycle);
+        self.set_owner_rram_data(5, test_cycle + 1);
+        match test_cycle {
+            0 => {
+
+                runner.assert_function("Test wakeup prescaler boundries check negative case!", || {
+                    self.wakeup_set_prescaler_and_enable(4096) ==  Err(ErrorCode::INVAL) 
+                });
+                runner.assert_function("Test wakeup prescaler boundries check OK case!", || {
+                    self.wakeup_set_prescaler_and_enable(4095) ==  Ok(()) &&
+                    self.registers.wkup_ctrl.read(WKUP_CTRL::PRESCALER)==4095 &&
+                    self.registers.wkup_ctrl.read(WKUP_CTRL::ENABLE)==1 
+                });
+                runner.assert_function("Test wakeup_disable!", || {
+                    self.wakeup_disable();
+                    self.registers.wkup_ctrl.read(WKUP_CTRL::ENABLE)==0 
+                });
+                runner.assert_function("Test wakeup prescaler boundries check OK case!", || {
+                    self.wakeup_disable(0) ==  Ok(())
+                });
+                runner.assert_function("Enable wakeup fail because of boundaries!", || {
+                    self.wakeup_enable_after_ms(1000) == Err(ErrorCode::INVAL)
+                });
+
+                runner.assert_function("Enable wakeup fail because of boundaries!", || {
+                    self.wakeup_enable_after_ms(1000) == Err(ErrorCode::INVAL)
+                });
+            }
+            1 => {
+                test_runner.assert_function("Test rram data ID 10 survived!", || {
+                    self.get_owner_rram_data(10) == 0x5A
+            }
+            _ => {}
+        }
+
+        debug!("Ending sram_ret self-test");
     }
 }

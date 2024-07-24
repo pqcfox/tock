@@ -41,3 +41,9 @@ impl TestRunner {
         }
     }
 }
+
+pub trait TargetTests {
+    fn test(&self) -> bool {
+        true
+    }
+}
