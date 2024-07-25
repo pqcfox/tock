@@ -21,6 +21,7 @@ use crate::interrupts;
 use crate::pinmux_config::EarlGreyPinmuxConfig;
 use crate::plic::Plic;
 use crate::plic::PLIC;
+use crate::registers::top_earlgrey;
 use crate::registers::top_earlgrey::AlertId;
 use crate::rstmgr::RstMgr;
 
@@ -95,7 +96,10 @@ impl<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig>
             ),
             */
             rng: lowrisc::csrng::CsRng::new(crate::csrng::CSRNG_BASE),
-            watchdog: lowrisc::aon_timer::AonTimer::new(CFG::AON_TIMER_FREQ),
+            watchdog: lowrisc::aon_timer::AonTimer::new(
+                top_earlgrey::AON_TIMER_AON_BASE_ADDR,
+                CFG::AON_TIMER_FREQ,
+            ),
             timer: crate::timer::RvTimer::new(),
             alert_handler: AlertHandler::new(),
             pattgen: lowrisc::pattgen::PattGen::new(crate::pattgen::PATTGEN_BASE),

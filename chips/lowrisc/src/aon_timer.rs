@@ -14,15 +14,6 @@ use kernel::utilities::target_test::{self, TargetTests};
 use kernel::utilities::StaticRef;
 use kernel::{debug, platform, ErrorCode};
 
-/// Peripheral base address for aon_timer_aon in top earlgrey.
-///
-/// This should be used with #mmio_region_from_addr to access the memory-mapped
-/// registers associated with the peripheral (usually via a DIF).
-pub const AON_TIMER_AON_BASE_ADDR: usize = 0x40470000;
-
-pub const AON_TIMER_BASE: StaticRef<AonTimerRegisters> =
-    unsafe { StaticRef::new(AON_TIMER_AON_BASE_ADDR as *const AonTimerRegisters) };
-
 pub struct AonTimer<'a> {
     registers: StaticRef<AonTimerRegisters>,
     wakeup_notification: OptionalCell<&'a dyn Fn()>,
@@ -31,9 +22,9 @@ pub struct AonTimer<'a> {
 }
 
 impl<'a> AonTimer<'a> {
-    pub const fn new(aon_clk_freq: u32) -> AonTimer<'a> {
+    pub const fn new(register_base: usize, aon_clk_freq: u32) -> AonTimer<'a> {
         AonTimer {
-            registers: AON_TIMER_BASE,
+            registers: unsafe { StaticRef::new(register_base as *const AonTimerRegisters) },
             wakeup_notification: OptionalCell::empty(),
             bark_notification: OptionalCell::empty(),
             aon_clk_freq,
