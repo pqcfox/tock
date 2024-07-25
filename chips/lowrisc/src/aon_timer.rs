@@ -8,8 +8,9 @@ use crate::registers::aon_timer_regs::{
     AonTimerRegisters, ALERT_TEST, INTR_STATE, WDOG_BARK_THOLD, WDOG_BITE_THOLD, WDOG_CTRL,
     WDOG_REGWEN, WKUP_COUNT, WKUP_CTRL, WKUP_THOLD,
 };
+use kernel::utilities::cells::OptionalCell;
 use kernel::utilities::registers::interfaces::{Readable, Writeable};
-use kernel::utilities::target_test::TargetTests;
+use kernel::utilities::target_test::{self, TargetTests};
 use kernel::utilities::StaticRef;
 use kernel::{debug, platform, ErrorCode};
 
@@ -22,15 +23,19 @@ pub const AON_TIMER_AON_BASE_ADDR: usize = 0x40470000;
 pub const AON_TIMER_BASE: StaticRef<AonTimerRegisters> =
     unsafe { StaticRef::new(AON_TIMER_AON_BASE_ADDR as *const AonTimerRegisters) };
 
-pub struct AonTimer {
+pub struct AonTimer<'a> {
     registers: StaticRef<AonTimerRegisters>,
+    wakeup_notification: OptionalCell<&'a dyn Fn()>,
+    bark_notification: OptionalCell<&'a dyn Fn()>,
     aon_clk_freq: u32, //Hz, this differs for FPGA/Verilator
 }
 
-impl AonTimer {
-    pub const fn new(aon_clk_freq: u32) -> AonTimer {
+impl<'a> AonTimer<'a> {
+    pub const fn new(aon_clk_freq: u32) -> AonTimer<'a> {
         AonTimer {
             registers: AON_TIMER_BASE,
+            wakeup_notification: OptionalCell::empty(),
+            bark_notification: OptionalCell::empty(),
             aon_clk_freq,
         }
     }
@@ -49,7 +54,7 @@ impl AonTimer {
         self.registers.wkup_ctrl.write(WKUP_CTRL::ENABLE::CLEAR);
     }
 
-    // Enable wakeup after a number of miliseconds. This can fail if the ms number is out of range. 
+    // Enable wakeup after a number of miliseconds. This can fail if the ms number is out of range.
     pub fn wakeup_enable_after_ms(&self, ms: u32) -> Result<(), ErrorCode> {
         let wakeup_cycles = self.ms_to_cycles(ms);
 
@@ -82,6 +87,11 @@ impl AonTimer {
                 ),
         )
     }
+
+    pub fn register_wakeup_callback(&self, callback: Option<&'a dyn Fn()>) {
+        self.wakeup_notification.insert(callback);
+    }
+
     /// Reset watch dog timer count value.
     fn reset_wdog(&self) {
         self.registers.wdog_count.set(0x00);
@@ -126,6 +136,10 @@ impl AonTimer {
             .write(WDOG_BARK_THOLD::THRESHOLD.val(bark_cycles));
     }
 
+    pub fn register_watchdog_bark_callback(&self, callback: Option<&'a dyn Fn()>) {
+        self.bark_notification.insert(callback);
+    }
+
     // Reset watch dog timer
     fn wdog_pet(&self) {
         self.registers.wdog_count.set(0x00);
@@ -167,17 +181,19 @@ impl AonTimer {
             self.reset_wkup();
             // RW1C, clear the interrupt
             regs.intr_state.write(INTR_STATE::WKUP_TIMER_EXPIRED::SET);
+            self.wakeup_notification.map(|a| a());
         }
 
         if intr.is_set(INTR_STATE::WDOG_TIMER_BARK) {
             // Clear the bark (RW1C) and pet doggo
             regs.intr_state.write(INTR_STATE::WDOG_TIMER_BARK::SET);
             self.wdog_pet();
+            self.bark_notification.map(|a| a());
         }
     }
 }
 
-impl platform::watchdog::WatchDog for AonTimer {
+impl<'a> platform::watchdog::WatchDog for AonTimer<'a> {
     /// The always-on timer will run on a ~125KHz (Verilator) or ~250kHz clock.
     /// The timers themselves are 32b wide, giving a maximum timeout
     /// window of roughly ~6 hours. For the wakeup timer, the pre-scaler
@@ -217,39 +233,41 @@ impl platform::watchdog::WatchDog for AonTimer {
     }
 }
 
-// #[cfg(feature = "target_tests")]
-impl TargetTests for AonTimer {
+impl<'a> TargetTests for AonTimer<'a> {
     fn test(&self) -> bool {
         let mut runner = target_test::TestRunner::new();
 
-        debug!("Starting sram_ret self-test");
-        debug!("Reset reason from API is {}", self.get_creator_rram_data(1));
+        debug!("Starting aon_timer self-test");
+        let test_cycle = 0;
+        // debug!("Reset reason from API is {}", self.get_creator_rram_data(1));
 
-        if (self.get_creator_rram_data(1) == 1) || (self.get_owner_rram_data(5) > 100) {
-            self.set_owner_rram_data(5, 0);
-            debug!("Force reset test cycles");
-        }
-        let test_cycle = self.get_owner_rram_data(5);
-        debug!("Reset Count is {}", test_cycle);
-        self.set_owner_rram_data(5, test_cycle + 1);
+        // if (self.get_creator_rram_data(1) == 1) || (self.get_owner_rram_data(5) > 100) {
+        //     self.set_owner_rram_data(5, 0);
+        //     debug!("Force reset test cycles");
+        // }
+        // let test_cycle = self.get_owner_rram_data(5);
+        // debug!("Reset Count is {}", test_cycle);
+        // self.set_owner_rram_data(5, test_cycle + 1);
         match test_cycle {
             0 => {
-
-                runner.assert_function("Test wakeup prescaler boundries check negative case!", || {
-                    self.wakeup_set_prescaler_and_enable(4096) ==  Err(ErrorCode::INVAL) 
-                });
+                runner.assert_function(
+                    "Test wakeup prescaler boundries check negative case!",
+                    || self.wakeup_set_prescaler_and_enable(4096) == Err(ErrorCode::INVAL),
+                );
                 runner.assert_function("Test wakeup prescaler boundries check OK case!", || {
-                    self.wakeup_set_prescaler_and_enable(4095) ==  Ok(()) &&
-                    self.registers.wkup_ctrl.read(WKUP_CTRL::PRESCALER)==4095 &&
-                    self.registers.wkup_ctrl.read(WKUP_CTRL::ENABLE)==1 
+                    self.wakeup_set_prescaler_and_enable(4095) == Ok(())
+                        && self.registers.wkup_ctrl.read(WKUP_CTRL::PRESCALER) == 4095
+                        && self.registers.wkup_ctrl.read(WKUP_CTRL::ENABLE) == 1
                 });
                 runner.assert_function("Test wakeup_disable!", || {
                     self.wakeup_disable();
-                    self.registers.wkup_ctrl.read(WKUP_CTRL::ENABLE)==0 
+                    self.registers.wkup_ctrl.read(WKUP_CTRL::ENABLE) == 0
                 });
+
                 runner.assert_function("Test wakeup prescaler boundries check OK case!", || {
-                    self.wakeup_disable(0) ==  Ok(())
+                    self.wakeup_set_prescaler_and_enable(0) == Ok(())
                 });
+
                 runner.assert_function("Enable wakeup fail because of boundaries!", || {
                     self.wakeup_enable_after_ms(1000) == Err(ErrorCode::INVAL)
                 });
@@ -259,12 +277,16 @@ impl TargetTests for AonTimer {
                 });
             }
             1 => {
-                test_runner.assert_function("Test rram data ID 10 survived!", || {
-                    self.get_owner_rram_data(10) == 0x5A
+                // runner.assert_function("We woke up after sleep!", || {
+                //     self.get_owner_rram_data(10) == 0x5A
+                // });
             }
             _ => {}
         }
 
-        debug!("Ending sram_ret self-test");
+        debug!("Ending aon_timer self-test");
+        runner.is_test_failed
     }
+
+    // fn set_rram
 }

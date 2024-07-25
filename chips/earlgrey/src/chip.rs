@@ -56,7 +56,7 @@ pub struct EarlGreyDefaultPeripherals<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyP
     pub spi_host1: lowrisc::spi_host::SpiHost<'a>,
     //pub flash_ctrl: lowrisc::flash_ctrl::FlashCtrl<'a>,
     pub rng: lowrisc::csrng::CsRng<'a>,
-    pub watchdog: lowrisc::aon_timer::AonTimer,
+    pub watchdog: lowrisc::aon_timer::AonTimer<'a>,
     pub timer: crate::timer::RvTimer<'static, CFG>,
     pub alert_handler: AlertHandler,
     pub pattgen: lowrisc::pattgen::PattGen<'a>,

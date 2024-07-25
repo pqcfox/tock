@@ -248,7 +248,7 @@ struct EarlGrey {
     scheduler_timer: &'static VirtualSchedulerTimer<
         VirtualMuxAlarm<'static, earlgrey::timer::RvTimer<'static, ChipConfig>>,
     >,
-    watchdog: &'static lowrisc::aon_timer::AonTimer,
+    watchdog: &'static lowrisc::aon_timer::AonTimer<'static>,
     opentitan_alerthandler: &'static AlertHandlerCapsule,
     reset_manager: &'static ResetManager<'static, earlgrey::rstmgr::RstMgr>,
 }
@@ -288,7 +288,7 @@ impl KernelResources<EarlGreyChip> for EarlGrey {
     type Scheduler = PrioritySched;
     type SchedulerTimer =
         VirtualSchedulerTimer<VirtualMuxAlarm<'static, RvTimer<'static, ChipConfig>>>;
-    type WatchDog = lowrisc::aon_timer::AonTimer;
+    type WatchDog = lowrisc::aon_timer::AonTimer<'static>;
     type ContextSwitchCallback = ();
 
     fn syscall_driver_lookup(&self) -> &Self::SyscallDriverLookup {
