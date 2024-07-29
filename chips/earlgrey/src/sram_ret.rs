@@ -60,7 +60,7 @@ impl SramCtrl {
                     RET_RAM_OWNER = ram_owner_backup;
                     Ok(())
                 }
-                _ => Err(ErrorCode::OFF),
+                _ => Err(ErrorCode::FAIL),
             }
         }
     }
@@ -232,20 +232,21 @@ impl SramCtrl {
                 if (self.get_creator_rram_data(1).unwrap() == 1)
                     || (self.get_owner_rram_data(5).unwrap() > 100)
                 {
-                    self.set_owner_rram_data(5, 0);
+                    let _ = self.set_owner_rram_data(5, 0);
                     test_cycle = 0;
                     debug!("Force reset test cycles");
                 } else {
                     test_cycle = self.get_owner_rram_data(5).unwrap();
                     debug!("Reset Count is {}", test_cycle);
 
-                    self.set_owner_rram_data(5, test_cycle + 1);
+                    let _ = self.set_owner_rram_data(5, test_cycle + 1);
                 }
                 boot_from_rom_ext = true;
             }
             _ => {
                 test_cycle = 0;
-                debug!("Driver is not initialized, we're probably coming in from test ROM");
+                debug!("Driver is not initialized, we're probably coming in from test ROM. Force the init on our own, with backup and restore of data. ");
+                let _ = self.forced_safe_init();
                 boot_from_rom_ext = false;
             }
         }
@@ -253,7 +254,7 @@ impl SramCtrl {
         match test_cycle {
             0 => {
                 test_runner.assert_function("Test init status!", || {
-                    self.get_state() == DrvState::Uninitialized
+                    self.get_state() == DrvState::InitializedScrambled
                 });
                 test_runner.assert_function("Test no lock on execution!", || {
                     !self.is_locked_exec()
@@ -294,12 +295,12 @@ impl SramCtrl {
                             == 0x1)
                 });
                 test_runner.assert_function("Test setter for rram id's!", || {
-                    self.set_owner_rram_data(10, 0xFF);
-                    self.get_owner_rram_data(10).unwrap() == 0xFF
+                    self.set_owner_rram_data(10, 0xFF) == Ok(())
+                        && self.get_owner_rram_data(10).unwrap() == 0xFF
                 });
                 test_runner.assert_function("Test 2nd setter for rram id's!", || {
-                    self.set_owner_rram_data(10, 0x5A);
-                    self.get_owner_rram_data(10).unwrap() == 0x5A
+                    self.set_owner_rram_data(10, 0x5A) == Ok(())
+                        && self.get_owner_rram_data(10).unwrap() == 0x5A
                 });
                 test_runner.assert(
                     "Test forced Safe Init!",
@@ -319,21 +320,23 @@ impl SramCtrl {
                             .read(sram_ctrl_regs::CTRL_REGWEN::CTRL_REGWEN)
                             == 0x0)
                 });
+
+                test_runner.assert("Check if is Locked Ctrl.", self.is_locked_ctrl() == true);
                 test_runner.assert(
                     "Test fail Safe Init because we're locked",
                     self.forced_safe_init() == Err(ErrorCode::FAIL),
                 );
                 test_runner.assert_function("Test rram data setters ID 10 before reset!", || {
-                    self.set_owner_rram_data(10, 0x5A);
-                    self.get_owner_rram_data(10).unwrap() == 0x5A
+                    self.set_owner_rram_data(10, 0x5A) == Ok(())
+                        && self.get_owner_rram_data(10).unwrap() == 0x5A
                 });
                 test_runner.assert_function("Test rram data setters ID 11 before reset!", || {
-                    self.set_owner_rram_data(11, 0xFEEDBEEF);
-                    self.get_owner_rram_data(11).unwrap() == 0xFEEDBEEF
+                    self.set_owner_rram_data(11, 0xFEEDBEEF) == Ok(())
+                        && self.get_owner_rram_data(11).unwrap() == 0xFEEDBEEF
                 });
                 test_runner.assert_function("Test rram data setters ID 12 before reset!", || {
-                    self.set_owner_rram_data(12, 0x5A5A5A5A);
-                    self.get_owner_rram_data(12).unwrap() == 0x5A5A5A5A
+                    self.set_owner_rram_data(12, 0x5A5A5A5A) == Ok(())
+                        && self.get_owner_rram_data(12).unwrap() == 0x5A5A5A5A
                 });
             }
             1 => {
