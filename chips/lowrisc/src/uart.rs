@@ -15,7 +15,7 @@ use kernel::utilities::cells::TakeCell;
 use kernel::utilities::registers::interfaces::{ReadWriteable, Readable, Writeable};
 use kernel::utilities::StaticRef;
 
-use crate::registers::uart_regs::UartRegisters;
+use crate::registers::uart_regs::{UartRegisters, ALERT_TEST};
 use crate::registers::uart_regs::{CTRL, FIFO_CTRL, INTR, STATUS, TIMEOUT_CTRL, WDATA};
 
 pub struct Uart<'a> {
@@ -194,9 +194,6 @@ impl<'a> Uart<'a> {
                 let mut return_code = Ok(());
 
                 for i in self.rx_index.get()..self.rx_len.get() {
-                    rx_buf[i] = regs.rdata.get() as u8;
-                    len = i + 1;
-
                     if regs.status.is_set(STATUS::RXEMPTY) {
                         /* RX is empty */
 
@@ -213,6 +210,9 @@ impl<'a> Uart<'a> {
                             break;
                         }
                     }
+
+                    rx_buf[i] = regs.rdata.get() as u8;
+                    len = i + 1;
                 }
 
                 client.received_buffer(rx_buf, len, return_code, uart::Error::None);
@@ -316,6 +316,25 @@ impl<'a> Uart<'a> {
             while regs.status.is_set(STATUS::TXFULL) {}
             regs.wdata.write(WDATA::WDATA.val(*b as u32));
         }
+    }
+
+    pub fn test_alert(&self) {
+        self.registers
+            .alert_test
+            .write(ALERT_TEST::FATAL_FAULT.val(1));
+    }
+
+    pub fn handle_alert(&self) -> bool {
+        //if cfg!(feature = "test_alerthandler") {
+        #[cfg(feature = "test_alerthandler")]
+        {
+            // during test_alerthandler, use `TEST_ALERTHANDLER_UART` flag to signal that t alert was handled
+            unsafe {
+                tests::TEST_ALERTHANDLER_UART
+                    .set(tests::TEST_ALERTHANDLER_UART.get().unwrap_or(0) + 1);
+            }
+        }
+        true
     }
 }
 
@@ -445,10 +464,9 @@ impl<'a> DeferredCallClient for Uart<'a> {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::div_round_bounded;
-    use kernel::ErrorCode;
+#[cfg(any(test, feature = "test_alerthandler"))]
+pub mod tests {
+    use kernel::utilities::cells::OptionalCell;
 
     #[test]
     fn test_bounded_division() {
@@ -468,4 +486,7 @@ mod tests {
             assert_eq!(div_round_bounded(*a, *b), *expected);
         }
     }
+
+    // variable used for testing alert handling functionality
+    pub static mut TEST_ALERTHANDLER_UART: OptionalCell<u32> = OptionalCell::empty();
 }

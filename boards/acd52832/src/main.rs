@@ -10,17 +10,17 @@
 #![cfg_attr(not(doc), no_main)]
 #![deny(missing_docs)]
 
+use core::ptr::{addr_of, addr_of_mut};
+
 use capsules_core::virtualizers::virtual_alarm::VirtualMuxAlarm;
 use kernel::capabilities;
 use kernel::component::Component;
 use kernel::hil;
 use kernel::hil::adc::Adc;
 use kernel::hil::buzzer::Buzzer;
-use kernel::hil::entropy::Entropy32;
 use kernel::hil::gpio::{Configure, InterruptWithValue, Output};
 use kernel::hil::i2c::I2CMaster;
 use kernel::hil::led::LedLow;
-use kernel::hil::rng::Rng;
 use kernel::hil::time::{Alarm, Counter};
 use kernel::platform::{KernelResources, SyscallDriverLookup};
 use kernel::scheduler::round_robin::RoundRobinSched;
@@ -46,7 +46,8 @@ pub mod io;
 
 // State for loading and holding applications.
 // How should the kernel respond when a process faults.
-const FAULT_RESPONSE: kernel::process::PanicFaultPolicy = kernel::process::PanicFaultPolicy {};
+const FAULT_RESPONSE: capsules_system::process_policies::PanicFaultPolicy =
+    capsules_system::process_policies::PanicFaultPolicy {};
 
 // Number of concurrent processes this platform supports.
 const NUM_PROCS: usize = 4;
@@ -61,6 +62,7 @@ pub static mut STACK_MEMORY: [u8; 0x1000] = [0; 0x1000];
 
 type TemperatureDriver =
     components::temperature::TemperatureComponentType<nrf52832::temperature::Temp<'static>>;
+type RngDriver = components::rng::RngComponentType<nrf52832::trng::Trng<'static>>;
 
 /// Supported drivers by the platform
 pub struct Platform {
@@ -77,7 +79,7 @@ pub struct Platform {
         LedLow<'static, nrf52832::gpio::GPIOPin<'static>>,
         4,
     >,
-    rng: &'static capsules_core::rng::RngDriver<'static>,
+    rng: &'static RngDriver,
     temp: &'static TemperatureDriver,
     ipc: kernel::ipc::IPC<{ NUM_PROCS as u8 }>,
     alarm: &'static capsules_core::alarm::AlarmDriver<
@@ -139,7 +141,6 @@ impl KernelResources<nrf52832::chip::NRF52<'static, Nrf52832DefaultPeripherals<'
     type SyscallDriverLookup = Self;
     type SyscallFilter = ();
     type ProcessFault = ();
-    type CredentialsCheckingPolicy = ();
     type Scheduler = RoundRobinSched<'static>;
     type SchedulerTimer = cortexm4::systick::SysTick;
     type WatchDog = ();
@@ -152,9 +153,6 @@ impl KernelResources<nrf52832::chip::NRF52<'static, Nrf52832DefaultPeripherals<'
         &()
     }
     fn process_fault(&self) -> &Self::ProcessFault {
-        &()
-    }
-    fn credentials_checking_policy(&self) -> &'static Self::CredentialsCheckingPolicy {
         &()
     }
     fn scheduler(&self) -> &Self::Scheduler {
@@ -197,7 +195,7 @@ unsafe fn start() -> (
         create_capability!(capabilities::ProcessManagementCapability);
     let memory_allocation_capability = create_capability!(capabilities::MemoryAllocationCapability);
 
-    let board_kernel = static_init!(kernel::Kernel, kernel::Kernel::new(&PROCESSES));
+    let board_kernel = static_init!(kernel::Kernel, kernel::Kernel::new(&*addr_of!(PROCESSES)));
 
     // Make non-volatile memory writable and activate the reset button
     let uicr = nrf52832::uicr::Uicr::new();
@@ -483,25 +481,12 @@ unsafe fn start() -> (
     // RNG
     //
 
-    // Convert hardware RNG to the Random interface.
-    let entropy_to_random = static_init!(
-        capsules_core::rng::Entropy32ToRandom<'static>,
-        capsules_core::rng::Entropy32ToRandom::new(&base_peripherals.trng)
-    );
-    base_peripherals.trng.set_client(entropy_to_random);
-
-    // Setup RNG for userspace
-    let rng = static_init!(
-        capsules_core::rng::RngDriver<'static>,
-        capsules_core::rng::RngDriver::new(
-            entropy_to_random,
-            board_kernel.create_grant(
-                capsules_core::rng::DRIVER_NUM,
-                &memory_allocation_capability
-            )
-        )
-    );
-    entropy_to_random.set_client(rng);
+    let rng = components::rng::RngComponent::new(
+        board_kernel,
+        capsules_core::rng::DRIVER_NUM,
+        &base_peripherals.trng,
+    )
+    .finalize(components::rng_component_static!(nrf52832::trng::Trng));
 
     //
     // Light Sensor
@@ -616,21 +601,21 @@ unsafe fn start() -> (
     while !base_peripherals.clock.low_started() {}
     while !base_peripherals.clock.high_started() {}
 
-    let scheduler = components::sched::round_robin::RoundRobinComponent::new(&PROCESSES)
+    let scheduler = components::sched::round_robin::RoundRobinComponent::new(&*addr_of!(PROCESSES))
         .finalize(components::round_robin_component_static!(NUM_PROCS));
 
     let platform = Platform {
-        button: button,
-        ble_radio: ble_radio,
-        console: console,
-        led: led,
-        gpio: gpio,
-        rng: rng,
-        temp: temp,
-        alarm: alarm,
-        gpio_async: gpio_async,
-        light: light,
-        buzzer: buzzer,
+        button,
+        ble_radio,
+        console,
+        led,
+        gpio,
+        rng,
+        temp,
+        alarm,
+        gpio_async,
+        light,
+        buzzer,
         ipc: kernel::ipc::IPC::new(
             board_kernel,
             kernel::ipc::DRIVER_NUM,
@@ -649,7 +634,7 @@ unsafe fn start() -> (
     nrf52832_peripherals.gpio_port[Pin::P0_31].clear();
 
     debug!("Initialization complete. Entering main loop\r");
-    debug!("{}", &nrf52832::ficr::FICR_INSTANCE);
+    debug!("{}", &*addr_of!(nrf52832::ficr::FICR_INSTANCE));
 
     // These symbols are defined in the linker script.
     extern "C" {
@@ -667,14 +652,14 @@ unsafe fn start() -> (
         board_kernel,
         chip,
         core::slice::from_raw_parts(
-            &_sapps as *const u8,
-            &_eapps as *const u8 as usize - &_sapps as *const u8 as usize,
+            core::ptr::addr_of!(_sapps),
+            core::ptr::addr_of!(_eapps) as usize - core::ptr::addr_of!(_sapps) as usize,
         ),
         core::slice::from_raw_parts_mut(
-            &mut _sappmem as *mut u8,
-            &_eappmem as *const u8 as usize - &_sappmem as *const u8 as usize,
+            core::ptr::addr_of_mut!(_sappmem),
+            core::ptr::addr_of!(_eappmem) as usize - core::ptr::addr_of!(_sappmem) as usize,
         ),
-        &mut PROCESSES,
+        &mut *addr_of_mut!(PROCESSES),
         &FAULT_RESPONSE,
         &process_management_capability,
     )

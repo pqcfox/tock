@@ -3,21 +3,26 @@
 // Copyright Tock Contributors 2022.
 
 //! High-level setup and interrupt mapping for the chip.
-
 use core::fmt::{Display, Write};
 use core::marker::PhantomData;
-use kernel;
+use core::num::NonZeroU32;
+use core::ptr::addr_of;
 use kernel::platform::chip::{Chip, InterruptService};
+use kernel::utilities::helpers::create_non_zero_u32;
 use kernel::utilities::registers::interfaces::{ReadWriteable, Readable, Writeable};
 use rv32i::csr::{mcause, mie::mie, mtvec::mtvec, CSR};
 use rv32i::pmp::{PMPUserMPU, TORUserPMP};
 use rv32i::syscall::SysCall;
 
+use crate::alert_handler::{AlertBitfield, AlertClass, LocalAlertFlags, LocalAlertId};
+use crate::alert_handler::{AlertFlags, AlertHandler};
 use crate::chip_config::EarlGreyConfig;
 use crate::interrupts;
 use crate::pinmux_config::EarlGreyPinmuxConfig;
 use crate::plic::Plic;
 use crate::plic::PLIC;
+use crate::registers::top_earlgrey::AlertId;
+use crate::rstmgr::RstMgr;
 
 pub struct EarlGrey<
     'a,
@@ -30,7 +35,6 @@ pub struct EarlGrey<
     userspace_kernel_boundary: SysCall,
     pub mpu: PMPUserMPU<MPU_REGIONS, PMP>,
     plic: &'a Plic,
-    timer: &'static crate::timer::RvTimer<'static, CFG>,
     pwrmgr: lowrisc::pwrmgr::PwrMgr,
     plic_interrupt_service: &'a I,
     _cfg: PhantomData<CFG>,
@@ -38,11 +42,14 @@ pub struct EarlGrey<
 }
 
 pub struct EarlGreyDefaultPeripherals<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig> {
+    pub sram_ret: crate::sram_ret::SramCtrl,
     pub aes: crate::aes::Aes<'a>,
     pub hmac: lowrisc::hmac::Hmac<'a>,
-    pub usb: lowrisc::usbdev::Usb<'a>,
+    pub clkmgr: crate::clkmgr::Clkmgr,
+    pub usb: lowrisc::usb::Usb<'a>,
     pub uart0: lowrisc::uart::Uart<'a>,
     pub otbn: lowrisc::otbn::Otbn<'a>,
+    pub otp: lowrisc::otp::Otp,
     pub gpio_port: crate::gpio::Port<'a>,
     pub i2c0: lowrisc::i2c::I2c<'a>,
     pub spi_host0: lowrisc::spi_host::SpiHost<'a>,
@@ -50,6 +57,10 @@ pub struct EarlGreyDefaultPeripherals<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyP
     pub flash_ctrl: crate::flash_ctrl::FlashCtrl<'a>,
     pub rng: lowrisc::csrng::CsRng<'a>,
     pub watchdog: lowrisc::aon_timer::AonTimer,
+    pub timer: crate::timer::RvTimer<'static, CFG>,
+    pub alert_handler: AlertHandler,
+    pub pattgen: lowrisc::pattgen::PattGen<'a>,
+    pub rst_mgmt: RstMgr,
     _cfg: PhantomData<CFG>,
     _pinmux: PhantomData<PINMUX>,
 }
@@ -61,11 +72,14 @@ impl<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig>
         flash_memory_protection_configuration: crate::flash_ctrl::MemoryProtectionConfiguration,
     ) -> Self {
         Self {
+            sram_ret: crate::sram_ret::SramCtrl::new(),
             aes: crate::aes::Aes::new(),
             hmac: lowrisc::hmac::Hmac::new(crate::hmac::HMAC0_BASE),
-            usb: lowrisc::usbdev::Usb::new(crate::usbdev::USB0_BASE),
+            clkmgr: crate::clkmgr::Clkmgr::new(),
+            usb: lowrisc::usb::Usb::new(crate::usbdev::USB0_BASE),
             uart0: lowrisc::uart::Uart::new(crate::uart::UART0_BASE, CFG::PERIPHERAL_FREQ),
             otbn: lowrisc::otbn::Otbn::new(crate::otbn::OTBN_BASE),
+            otp: lowrisc::otp::Otp::new(crate::otp::OTP_BASE),
             gpio_port: crate::gpio::Port::new::<PINMUX>(),
             i2c0: lowrisc::i2c::I2c::new(crate::i2c::I2C0_BASE, (1 / CFG::CPU_FREQ) * 1000 * 1000),
             spi_host0: lowrisc::spi_host::SpiHost::new(
@@ -82,6 +96,10 @@ impl<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig>
                 crate::aon_timer::AON_TIMER_BASE,
                 CFG::CPU_FREQ,
             ),
+            timer: crate::timer::RvTimer::new(),
+            alert_handler: AlertHandler::new(),
+            pattgen: lowrisc::pattgen::PattGen::new(crate::pattgen::PATTGEN_BASE),
+            rst_mgmt: RstMgr::new(),
             _cfg: PhantomData,
             _pinmux: PhantomData,
         }
@@ -90,6 +108,79 @@ impl<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig>
     pub fn init(&'static self) {
         kernel::deferred_call::DeferredCallClient::register(&self.aes);
         kernel::deferred_call::DeferredCallClient::register(&self.uart0);
+        // Recommended value by documentation
+        const INTEGRITY_CHECK_PERIOD: u32 = 0x3_FFFF;
+        // Recommended value by documentation
+        const CONSISTENCY_CHECK_PERIOD: u32 = 0x3_FFFF;
+        // Recommended value by documentation is at least 100_000.
+        const CHECK_TIMEOUT: NonZeroU32 = create_non_zero_u32(100_000);
+        self.otp
+            .init(
+                INTEGRITY_CHECK_PERIOD,
+                CONSISTENCY_CHECK_PERIOD,
+                Some(CHECK_TIMEOUT),
+            )
+            .expect("Failed to initialize OTP");
+    }
+
+    #[inline]
+    pub fn handle_alert_interrupt(&self, class: AlertClass) {
+        // retrieve alert state for this class and (try to) stop HW escalation
+        let class_state = self.alert_handler.class_state(class);
+        self.alert_handler.clear_esclation(class);
+
+        // HANDLE LOCAL ALERTS
+        // iterate multiple times through the local alerts, only handled once each alert (mark the alerts that have been handled in `handled_alerts` and don't reconsider them).
+        let mut handled_alerts = LocalAlertFlags::empty();
+        loop {
+            // check which local alerts are still set
+            let local_alerts = self.alert_handler.snapshot_local_alert_causes();
+
+            // iterate through all of the set local alerts that have not been handled since the start of the interrupt
+            let anything_new = handled_alerts.for_each_new(&local_alerts, |alert| {
+                // send each alert to `alert_handler`
+                let should_clear = self.alert_handler.handle_alert(alert, class_state);
+                if should_clear {
+                    self.alert_handler.clear_local_alert_cause(alert);
+                }
+            });
+
+            // if no new alerts have been raised consider that all of the alert have been handled
+            if !anything_new {
+                break;
+            }
+        }
+
+        // HANDLE ALERTS FROM ALL PERIPHEREALS
+        // alerts could be triggered while inside the interrupt handler,
+        // alerts flags could remain set until the underlying issue is solved
+        let mut handled_alerts = AlertFlags::empty();
+        loop {
+            // snapshot alert flags
+            let alerts = self.alert_handler.snapshot_alert_causes();
+            // iterate over current alert flags that have not previously been handled (and marked as such in `handled_alerts`)
+            let anything_new =
+                handled_alerts.for_each_new(&alerts, |alert| self.handle_alert(alert));
+
+            // break the loop when no new alert flags have been raised
+            if !anything_new {
+                break;
+            }
+        }
+
+        // clear interrupt flag
+        self.alert_handler.clear_interrupt(class);
+    }
+
+    fn handle_alert(&self, alert: AlertId) {
+        let should_clear = match alert {
+            AlertId::Uart0FatalFault => self.uart0.handle_alert(),
+            _ => panic!("alert with no handle was triggered"),
+        };
+        self.alert_handler.notify_userspace(alert);
+        if should_clear {
+            self.alert_handler.clear_alert_cause(alert);
+        }
     }
 }
 
@@ -108,8 +199,12 @@ impl<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig> InterruptService
             interrupts::HMAC_HMACDONE..=interrupts::HMAC_HMACERR => {
                 self.hmac.handle_interrupt();
             }
-            interrupts::USBDEV_PKTRECEIVED..=interrupts::USBDEV_LINKOUTERR => {
-                self.usb.handle_interrupt();
+            raw_usb_interrupt @ interrupts::USBDEV_PKTRECEIVED..=interrupts::USBDEV_LINKOUTERR => {
+                // PANIC: raw_usb_interrupt is a valid interrupt because of the match arm
+                // CAST: u32 == usize on RV32I
+                let usb_interrupt =
+                    lowrisc::usb::UsbInterrupt::try_from_usize(raw_usb_interrupt as usize).unwrap();
+                self.usb.handle_interrupt(usb_interrupt);
             }
             interrupts::FLASHCTRL_PROGEMPTY => {
                 // Since writing is done on chunks of FIFO depth level, this interrupt is useless.
@@ -147,6 +242,27 @@ impl<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig> InterruptService
             interrupts::SPIHOST1_ERROR..=interrupts::SPIHOST1_SPIEVENT => {
                 self.spi_host1.handle_interrupt()
             }
+            interrupts::ALERTHANDLER_CLASSA => {
+                self.handle_alert_interrupt(AlertClass::ClassA);
+            }
+            interrupts::ALERTHANDLER_CLASSB => {
+                self.handle_alert_interrupt(AlertClass::ClassB);
+            }
+            interrupts::ALERTHANDLER_CLASSC => {
+                self.handle_alert_interrupt(AlertClass::ClassC);
+            }
+            interrupts::ALERTHANDLER_CLASSD => {
+                self.handle_alert_interrupt(AlertClass::ClassD);
+            }
+            interrupts::RVTIMERTIMEREXPIRED0_0 => self.timer.service_interrupt(),
+            raw_pattgen_interrupt @ interrupts::PATTGENDONECH0..=interrupts::PATTGENDONECH1 => {
+                // PANIC: raw_pattgen_interrupt is a valid interrupt because of the match arm
+                // CAST: u32 == usize on RV32I
+                let pattgen_interrupt =
+                    lowrisc::pattgen::PattgenInterrupt::try_from(raw_pattgen_interrupt as usize)
+                        .unwrap();
+                self.pattgen.handle_interrupt(pattgen_interrupt);
+            }
             interrupts::AON_TIMER_AON_WKUP_TIMER_EXPIRED
                 ..=interrupts::AON_TIMER_AON_WDOG_TIMER_BARK => self.watchdog.handle_interrupt(),
             _ => return false,
@@ -164,17 +280,12 @@ impl<
         PMP: TORUserPMP<{ MPU_REGIONS }> + Display + 'static,
     > EarlGrey<'a, MPU_REGIONS, I, CFG, PINMUX, PMP>
 {
-    pub unsafe fn new(
-        plic_interrupt_service: &'a I,
-        timer: &'static crate::timer::RvTimer<CFG>,
-        pmp: PMP,
-    ) -> Self {
+    pub unsafe fn new(plic_interrupt_service: &'a I, pmp: PMP) -> Self {
         Self {
             userspace_kernel_boundary: SysCall::new(),
             mpu: PMPUserMPU::new(pmp),
-            plic: &PLIC,
+            plic: &*addr_of!(PLIC),
             pwrmgr: lowrisc::pwrmgr::PwrMgr::new(crate::pwrmgr::PWRMGR_BASE),
-            timer,
             plic_interrupt_service,
             _cfg: PhantomData,
             _pinmux: PhantomData,
@@ -196,7 +307,6 @@ impl<
                         None,
                     );
                 }
-                interrupts::RVTIMERTIMEREXPIRED0_0 => self.timer.service_interrupt(),
                 _ => {
                     if interrupt >= interrupts::HMAC_HMACDONE
                         && interrupt <= interrupts::HMAC_HMACERR
@@ -454,7 +564,7 @@ pub unsafe fn configure_trap_handler() {
 // Mock implementation for crate tests that does not include the section
 // specifier, as the test will not use our linker script, and the host
 // compilation environment may not allow the section name.
-#[cfg(not(any(target_arch = "riscv32", target_os = "none")))]
+#[cfg(not(all(target_arch = "riscv32", target_os = "none")))]
 pub extern "C" fn _start_trap_vectored() {
     use core::hint::unreachable_unchecked;
     unsafe {
@@ -463,55 +573,55 @@ pub extern "C" fn _start_trap_vectored() {
 }
 
 #[cfg(all(target_arch = "riscv32", target_os = "none"))]
-#[link_section = ".riscv.trap_vectored"]
-#[export_name = "_start_trap_vectored"]
-#[naked]
-pub extern "C" fn _start_trap_vectored() -> ! {
-    use core::arch::asm;
-    unsafe {
-        // According to the Ibex user manual:
-        // [NMI] has interrupt ID 31, i.e., it has the highest priority of all
-        // interrupts and the core jumps to the trap-handler base address (in
-        // mtvec) plus 0x7C to handle the NMI.
-        //
-        // Below are 32 (non-compressed) jumps to cover the entire possible
-        // range of vectored traps.
-        asm!(
-            "
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-        ",
-            options(noreturn)
-        );
-    }
+extern "C" {
+    pub fn _start_trap_vectored();
 }
+
+#[cfg(all(target_arch = "riscv32", target_os = "none"))]
+// According to the Ibex user manual:
+// [NMI] has interrupt ID 31, i.e., it has the highest priority of all
+// interrupts and the core jumps to the trap-handler base address (in
+// mtvec) plus 0x7C to handle the NMI.
+//
+// Below are 32 (non-compressed) jumps to cover the entire possible
+// range of vectored traps.
+core::arch::global_asm!(
+    "
+            .section .riscv.trap_vectored, \"ax\"
+            .globl _start_trap_vectored
+          _start_trap_vectored:
+
+            j _start_trap
+            j _start_trap
+            j _start_trap
+            j _start_trap
+            j _start_trap
+            j _start_trap
+            j _start_trap
+            j _start_trap
+            j _start_trap
+            j _start_trap
+            j _start_trap
+            j _start_trap
+            j _start_trap
+            j _start_trap
+            j _start_trap
+            j _start_trap
+            j _start_trap
+            j _start_trap
+            j _start_trap
+            j _start_trap
+            j _start_trap
+            j _start_trap
+            j _start_trap
+            j _start_trap
+            j _start_trap
+            j _start_trap
+            j _start_trap
+            j _start_trap
+            j _start_trap
+            j _start_trap
+            j _start_trap
+            j _start_trap
+        "
+);

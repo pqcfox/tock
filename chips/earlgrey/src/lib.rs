@@ -4,7 +4,6 @@
 
 //! Drivers and chip support for EarlGrey.
 
-#![feature(naked_functions)]
 #![no_std]
 #![crate_name = "earlgrey"]
 #![crate_type = "rlib"]
@@ -18,8 +17,10 @@ pub mod pinmux_config;
 mod interrupts;
 
 pub mod aes;
+pub mod alert_handler;
 pub mod aon_timer;
 pub mod chip;
+pub mod clkmgr;
 pub mod csrng;
 pub mod epmp;
 pub mod flash_ctrl;
@@ -27,11 +28,15 @@ pub mod gpio;
 pub mod hmac;
 pub mod i2c;
 pub mod otbn;
+pub mod otp;
+pub mod pattgen;
 pub mod pinmux;
 pub mod plic;
 pub mod pwrmgr;
 pub mod registers;
+pub mod rstmgr;
 pub mod spi_host;
+pub mod sram_ret;
 pub mod timer;
 pub mod uart;
 pub mod usbdev;

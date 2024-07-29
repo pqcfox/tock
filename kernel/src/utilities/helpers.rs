@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // Copyright Tock Contributors 2022.
 
-//! Helper macros.
+//! Helper macros and functions.
+
+use core::num::{NonZeroUsize, NonZeroU32};
 
 /// Create an object with the given capability.
 ///
@@ -41,4 +43,56 @@ macro_rules! count_expressions {
     () => (0usize);
     ($head:expr $(,)?) => (1usize);
     ($head:expr, $($tail:expr),* $(,)?) => (1usize + count_expressions!($($tail),*));
+}
+
+/// Creates a [NonZeroUsize] from the given value
+///
+/// # Return value
+///
+/// A new instance of [NonZeroUsize]
+///
+/// # Panic
+///
+/// Panics if `value` == 0.
+pub const fn create_non_zero_usize(value: usize) -> NonZeroUsize {
+    match NonZeroUsize::new(value) {
+        None => panic!("Attempted to create NonZeroUsize with 0 as value"),
+        Some(non_zero_value) => non_zero_value,
+    }
+}
+
+/// Creates a [NonZeroU32] from the given value
+///
+/// # Return value
+///
+/// A new instance of [NonZeroU32]
+///
+/// # Panic
+///
+/// Panics if `value` == 0.
+pub const fn create_non_zero_u32(value: u32) -> NonZeroU32 {
+    match NonZeroU32::new(value) {
+        None => panic!("Attempted to create NonZeroU32 with 0 as value"),
+        Some(non_zero_value) => non_zero_value,
+    }
+}
+
+/// Compute a POSIX-style CRC32 checksum of a slice.
+///
+/// Online calculator: <https://crccalc.com/>
+pub fn crc32_posix(b: &[u8]) -> u32 {
+    let mut crc: u32 = 0;
+
+    for c in b {
+        crc ^= (*c as u32) << 24;
+
+        for _i in 0..8 {
+            if crc & (0b1 << 31) > 0 {
+                crc = (crc << 1) ^ 0x04c11db7;
+            } else {
+                crc <<= 1;
+            }
+        }
+    }
+    !crc
 }
