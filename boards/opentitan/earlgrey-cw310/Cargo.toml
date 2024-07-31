@@ -25,6 +25,7 @@ capsules-system = { path = "../../../capsules/system" }
 
 [features]
 default = ["fpga_cw310"]
+test_sysrst_ctrl = ["lowrisc/test_sysrst_ctrl"]
 test_alerthandler = ["earlgrey/test_alerthandler", "lowrisc/test_alerthandler"]
 
 # OpenTitan SoC design can be synthesized or compiled for different targets. A

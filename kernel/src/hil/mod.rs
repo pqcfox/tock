@@ -27,6 +27,7 @@ pub mod led;
 pub mod log;
 pub mod nonvolatile_storage;
 pub mod opentitan_alerthandler;
+pub mod opentitan_sysrst;
 pub mod pattgen;
 pub mod public_key_crypto;
 pub mod pwm;

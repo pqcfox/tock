@@ -97,5 +97,6 @@ pub enum NUM {
     Pattgen               = 0x90009,
     ResetManager          = 0x9000A,
     OpenTitanAlertHandler = 0x9000B,
+    OpenTitanSysRst       = 0x9000C,
 }
 }

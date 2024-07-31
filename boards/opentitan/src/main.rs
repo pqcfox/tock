@@ -20,11 +20,13 @@ use crate::hil::symmetric_encryption::AES128_BLOCK_SIZE;
 use crate::otbn::OtbnComponent;
 use crate::pinmux_layout::BoardPinmuxLayout;
 use capsules_aes_gcm::aes_gcm;
+use capsules_core::driver;
 use capsules_core::reset_manager::ResetManager;
 use capsules_core::virtualizers::virtual_aes_ccm;
 use capsules_core::virtualizers::virtual_alarm::{MuxAlarm, VirtualMuxAlarm};
 use core::num::NonZeroU16;
 use capsules_extra::opentitan_alerthandler::AlertHandlerCapsule;
+use capsules_extra::opentitan_sysrst::SystemReset;
 use earlgrey::alert_handler;
 use earlgrey::chip::EarlGreyDefaultPeripherals;
 use earlgrey::chip_config::EarlGreyConfig;
@@ -51,6 +53,8 @@ use kernel::platform::{KernelResources, SyscallDriverLookup, TbfHeaderFilterDefa
 use kernel::scheduler::priority::PrioritySched;
 use kernel::utilities::registers::interfaces::ReadWriteable;
 use kernel::{create_capability, debug, static_init};
+use lowrisc::flash_ctrl::FlashMPConfig;
+use lowrisc::sysrst_ctrl::SysRstCtrl;
 use rv32i::csr;
 
 pub mod io;
@@ -245,6 +249,7 @@ struct EarlGrey {
             >,
         >,
     >,
+    opentitan_sysrst: &'static SystemReset<'static, SysRstCtrl<'static>>,
     syscall_filter: &'static TbfHeaderFilterDefaultAllow,
     scheduler: &'static PrioritySched,
     scheduler_timer: &'static VirtualSchedulerTimer<
@@ -283,6 +288,7 @@ impl SyscallDriverLookup for EarlGrey {
                 f(Some(self.opentitan_alerthandler))
             }
             capsules_core::reset_manager::DRIVER_NUM => f(Some(self.reset_manager)),
+            capsules_extra::opentitan_sysrst::DRIVER_NUM => f(Some(self.opentitan_sysrst)),
             _ => f(None),
         }
     }
@@ -1045,6 +1051,17 @@ unsafe fn setup() -> (
     );
     peripherals.alert_handler.set_client(alert_handler_capsule);
 
+    let opentitan_sysrst = static_init!(
+        SystemReset<'static, SysRstCtrl>,
+        SystemReset::new(
+            &peripherals.sysreset,
+            board_kernel.create_grant(
+                driver::NUM::OpenTitanSysRst as usize,
+                &memory_allocation_cap
+            ),
+        )
+    );
+
     let earlgrey = static_init!(
         EarlGrey,
         EarlGrey {
@@ -1064,6 +1081,7 @@ unsafe fn setup() -> (
             syscall_filter,
             scheduler,
             scheduler_timer,
+            opentitan_sysrst,
             watchdog,
             reset_manager,
             opentitan_alerthandler: alert_handler_capsule,
@@ -1082,9 +1100,16 @@ unsafe fn setup() -> (
     earlgrey.reset_manager.startup();
     earlgrey.reset_manager.populate_reset_reason(reset_reason);
 
+    /* TESTs */
+
     #[cfg(feature = "test_alerthandler")]
     {
         test_alerthandler(peripherals, mux_alarm);
+    }
+
+    #[cfg(feature = "test_sysrst_ctrl")]
+    {
+        test_sysrst_ctrl(peripherals);
     }
 
     kernel::process::load_processes(
@@ -1109,6 +1134,18 @@ unsafe fn setup() -> (
     debug!("OpenTitan initialisation complete. Entering main loop");
 
     (board_kernel, earlgrey, chip, peripherals)
+}
+
+
+#[cfg(feature = "test_sysrst_ctrl")]
+fn test_sysrst_ctrl(peripherals: &EarlGreyDefaultPeripherals<ChipConfig, BoardPinmuxLayout>) {
+    pinmux_layout::prepare_wiring_sysrst_ctrl_tests();
+    lowrisc::sysrst_ctrl::tests::test_all(
+        &peripherals.sysreset,
+        &peripherals.gpio_port[7],
+        &peripherals.gpio_port[2],
+        &peripherals.gpio_port[20],
+    );
 }
 
 fn test_flash(

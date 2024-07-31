@@ -21,7 +21,7 @@ use crate::interrupts;
 use crate::pinmux_config::EarlGreyPinmuxConfig;
 use crate::plic::Plic;
 use crate::plic::PLIC;
-use crate::registers::top_earlgrey::AlertId;
+use crate::registers::top_earlgrey::{AlertId, SYSRST_CTRL_AON_BASE_ADDR};
 use crate::rstmgr::RstMgr;
 
 pub struct EarlGrey<
@@ -57,6 +57,7 @@ pub struct EarlGreyDefaultPeripherals<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyP
     pub flash_ctrl: crate::flash_ctrl::FlashCtrl<'a>,
     pub rng: lowrisc::csrng::CsRng<'a>,
     pub watchdog: lowrisc::aon_timer::AonTimer,
+    pub sysreset: lowrisc::sysrst_ctrl::SysRstCtrl<'a>,
     pub timer: crate::timer::RvTimer<'static, CFG>,
     pub alert_handler: AlertHandler,
     pub pattgen: lowrisc::pattgen::PattGen<'a>,
@@ -96,6 +97,7 @@ impl<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig>
                 crate::aon_timer::AON_TIMER_BASE,
                 CFG::CPU_FREQ,
             ),
+            sysreset: lowrisc::sysrst_ctrl::SysRstCtrl::new(SYSRST_CTRL_AON_BASE_ADDR),
             timer: crate::timer::RvTimer::new(),
             alert_handler: AlertHandler::new(),
             pattgen: lowrisc::pattgen::PattGen::new(crate::pattgen::PATTGEN_BASE),
@@ -242,6 +244,7 @@ impl<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig> InterruptService
             interrupts::SPIHOST1_ERROR..=interrupts::SPIHOST1_SPIEVENT => {
                 self.spi_host1.handle_interrupt()
             }
+            interrupts::SYSRST_CTRL_AON_SYSRST_CTRL => self.sysreset.handle_interrupt(),
             interrupts::ALERTHANDLER_CLASSA => {
                 self.handle_alert_interrupt(AlertClass::ClassA);
             }
