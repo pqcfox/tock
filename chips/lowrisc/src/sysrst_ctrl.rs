@@ -107,7 +107,7 @@ impl<'a> SysRstCtrl<'a> {
     }
 
     /// configure input debuounce timer that affercts Key Interrupt and Combo Detector
-    pub fn confiugre_debouncetimer(&self, duration_us: u16) {
+    pub fn configure_debouncetimer(&self, duration_us: u16) {
         self.registers
             .key_intr_debounce_ctl
             .write(KEY_INTR_DEBOUNCE_CTL::DEBOUNCE_TIMER.val(u16::div_ceil(duration_us, 5) as u32));
