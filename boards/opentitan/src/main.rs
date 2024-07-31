@@ -24,11 +24,13 @@ use capsules_core::driver;
 use capsules_core::reset_manager::ResetManager;
 use capsules_core::virtualizers::virtual_aes_ccm;
 use capsules_core::virtualizers::virtual_alarm::{MuxAlarm, VirtualMuxAlarm};
+use core::num::NonZeroU16;
 use capsules_extra::opentitan_alerthandler::AlertHandlerCapsule;
 use capsules_extra::opentitan_sysrst::SystemReset;
 use earlgrey::alert_handler;
 use earlgrey::chip::EarlGreyDefaultPeripherals;
 use earlgrey::chip_config::EarlGreyConfig;
+use earlgrey::flash_ctrl;
 use earlgrey::pinmux_config::EarlGreyPinmuxConfig;
 use earlgrey::timer::RvTimer;
 
@@ -36,6 +38,8 @@ use kernel::capabilities;
 use kernel::component::Component;
 use kernel::hil;
 use kernel::hil::entropy::Entropy32;
+use kernel::hil::flash::Flash as FlashHIL;
+use kernel::hil::flash::HasInfoClient;
 use kernel::hil::hasher::Hasher;
 use kernel::hil::i2c::I2CMaster;
 use kernel::hil::led::LedHigh;
@@ -144,7 +148,7 @@ static mut TICKV: Option<
         'static,
         capsules_core::virtualizers::virtual_flash::FlashUser<
             'static,
-            lowrisc::flash_ctrl::FlashCtrl<'static>,
+            earlgrey::flash_ctrl::FlashCtrl<'static>,
         >,
         capsules_extra::sip_hash::SipHasher24<'static>,
         2048,
@@ -197,6 +201,7 @@ struct EarlGrey {
         VirtualMuxAlarm<'static, earlgrey::timer::RvTimer<'static, ChipConfig>>,
     >,
     hmac: &'static capsules_extra::hmac::HmacDriver<'static, lowrisc::hmac::Hmac<'static>, 32>,
+    info_flash: Option<&'static capsules_extra::info_flash::InfoFlash<'static, earlgrey::flash_ctrl::FlashCtrl<'static>>>,
     lldb: &'static capsules_core::low_level_debug::LowLevelDebug<
         'static,
         capsules_core::virtualizers::virtual_uart::UartDevice<'static>,
@@ -222,7 +227,6 @@ struct EarlGrey {
         >,
     >,
     pattgen: &'static capsules_extra::pattgen::PattGen<'static, lowrisc::pattgen::PattGen<'static>>,
-    /*
     kv_driver: &'static capsules_extra::kv_driver::KVStoreDriver<
         'static,
         capsules_extra::virtual_kv::VirtualKVPermissions<
@@ -235,7 +239,7 @@ struct EarlGrey {
                         'static,
                         capsules_core::virtualizers::virtual_flash::FlashUser<
                             'static,
-                            lowrisc::flash_ctrl::FlashCtrl<'static>,
+                            earlgrey::flash_ctrl::FlashCtrl<'static>,
                         >,
                         capsules_extra::sip_hash::SipHasher24<'static>,
                         2048,
@@ -245,7 +249,6 @@ struct EarlGrey {
             >,
         >,
     >,
-    */
     opentitan_sysrst: &'static SystemReset<'static, SysRstCtrl<'static>>,
     syscall_filter: &'static TbfHeaderFilterDefaultAllow,
     scheduler: &'static PrioritySched,
@@ -274,6 +277,11 @@ impl SyscallDriverLookup for EarlGrey {
             capsules_core::spi_controller::DRIVER_NUM => f(Some(self.spi_controller)),
             capsules_core::rng::DRIVER_NUM => f(Some(self.rng)),
             capsules_extra::symmetric_encryption::aes::DRIVER_NUM => f(Some(self.aes)),
+            capsules_extra::kv_driver::DRIVER_NUM => f(Some(self.kv_driver)),
+            capsules_extra::info_flash::DRIVER_NUMBER => match self.info_flash {
+                Some(info_flash) => f(Some(info_flash)),
+                None => f(None),
+            }
             //capsules_extra::kv_driver::DRIVER_NUM => f(Some(self.kv_driver)),
             capsules_extra::pattgen::DRIVER_NUM => f(Some(self.pattgen)),
             capsules_extra::opentitan_alerthandler::DRIVER_NUM => {
@@ -319,38 +327,126 @@ impl KernelResources<EarlGreyChip> for EarlGrey {
     }
 }
 
+// These symbols are defined in the linker script.
+extern "C" {
+    /// Beginning of the ROM region containing app images.
+    static _sapps: u8;
+    /// End of the ROM region containing app images.
+    static _eapps: u8;
+    /// Beginning of the RAM region for app memory.
+    static mut _sappmem: u8;
+    /// End of the RAM region for app memory.
+    static _eappmem: u8;
+    /// The start of the kernel text (Included only for kernel PMP)
+    static _stext: u8;
+    /// The end of the kernel text (Included only for kernel PMP)
+    static _etext: u8;
+    /// The start of the kernel / app / storage flash (Included only for kernel PMP)
+    static _sflash: u8;
+    /// The end of the kernel / app / storage flash (Included only for kernel PMP)
+    static _eflash: u8;
+    /// The start of the kernel / app RAM (Included only for kernel PMP)
+    static _ssram: u8;
+    /// The end of the kernel / app RAM (Included only for kernel PMP)
+    static _esram: u8;
+    /// The start of the OpenTitan manifest
+    static _manifest: u8;
+}
+
+// Set this variable to true if tests are needed to be run
+const FLASH_TESTS_ENABLED: bool = false;
+
+fn get_flash_default_memory_protection_region() -> flash_ctrl::DefaultMemoryProtectionRegion {
+    flash_ctrl::DefaultMemoryProtectionRegion::new()
+}
+
+fn get_flash_memory_protection_configuration() -> flash_ctrl::MemoryProtectionConfiguration {
+    let flash_default_memory_protection_region = get_flash_default_memory_protection_region();
+
+    if FLASH_TESTS_ENABLED {
+        let page_index_range =
+            earlgrey::flash_ctrl::tests::convert_flash_slice_to_page_position_range(unsafe {
+                core::slice::from_raw_parts(
+                    &_sapps as *const u8,
+                    &_eapps as *const u8 as usize - &_sapps as *const u8 as usize,
+                )
+            })
+            .unwrap();
+
+        use earlgrey::flash_ctrl::DataMemoryProtectionRegionBase;
+        use earlgrey::flash_ctrl::DataMemoryProtectionRegionSize;
+
+        let memory_protection_page0_base =
+            DataMemoryProtectionRegionBase::new(*page_index_range.end());
+
+        const RAW_MEMORY_PROTECTION_PAGE0_SIZE: NonZeroU16 = match NonZeroU16::new(1) {
+            Some(non_zero_u16) => non_zero_u16,
+            None => unreachable!(),
+        };
+
+        const MEMORY_PROTECTION_PAGE0_SIZE: DataMemoryProtectionRegionSize =
+            match DataMemoryProtectionRegionSize::new(RAW_MEMORY_PROTECTION_PAGE0_SIZE) {
+                Ok(memory_protection_page0_size) => memory_protection_page0_size,
+                Err(()) => unreachable!(),
+            };
+
+        flash_ctrl::MemoryProtectionConfiguration::new(flash_default_memory_protection_region)
+            .enable_and_configure_data_region(
+                flash_ctrl::DataMemoryProtectionRegionIndex::Index0,
+                memory_protection_page0_base,
+                MEMORY_PROTECTION_PAGE0_SIZE,
+            )
+            .enable_erase()
+            .enable_write()
+            .enable_read()
+            .enable_high_endurance()
+            .finalize_region()
+            .enable_and_configure_info2_region(
+                flash_ctrl::tests::VALID_INFO2_MEMORY_PROTECTION_REGION_INDEX,
+            )
+            .enable_erase()
+            .enable_write()
+            .enable_read()
+            .enable_high_endurance()
+            .finalize_region()
+    } else {
+        // SAFETY: &_stext represents a valid flash address in the host address space.
+        let starting_address =
+            flash_ctrl::FlashAddress::new_from_host_address(unsafe { &_stext as *const u8 })
+                .unwrap();
+        // SAFETY: &_etext represents a valid flash address in the host address space.
+        let ending_address =
+            flash_ctrl::FlashAddress::new_from_host_address(unsafe { &_etext as *const u8 })
+                .unwrap();
+
+        // Setup flash memory protection for the kernel
+        // PANIC: the unwrap panics only if Flash(_stext) < FlashAddress(_etext), which occurs
+        // only due to a linker script bug.
+        flash_ctrl::MemoryProtectionConfiguration::new(flash_default_memory_protection_region)
+            .enable_and_configure_data_region_from_pointers(
+                flash_ctrl::DataMemoryProtectionRegionIndex::Index0,
+                starting_address,
+                ending_address,
+            )
+            .unwrap()
+            .enable_read()
+            .finalize_region()
+            .enable_and_configure_info2_region(flash_ctrl::Info2MemoryProtectionRegionIndex::Bank1(
+                flash_ctrl::Info2PageIndex::Index1,
+            ))
+            .enable_read()
+            .enable_write()
+            .enable_erase()
+            .finalize_region()
+    }
+}
+
 unsafe fn setup() -> (
     &'static kernel::Kernel,
     &'static EarlGrey,
     &'static EarlGreyChip,
     &'static EarlGreyDefaultPeripherals<'static, ChipConfig, BoardPinmuxLayout>,
 ) {
-    // These symbols are defined in the linker script.
-    extern "C" {
-        /// Beginning of the ROM region containing app images.
-        static _sapps: u8;
-        /// End of the ROM region containing app images.
-        static _eapps: u8;
-        /// Beginning of the RAM region for app memory.
-        static mut _sappmem: u8;
-        /// End of the RAM region for app memory.
-        static _eappmem: u8;
-        /// The start of the kernel text (Included only for kernel PMP)
-        static _stext: u8;
-        /// The end of the kernel text (Included only for kernel PMP)
-        static _etext: u8;
-        /// The start of the kernel / app / storage flash (Included only for kernel PMP)
-        static _sflash: u8;
-        /// The end of the kernel / app / storage flash (Included only for kernel PMP)
-        static _eflash: u8;
-        /// The start of the kernel / app RAM (Included only for kernel PMP)
-        static _ssram: u8;
-        /// The end of the kernel / app RAM (Included only for kernel PMP)
-        static _esram: u8;
-        /// The start of the OpenTitan manifest
-        static _manifest: u8;
-    }
-
     // Ibex-specific handler
     earlgrey::chip::configure_trap_handler();
 
@@ -409,9 +505,11 @@ unsafe fn setup() -> (
 
     let board_kernel = static_init!(kernel::Kernel, kernel::Kernel::new(&*addr_of!(PROCESSES)));
 
+    let flash_memory_protection_configuration = get_flash_memory_protection_configuration();
+
     let peripherals = static_init!(
         EarlGreyDefaultPeripherals<ChipConfig, BoardPinmuxLayout>,
-        EarlGreyDefaultPeripherals::new()
+        EarlGreyDefaultPeripherals::new(flash_memory_protection_configuration)
     );
     peripherals.init();
 
@@ -672,19 +770,18 @@ unsafe fn setup() -> (
     }
     */
 
-    /*
     // Flash
     let flash_ctrl_read_buf = static_init!(
         [u8; lowrisc::flash_ctrl::PAGE_SIZE],
         [0; lowrisc::flash_ctrl::PAGE_SIZE]
     );
     let page_buffer = static_init!(
-        lowrisc::flash_ctrl::LowRiscPage,
-        lowrisc::flash_ctrl::LowRiscPage::default()
+        earlgrey::flash_ctrl::RawFlashCtrlPage,
+        earlgrey::flash_ctrl::RawFlashCtrlPage::default()
     );
 
     let mux_flash = components::flash::FlashMuxComponent::new(&peripherals.flash_ctrl).finalize(
-        components::flash_mux_component_static!(lowrisc::flash_ctrl::FlashCtrl),
+        components::flash_mux_component_static!(earlgrey::flash_ctrl::FlashCtrl),
     );
 
     // SipHash
@@ -706,7 +803,7 @@ unsafe fn setup() -> (
         page_buffer,         // Buffer used with the flash controller
     )
     .finalize(components::tickv_component_static!(
-        lowrisc::flash_ctrl::FlashCtrl,
+        earlgrey::flash_ctrl::FlashCtrl,
         capsules_extra::sip_hash::SipHasher24,
         2048
     ));
@@ -718,7 +815,7 @@ unsafe fn setup() -> (
         components::tickv_kv_store_component_static!(
             capsules_extra::tickv::TicKVSystem<
                 capsules_core::virtualizers::virtual_flash::FlashUser<
-                    lowrisc::flash_ctrl::FlashCtrl,
+                    earlgrey::flash_ctrl::FlashCtrl,
                 >,
                 capsules_extra::sip_hash::SipHasher24<'static>,
                 2048,
@@ -732,7 +829,7 @@ unsafe fn setup() -> (
             capsules_extra::tickv_kv_store::TicKVKVStore<
                 capsules_extra::tickv::TicKVSystem<
                     capsules_core::virtualizers::virtual_flash::FlashUser<
-                        lowrisc::flash_ctrl::FlashCtrl,
+                        earlgrey::flash_ctrl::FlashCtrl,
                     >,
                     capsules_extra::sip_hash::SipHasher24<'static>,
                     2048,
@@ -748,7 +845,7 @@ unsafe fn setup() -> (
                 capsules_extra::tickv_kv_store::TicKVKVStore<
                     capsules_extra::tickv::TicKVSystem<
                         capsules_core::virtualizers::virtual_flash::FlashUser<
-                            lowrisc::flash_ctrl::FlashCtrl,
+                            earlgrey::flash_ctrl::FlashCtrl,
                         >,
                         capsules_extra::sip_hash::SipHasher24<'static>,
                         2048,
@@ -765,7 +862,7 @@ unsafe fn setup() -> (
                 capsules_extra::tickv_kv_store::TicKVKVStore<
                     capsules_extra::tickv::TicKVSystem<
                         capsules_core::virtualizers::virtual_flash::FlashUser<
-                            lowrisc::flash_ctrl::FlashCtrl,
+                            earlgrey::flash_ctrl::FlashCtrl,
                         >,
                         capsules_extra::sip_hash::SipHasher24<'static>,
                         2048,
@@ -787,7 +884,7 @@ unsafe fn setup() -> (
                 capsules_extra::tickv_kv_store::TicKVKVStore<
                     capsules_extra::tickv::TicKVSystem<
                         capsules_core::virtualizers::virtual_flash::FlashUser<
-                            lowrisc::flash_ctrl::FlashCtrl,
+                            earlgrey::flash_ctrl::FlashCtrl,
                         >,
                         capsules_extra::sip_hash::SipHasher24<'static>,
                         2048,
@@ -797,7 +894,34 @@ unsafe fn setup() -> (
             >,
         >
     ));
-    */
+
+    let info_flash = if !FLASH_TESTS_ENABLED {
+        use capsules_extra::info_flash::InfoFlash;
+        let raw_flash_ctrl_page = static_init!(
+            earlgrey::flash_ctrl::RawFlashCtrlPage,
+            earlgrey::flash_ctrl::RawFlashCtrlPage::default()
+        );
+
+        let info_flash: &'static InfoFlash<earlgrey::flash_ctrl::FlashCtrl> = static_init!(
+            InfoFlash<earlgrey::flash_ctrl::FlashCtrl>,
+            InfoFlash::new(
+                &peripherals.flash_ctrl,
+                board_kernel.create_grant(
+                    capsules_extra::info_flash::DRIVER_NUMBER,
+                    &memory_allocation_cap
+                ),
+                raw_flash_ctrl_page,
+            ),
+        );
+
+        peripherals.flash_ctrl.set_info_client(info_flash);
+
+        Some(info_flash)
+    } else {
+        // Don't instantiate the info flash capsule when testing the flash peripheral. It may
+        // interfere with the tests.
+        None
+    };
 
     let mux_otbn = crate::otbn::AccelMuxComponent::new(&peripherals.otbn)
         .finalize(otbn_mux_component_static!());
@@ -946,12 +1070,13 @@ unsafe fn setup() -> (
             console,
             alarm,
             hmac,
+            info_flash,
             rng,
             lldb: lldb,
             i2c_master,
             spi_controller,
             aes,
-            //kv_driver,
+            kv_driver,
             pattgen,
             syscall_filter,
             scheduler,
@@ -1011,6 +1136,7 @@ unsafe fn setup() -> (
     (board_kernel, earlgrey, chip, peripherals)
 }
 
+
 #[cfg(feature = "test_sysrst_ctrl")]
 fn test_sysrst_ctrl(peripherals: &EarlGreyDefaultPeripherals<ChipConfig, BoardPinmuxLayout>) {
     pinmux_layout::prepare_wiring_sysrst_ctrl_tests();
@@ -1020,6 +1146,48 @@ fn test_sysrst_ctrl(peripherals: &EarlGreyDefaultPeripherals<ChipConfig, BoardPi
         &peripherals.gpio_port[2],
         &peripherals.gpio_port[20],
     );
+}
+
+fn test_flash(
+    flash_ctrl: &'static earlgrey::flash_ctrl::FlashCtrl,
+    uart: &'static earlgrey::uart::Uart<'static>,
+) {
+    let flash_page = unsafe {
+        static_init!(
+            <earlgrey::flash_ctrl::FlashCtrl as FlashHIL>::Page,
+            <earlgrey::flash_ctrl::FlashCtrl as FlashHIL>::Page::default()
+        )
+    };
+
+    let placeholder_flash_page = unsafe {
+        static_init!(
+            <earlgrey::flash_ctrl::FlashCtrl as FlashHIL>::Page,
+            <earlgrey::flash_ctrl::FlashCtrl as FlashHIL>::Page::default()
+        )
+    };
+
+    let page_index_range =
+        earlgrey::flash_ctrl::tests::convert_flash_slice_to_page_position_range(unsafe {
+            core::slice::from_raw_parts(
+                &_sapps as *const u8,
+                &_eapps as *const u8 as usize - &_sapps as *const u8 as usize,
+            )
+        })
+        .unwrap();
+
+    let test_client = unsafe {
+        static_init!(
+            earlgrey::flash_ctrl::tests::TestClient,
+            earlgrey::flash_ctrl::tests::TestClient::new(
+                flash_ctrl,
+                flash_page,
+                placeholder_flash_page,
+                page_index_range
+            ),
+        )
+    };
+
+    earlgrey::flash_ctrl::tests::run_all(flash_ctrl, test_client, uart);
 }
 
 #[cfg(feature = "test_alerthandler")]
@@ -1059,7 +1227,11 @@ pub unsafe fn main() {
 
     #[cfg(not(test))]
     {
-        let (board_kernel, earlgrey, chip, _peripherals) = setup();
+        let (board_kernel, earlgrey, chip, peripherals) = setup();
+
+        if FLASH_TESTS_ENABLED {
+            test_flash(&peripherals.flash_ctrl, &peripherals.uart0);
+        }
 
         let main_loop_cap = create_capability!(capabilities::MainLoopCapability);
 

@@ -15,7 +15,10 @@ use super::endpoint_state::{
 };
 use super::interrupt::UsbInterrupt;
 use super::packet_received::{OutPacket, PacketReceived, SetupPacket};
-use super::packet_size::{EMPTY_PACKET_SIZE, PacketSize};
+use super::packet_size::{PacketSize, EMPTY_PACKET_SIZE};
+use super::request::{
+    ClassRequest, Request, StandardDeviceRequest, StandardDeviceRequestFromHost, StandardRequest,
+};
 use super::usb_address::UsbAddress;
 use super::utils;
 
@@ -24,7 +27,7 @@ use crate::registers::usbdev_regs::{
 };
 
 use kernel::hil::usb::{
-    Client, CtrlInResult, CtrlSetupResult, DeviceSpeed, TransferType, UsbController,
+    Client, CtrlInResult, CtrlOutResult, CtrlSetupResult, DeviceSpeed, TransferType, UsbController,
 };
 use kernel::utilities::cells::{OptionalCell, VolatileCell};
 use kernel::utilities::registers::interfaces::{ReadWriteable, Readable, Writeable};
@@ -379,15 +382,165 @@ impl<'a> Usb<'a> {
     ///
     /// + `endpoint_index`: the index of the endpoint whose IN interface will be used
     /// + `buffer_index`: the index of the buffer that will store the packet to be transmitted
-    fn send_empty_packet(
-        &self,
-        endpoint_index: EndpointIndex,
-        buffer_index: BufferIndex,
-    ) {
+    fn send_empty_packet(&self, endpoint_index: EndpointIndex, buffer_index: BufferIndex) {
         self.configure_in_buffer(endpoint_index, buffer_index, EMPTY_PACKET_SIZE);
     }
 
-    /// Handler for a valid SETUP packet
+    /// Handler for a standard device request to host
+    ///
+    /// # Parameters
+    ///
+    /// + `setup_packet`: the setup packet representing the request
+    /// + `client`: USB client
+    fn handle_standard_device_to_host_request(
+        &self,
+        setup_packet: SetupPacket,
+        client: &'a dyn Client<'a>,
+    ) {
+        let endpoint_index = setup_packet.get_endpoint_index();
+        let buffer_index = setup_packet.get_buffer_index();
+        let endpoint = self.get_endpoint(endpoint_index);
+        match client.ctrl_in(endpoint_index.to_usize()) {
+            CtrlInResult::Packet(size, last) => {
+                // PANIC: This panics only if the upper layer is buggy
+                let packet_size = PacketSize::try_from_usize(size).unwrap();
+                let endpoint_in_buffer = endpoint.get_buffer_in();
+                endpoint.set_last(last);
+                endpoint_in_buffer.map(|buffer_in| {
+                    self.send_packet(endpoint_index, buffer_index, packet_size, buffer_in);
+                    endpoint.set_state(EndpointState::Ctrl(CtrlEndpointState::Transmit(
+                        TransmitCtrlEndpointState::Data,
+                    )));
+                });
+            }
+            CtrlInResult::Delay => unimplemented!(),
+            CtrlInResult::Error => unimplemented!(),
+        }
+    }
+
+    /// Handler for a standard device request from host
+    ///
+    /// # Parameters
+    ///
+    /// + `standard_device_request_from_host`: the standard device request from host
+    /// + `setup_packet`: the setup packet containing the request
+    /// + `client`: USB client
+    fn handle_standard_device_from_host_request(
+        &self,
+        standard_device_request_from_host: StandardDeviceRequestFromHost,
+        setup_packet: SetupPacket,
+        client: &'a dyn Client<'a>,
+    ) {
+        let endpoint_index = setup_packet.get_endpoint_index();
+        let buffer_index = setup_packet.get_buffer_index();
+        let endpoint = self.get_endpoint(endpoint_index);
+
+        match standard_device_request_from_host {
+            StandardDeviceRequestFromHost::ClearFeature
+            | StandardDeviceRequestFromHost::SetAddress
+            | StandardDeviceRequestFromHost::SetConfiguration
+            | StandardDeviceRequestFromHost::SetFeature
+            | StandardDeviceRequestFromHost::SetInterface => {
+                // All these requests don't have a data stage, so the endpoint passes directly in
+                // status stage
+                client.ctrl_status(endpoint_index.to_usize());
+                endpoint.set_state(EndpointState::Ctrl(CtrlEndpointState::Transmit(
+                    TransmitCtrlEndpointState::Status,
+                )));
+                self.send_empty_packet(endpoint_index, buffer_index);
+            }
+            StandardDeviceRequestFromHost::SetDescriptor => unimplemented!(),
+        }
+    }
+
+    /// Handler for standard device request
+    ///
+    /// + `standard_device_request`: the standard device request
+    /// + `setup_packet`: the setup packet containing the request
+    /// + `client`: USB client
+    fn handle_standard_device_request(
+        &self,
+        standard_device_request: StandardDeviceRequest,
+        setup_packet: SetupPacket,
+        client: &'a dyn Client<'a>,
+    ) {
+        match standard_device_request {
+            StandardDeviceRequest::ToHost(_) => {
+                self.handle_standard_device_to_host_request(setup_packet, client)
+            }
+            StandardDeviceRequest::FromHost(standard_device_request_from_host) => self
+                .handle_standard_device_from_host_request(
+                    standard_device_request_from_host,
+                    setup_packet,
+                    client,
+                ),
+        }
+    }
+
+    /// Handler for standard request
+    ///
+    /// + `standard_request`: the standard request
+    /// + `setup_packet`: the setup packet containing the request
+    /// + `client`: USB client
+    fn handle_standard_request(
+        &self,
+        standard_request: StandardRequest,
+        setup_packet: SetupPacket,
+        client: &'a dyn Client<'a>,
+    ) {
+        match standard_request {
+            StandardRequest::Device(standard_device_request) => {
+                self.handle_standard_device_request(standard_device_request, setup_packet, client)
+            }
+        }
+    }
+
+    /// Handler for class request with direction device to host
+    ///
+    /// + `setup_packet`: the setup packet containing the request
+    /// + `client`: USB client
+    fn handle_class_to_host_request(
+        &self,
+        _setup_packet: SetupPacket,
+        _client: &'a dyn Client<'a>,
+    ) {
+        unimplemented!()
+    }
+
+    /// Handler for class request with direction host to device
+    ///
+    /// + `setup_packet`: the setup packet containing the request
+    /// + `client`: USB client
+    fn handle_class_from_host_request(&self, setup_packet: SetupPacket) {
+        let endpoint_index = setup_packet.get_endpoint_index();
+        let buffer_index = setup_packet.get_buffer_index();
+        self.free_buffer(buffer_index);
+        self.fill_available_buffer_fifo();
+        let endpoint = self.get_endpoint(endpoint_index);
+
+        endpoint.set_state(EndpointState::Ctrl(CtrlEndpointState::Receive(
+            ReceiveCtrlEndpointState::Data,
+        )));
+    }
+
+    /// Handler for class request
+    ///
+    /// + `class_request`: the class request
+    /// + `setup_packet`: the setup packet containing the request
+    /// + `client`: USB client
+    fn handle_class_request(
+        &self,
+        class_request: ClassRequest,
+        setup_packet: SetupPacket,
+        client: &'a dyn Client<'a>,
+    ) {
+        match class_request {
+            ClassRequest::ToHost => self.handle_class_to_host_request(setup_packet, client),
+            ClassRequest::FromHost => self.handle_class_from_host_request(setup_packet),
+        }
+    }
+
+    /// Handler for a SETUP packet successfully received
     ///
     /// This method copies the received data to the endpoint's out buffer, informs the client about
     /// the receive of a SETUP packet and performs the indicated action.
@@ -401,54 +554,35 @@ impl<'a> Usb<'a> {
         let endpoint_out_buffer = endpoint.get_buffer_out();
         endpoint_out_buffer.map(|buffer_out| {
             self.copy_from_hardware_to_user(buffer_index, buffer_out);
-            // The high bit of the first byte indicates the direction of the SETUP packet.
-            let to_host = buffer_out.get(0).unwrap().get() & (1 << 7) != 0;
+            let request = match Request::try_from_packet(buffer_out) {
+                Ok(request) => request,
+                Err(error) => panic!(
+                    "Error while decoding the USB request: {:?} {:?}",
+                    error,
+                    buffer_out.get(1).unwrap().get()
+                ),
+            };
+
             self.client.map(|client| {
                 let endpoint_index = setup_packet.get_endpoint_index();
                 match client.ctrl_setup(endpoint_index.to_usize()) {
-                    CtrlSetupResult::Ok => {
-                        if to_host {
-                            match client.ctrl_in(endpoint_index.to_usize()) {
-                                CtrlInResult::Packet(size, last) => {
-                                    // PANIC: This panics only if the upper layer is buggy
-                                    let packet_size = PacketSize::try_from_usize(size).unwrap();
-                                    let endpoint_in_buffer = endpoint.get_buffer_in();
-                                    endpoint.set_last(last);
-                                    endpoint_in_buffer.map(|buffer_in| {
-                                        self.send_packet(
-                                            endpoint_index,
-                                            buffer_index,
-                                            packet_size,
-                                            buffer_in,
-                                        );
-                                        endpoint.set_state(EndpointState::Ctrl(
-                                            CtrlEndpointState::Transmit(
-                                                TransmitCtrlEndpointState::Data,
-                                            ),
-                                        ));
-                                    });
-                                }
-                                CtrlInResult::Delay => unimplemented!(),
-                                CtrlInResult::Error => unimplemented!(),
-                            }
-                        } else {
-                            unimplemented!();
+                    CtrlSetupResult::Ok => match request {
+                        Request::Standard(standard_request) => {
+                            self.handle_standard_request(standard_request, setup_packet, client)
                         }
-                    }
+                        Request::Class(class_request) => {
+                            self.handle_class_request(class_request, setup_packet, client)
+                        }
+                    },
                     CtrlSetupResult::OkSetAddress => {
                         // There is no data stage, so the endpoint passes in status stage. Also,
                         // when the data stage is missing, the status stage is from device to host
                         // as specified by section 9.4.6 in USB2.0 specification.
                         client.ctrl_status(endpoint_index.to_usize());
-                        endpoint.set_state(EndpointState::Ctrl(
-                            CtrlEndpointState::Transmit(
-                                TransmitCtrlEndpointState::Status,
-                            ),
-                        ));
-                        self.send_empty_packet(
-                            endpoint_index,
-                            buffer_index,
-                        );
+                        endpoint.set_state(EndpointState::Ctrl(CtrlEndpointState::Transmit(
+                            TransmitCtrlEndpointState::Status,
+                        )));
+                        self.send_empty_packet(endpoint_index, buffer_index);
                     }
                     // In case of an error, don't do anything and wait for another SETUP packet.
                     _ => {}
@@ -570,6 +704,34 @@ impl<'a> Usb<'a> {
         }
     }
 
+    fn handle_ok_data_receive_control_out_packet(
+        &self,
+        endpoint_index: EndpointIndex,
+        endpoint: &Endpoint,
+    ) {
+        let buffer_index = self.get_transmit_buffer(endpoint_index);
+        endpoint.set_state(EndpointState::Ctrl(CtrlEndpointState::Transmit(
+            TransmitCtrlEndpointState::Status,
+        )));
+        self.send_empty_packet(endpoint_index, buffer_index);
+    }
+
+    fn handle_data_receive_control_out_packet(&self, out_packet: OutPacket, endpoint: &Endpoint) {
+        let endpoint_index = out_packet.get_endpoint_index();
+        let packet_size = out_packet.get_size();
+
+        self.client.map(|client| {
+            // CAST: u32 == usize on RV32I
+            match client.ctrl_out(endpoint_index.to_usize(), packet_size.to_usize() as u32) {
+                CtrlOutResult::Ok => {
+                    self.handle_ok_data_receive_control_out_packet(endpoint_index, endpoint)
+                }
+                CtrlOutResult::Delay => unimplemented!(),
+                CtrlOutResult::Halted => unimplemented!(),
+            }
+        });
+    }
+
     /// Handler for a control OUT packet that the endpoint expected to receive.
     ///
     /// If the endpoint expected a SETUP packet, the driver discards the packet and waits for
@@ -589,7 +751,9 @@ impl<'a> Usb<'a> {
     ) {
         match receive_ctrl_state {
             ReceiveCtrlEndpointState::Setup => todo!("Retry receiving the packet"),
-            ReceiveCtrlEndpointState::Data => todo!("Implemented receive data"),
+            ReceiveCtrlEndpointState::Data => {
+                self.handle_data_receive_control_out_packet(out_packet, endpoint)
+            }
             ReceiveCtrlEndpointState::Status => {
                 self.handle_status_receive_control_out_packet(out_packet, endpoint)
             }
@@ -738,8 +902,7 @@ impl<'a> Usb<'a> {
 
         // PANIC: `try_from_usize()` may never panic because BUFFER_0 bitfield is 5-bit wide
         // CAST: u32 == usize on RV32I
-        BufferIndex::try_from_usize(configin_register.read(CONFIGIN::BUFFER_0) as usize)
-            .unwrap()
+        BufferIndex::try_from_usize(configin_register.read(CONFIGIN::BUFFER_0) as usize).unwrap()
     }
 
     /// Frees a buffer used for transmit
@@ -796,12 +959,7 @@ impl<'a> Usb<'a> {
                     let buffer_index = self.get_transmit_buffer(endpoint_index);
                     endpoint.set_last(last);
                     endpoint_in_buffer.map(|buffer_in| {
-                        self.send_packet(
-                            endpoint_index,
-                            buffer_index,
-                            packet_size,
-                            buffer_in,
-                        );
+                        self.send_packet(endpoint_index, buffer_index, packet_size, buffer_in);
                     });
                 }
                 CtrlInResult::Delay => unimplemented!(),
@@ -843,9 +1001,9 @@ impl<'a> Usb<'a> {
             client.ctrl_status_complete(endpoint_index.to_usize());
         });
 
-        endpoint.set_state(EndpointState::Ctrl(
-            CtrlEndpointState::Receive(ReceiveCtrlEndpointState::Setup)
-        ));
+        endpoint.set_state(EndpointState::Ctrl(CtrlEndpointState::Receive(
+            ReceiveCtrlEndpointState::Setup,
+        )));
 
         self.free_transmit_buffer(endpoint_index);
         self.fill_available_buffer_fifo();
@@ -1117,7 +1275,9 @@ impl<'a> UsbController<'a> for Usb<'a> {
     fn enable_address(&self) {
         let usb_address = self.address.get();
         // CAST: size_of(u32) > size_of(u8)
-        self.registers.usbctrl.modify(USBCTRL::DEVICE_ADDRESS.val(usb_address.to_u8() as u32));
+        self.registers
+            .usbctrl
+            .modify(USBCTRL::DEVICE_ADDRESS.val(usb_address.to_u8() as u32));
     }
 
     fn endpoint_in_enable(&self, _transfer_type: TransferType, raw_endpoint_index: usize) {

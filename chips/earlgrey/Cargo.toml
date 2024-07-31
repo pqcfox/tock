@@ -14,4 +14,5 @@ rv32i = { path = "../../arch/rv32i" }
 kernel = { path = "../../kernel" }
 
 [features]
+clkmgr_tests = []
 test_alerthandler = ["lowrisc/test_alerthandler"]

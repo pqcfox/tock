@@ -66,12 +66,10 @@ impl UsbAddress {
     /// + Err: `value` is invalid (> MAXIMUM_USB_ADDRESS)
     pub(super) const fn try_from_u8(value: u8) -> Result<Self, ()> {
         match NonZeroU8::new(value) {
-            Some(non_zero_u8) => {
-                match NonDefaultUsbAddress::try_from_non_zero_u8(non_zero_u8) {
-                    Ok(non_default_usb_address) => Ok(UsbAddress::NonDefault(non_default_usb_address)),
-                    Err(()) => Err(()),
-                }
-            }
+            Some(non_zero_u8) => match NonDefaultUsbAddress::try_from_non_zero_u8(non_zero_u8) {
+                Ok(non_default_usb_address) => Ok(UsbAddress::NonDefault(non_default_usb_address)),
+                Err(()) => Err(()),
+            },
             None => Ok(UsbAddress::Default),
         }
     }

@@ -16,6 +16,7 @@ mod endpoint_state;
 mod interrupt;
 mod packet_received;
 mod packet_size;
+mod request;
 mod usb;
 mod usb_address;
 mod utils;
