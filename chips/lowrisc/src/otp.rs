@@ -299,7 +299,7 @@ impl Otp {
     }
 
     /// Check if check timeout is disabled
-    fn is_timeout_disabled(&self) -> bool {
+    fn _is_timeout_disabled(&self) -> bool {
         self.registers.check_timeout.get() == 0
     }
 
