@@ -68,15 +68,6 @@ impl Chunk {
         self.0.get(index)
     }
 
-    /// Return the `index`th word in this chunk
-    ///
-    /// # Return value
-    ///
-    /// A mutable reference to the `index`th word
-    fn get_mut(&mut self, index: usize) -> Option<&mut usize> {
-        self.0.get_mut(index)
-    }
-
     /// Cast the chunk to an immutable iterator over its content
     ///
     /// # Return value

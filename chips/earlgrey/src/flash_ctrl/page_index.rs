@@ -10,7 +10,6 @@ use super::bank::DATA_PAGES_PER_BANK;
 use crate::utils;
 
 use core::num::NonZeroU8;
-use core::num::NonZeroUsize;
 
 /// The maximum data page index within a bank
 pub(super) const MAX_DATA_PAGE_INDEX: NonZeroU8 =
