@@ -1,8 +1,44 @@
-use crate::debug;
+use crate::hil::uart::Uart;
+use crate::{debug, hil::uart::Uart};
+use core::fmt::Write;
+use tock_cells::optional_cell::OptionalCell;
+
+macro_rules! println {
+    ($msg:expr) => ({
+        // If tests are running on host, there is no underlying Tock kernel, so this function becomes a
+        // NOP
+        if !cfg!(test) {
+            // SAFETY: Tock is mono threaded, so mutating a static variable is safe.
+            unsafe {
+                // The result is ignored for simplicity
+                let _ = self.write_fmt(format_args!("{}\r\n", $msg));
+            }
+        }
+    });
+    ($fmt:expr, $($arg:tt)+) => ({
+        // If tests are running on host, there is no underlying Tock kernel, so this function becomes a
+        // NOP
+        if !cfg!(test) {
+            // SAFETY: Tock is mono threaded, so mutating a static variable is safe.
+            unsafe {
+                // The result is ignored for simplicity
+                let _ = self.write_fmt(format_args!("{}\r\n", format_args!($fmt, $($arg)+)));
+            }
+        }
+    });
+}
 
 pub struct TestRunner {
     execution_id: u32,
+    uart: OptionalCell<&'static dyn Uart<'static>>,
     pub is_test_failed: bool,
+}
+
+impl Write for TestRunner {
+    fn write_str(&mut self, string: &str) -> core::fmt::Result {
+        self.uart.map(|uart| uart.transmit_sync(string.as_bytes()));
+        Ok(())
+    }
 }
 
 /// Test helper that takes a test text describing the test and a pass criteria for the test itself.
@@ -15,8 +51,13 @@ impl TestRunner {
     pub fn new() -> Self {
         Self {
             execution_id: 0,
+            uart: OptionalCell::empty(),
             is_test_failed: false,
         }
+    }
+
+    fn set_uart(&self, uart: &'static Uart) {
+        self.uart.set(uart);
     }
 
     /// Interface to set the execution ID in case of jumps across resets.
