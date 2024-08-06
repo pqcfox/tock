@@ -5,11 +5,13 @@
 use crate::registers::sram_ctrl_regs;
 use crate::registers::sram_ctrl_regs::SramCtrlRegisters;
 use crate::registers::top_earlgrey::SRAM_CTRL_RET_AON_REGS_BASE_ADDR;
+use crate::rstmgr::RstMgr;
 use core::cell::Cell;
 use kernel::hil::retention_ram;
 use kernel::utilities::registers::interfaces::Readable;
 use kernel::utilities::{registers::interfaces::ReadWriteable, target_test, StaticRef};
 use kernel::{debug, ErrorCode};
+use lowrisc::uart::Uart;
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum DrvState {
@@ -217,7 +219,12 @@ impl SramCtrl {
     }
 
     /// Test function. It runs on target self-test, returns if the test suite failed or passed.
-    pub fn test(&self) -> bool {
+    pub fn test(
+        &self,
+        // test: EarlGreyDefaultPeripherals<ChipConfig, BoardPinmuxLayout>,
+        reset_manager: &RstMgr,
+        uart: &'static Uart,
+    ) -> bool {
         let mut test_runner = target_test::TestRunner::new();
         debug!("Starting sram_ret self-test");
         match self.get_creator_rram_data(1) {
@@ -227,6 +234,9 @@ impl SramCtrl {
 
         let mut test_cycle: u32;
         let mut boot_from_rom_ext: bool;
+
+        let binding = |foo: &str| uart.transmit_sync(foo.as_bytes());
+        test_runner.set_print_func(&binding);
         match self.get_state() {
             DrvState::InitializedScrambled | DrvState::InitializedScrambledDefault => {
                 if (self.get_creator_rram_data(1).unwrap() == 1)

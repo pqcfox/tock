@@ -1,5 +1,4 @@
-use crate::hil::uart::Uart;
-use crate::{debug, hil::uart::Uart};
+use crate::debug;
 use core::fmt::Write;
 use tock_cells::optional_cell::OptionalCell;
 
@@ -28,18 +27,18 @@ macro_rules! println {
     });
 }
 
-pub struct TestRunner {
+pub struct TestRunner<'a> {
     execution_id: u32,
-    uart: OptionalCell<&'static dyn Uart<'static>>,
+    printer: OptionalCell<&'a dyn Fn(&'a str)>,
     pub is_test_failed: bool,
 }
 
-impl Write for TestRunner {
-    fn write_str(&mut self, string: &str) -> core::fmt::Result {
-        self.uart.map(|uart| uart.transmit_sync(string.as_bytes()));
-        Ok(())
-    }
-}
+// impl Write for TestRunner {
+//     fn write_str(&mut self, string: &str) -> core::fmt::Result {
+//         self.uart.map(|uart| uart.transmit_sync(string.as_bytes()));
+//         Ok(())
+//     }
+// }
 
 /// Test helper that takes a test text describing the test and a pass criteria for the test itself.
 ///
@@ -47,17 +46,21 @@ impl Write for TestRunner {
 ///  with positive feedback. The buffer is limited because we run before the system is fully running and
 /// the debugger manages to flush the data.
 ///
-impl TestRunner {
+impl<'a> TestRunner<'a> {
     pub fn new() -> Self {
         Self {
             execution_id: 0,
-            uart: OptionalCell::empty(),
+            printer: OptionalCell::empty(),
             is_test_failed: false,
         }
     }
 
-    fn set_uart(&self, uart: &'static Uart) {
-        self.uart.set(uart);
+    pub fn set_print_func(&self, print: &'a dyn Fn(&'a str)) {
+        self.printer.set(print);
+    }
+
+    fn print(&self, string: &'a str) {
+        self.printer.map(|funct| funct(string));
     }
 
     /// Interface to set the execution ID in case of jumps across resets.
@@ -69,10 +72,11 @@ impl TestRunner {
         self.execution_id += 1;
         if test {
             // Keep test success silent, we don't want to fill the buffer if everything is OK!
-            self.is_test_failed = true;
+            self.print("*   Test No. {} passed! : {}");
             true
         } else {
-            debug!("*   Test No. {} Failed! : {}", self.execution_id, test_info);
+            self.print("*   Test No. {} Failed! : {}");
+            self.is_test_failed = true;
             false
         }
     }
@@ -86,10 +90,10 @@ impl TestRunner {
         self.execution_id += 1;
         if f() {
             // Keep test success silent, we don't want to fill the buffer if everything is OK!
-            self.is_test_failed = true;
             true
         } else {
-            debug!("*   Test No. {} Failed! : {}", self.execution_id, test_info);
+            self.print("*   Test No. {} Failed! : {}", self.execution_id, test_info);
+            self.is_test_failed = true;
             false
         }
     }

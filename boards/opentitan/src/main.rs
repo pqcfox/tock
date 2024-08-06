@@ -14,7 +14,7 @@
 #![test_runner(test_runner)]
 #![reexport_test_harness_main = "test_main"]
 
-use core::ptr::addr_of;
+use core::ptr::{addr_of, addr_of_mut};
 
 use crate::hil::symmetric_encryption::AES128_BLOCK_SIZE;
 use crate::otbn::OtbnComponent;
@@ -982,6 +982,10 @@ unsafe fn setup() -> (
         debug!("Error loading processes!");
         debug!("{:?}", err);
     });
+
+    peripherals
+        .sram_ret
+        .test(&peripherals.rst_mgmt, &peripherals.uart0);
     debug!("OpenTitan initialisation complete. Entering main loop");
 
     (board_kernel, earlgrey, chip, peripherals)
