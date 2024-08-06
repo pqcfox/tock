@@ -221,6 +221,13 @@ impl<'a> Usb<'a> {
         }
     }
 
+    fn convert_endpoint_state_to_transfer_type(endpoint_state: EndpointState) -> TransferType {
+        match endpoint_state {
+            EndpointState::Ctrl(_) => TransferType::Control,
+            EndpointState::Bulk => TransferType::Bulk,
+        }
+    }
+
     /// Initializes endpoint state for the given transfer type
     ///
     /// # Parameters
@@ -1154,8 +1161,36 @@ impl<'a> Usb<'a> {
     ///
     /// + `endpoint_index`: the index of the endpoint whose IN buffer has been transmitted
     /// + `endpoint`: the endpoint whose IN buffer has been transmitted
-    fn handle_bulk_in_packet(&self, _endpoint_index: EndpointIndex, _endpoint: &Endpoint<'a>) {
-        unimplemented!()
+    fn handle_bulk_in_packet(&self, endpoint_index: EndpointIndex, endpoint: &Endpoint<'a>) {
+        let endpoint_state = endpoint.get_state();
+        let transfer_type = Self::convert_endpoint_state_to_transfer_type(endpoint_state);
+        let buffer_index = self.get_transmit_buffer(endpoint_index);
+
+        self.client.map(|client| {
+            match client.packet_in(transfer_type, endpoint_index.to_usize()) {
+                InResult::Packet(raw_packet_size) => {
+                    let packet_size = match PacketSize::try_from_usize(raw_packet_size) {
+                        Ok(packet_size) => packet_size,
+                        Err(()) => todo!("Return error on invalid packet size"),
+                    };
+                    let endpoint_buffer_in = endpoint.get_buffer_in();
+
+                    endpoint_buffer_in.map(|buffer_in| {
+                        self.send_packet(
+                            endpoint_index,
+                            buffer_index,
+                            packet_size,
+                            buffer_in,
+                        );
+                    });
+                }
+                InResult::Delay => {
+                    self.free_buffer(buffer_index);
+                    self.fill_available_buffer_fifo();
+                }
+                InResult::Error => unimplemented!(),
+            }
+        });
     }
 
     /// Handler for an IN packet.
@@ -1444,11 +1479,7 @@ impl<'a> UsbController<'a> for Usb<'a> {
         };
         let endpoint = self.get_endpoint(endpoint_index);
         let endpoint_state = endpoint.get_state();
-
-        let transfer_type = match endpoint_state {
-            EndpointState::Ctrl(_) => TransferType::Control,
-            EndpointState::Bulk => TransferType::Bulk,
-        };
+        let transfer_type = Self::convert_endpoint_state_to_transfer_type(endpoint_state);
 
         self.client.map(|client| {
             match client.packet_in(transfer_type, endpoint_index.to_usize()) {
