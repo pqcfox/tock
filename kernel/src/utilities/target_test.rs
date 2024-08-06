@@ -29,16 +29,16 @@ macro_rules! println {
 
 pub struct TestRunner<'a> {
     execution_id: u32,
-    printer: OptionalCell<&'a dyn Fn(&'a str)>,
+    printer: OptionalCell<&'a dyn Fn(&str)>,
     pub is_test_failed: bool,
 }
 
-// impl Write for TestRunner {
-//     fn write_str(&mut self, string: &str) -> core::fmt::Result {
-//         self.uart.map(|uart| uart.transmit_sync(string.as_bytes()));
-//         Ok(())
-//     }
-// }
+impl<'a> Write for TestRunner<'a> {
+    fn write_str(&mut self, string: &str) -> core::fmt::Result {
+        self.printer.map(|funct| funct(string));
+        Ok(())
+    }
+}
 
 /// Test helper that takes a test text describing the test and a pass criteria for the test itself.
 ///
@@ -55,13 +55,13 @@ impl<'a> TestRunner<'a> {
         }
     }
 
-    pub fn set_print_func(&self, print: &'a dyn Fn(&'a str)) {
+    pub fn set_print_func(&self, print: &'a dyn Fn(&str)) {
         self.printer.set(print);
     }
 
-    fn print(&self, string: &'a str) {
-        self.printer.map(|funct| funct(string));
-    }
+    // fn print(&self, string: &'a str) {
+    //     self.printer.map(|funct| funct(string));
+    // }
 
     /// Interface to set the execution ID in case of jumps across resets.
     pub fn set_test_execution_id(&mut self, id: u32) {
@@ -71,11 +71,19 @@ impl<'a> TestRunner<'a> {
     pub fn assert(&mut self, test_info: &str, test: bool) -> bool {
         self.execution_id += 1;
         if test {
+            let id = self.execution_id;
             // Keep test success silent, we don't want to fill the buffer if everything is OK!
-            self.print("*   Test No. {} passed! : {}");
+            self.write_fmt(format_args!(
+                "*   Test No. {} passed! : {}\r\n",
+                id, test_info
+            ));
             true
         } else {
-            self.print("*   Test No. {} Failed! : {}");
+            self.write_fmt(format_args!(
+                "*  ERROR: Test No. {} failed!!! : {}\r\n",
+                self.execution_id.clone(),
+                test_info,
+            ));
             self.is_test_failed = true;
             false
         }
@@ -89,10 +97,19 @@ impl<'a> TestRunner<'a> {
     pub fn assert_function(&mut self, test_info: &str, f: impl Fn() -> bool) -> bool {
         self.execution_id += 1;
         if f() {
+            self.write_fmt(format_args!(
+                "*   Test No. {} Passed! : {}\r\n",
+                self.execution_id.clone(),
+                test_info
+            ));
             // Keep test success silent, we don't want to fill the buffer if everything is OK!
             true
         } else {
-            self.print("*   Test No. {} Failed! : {}", self.execution_id, test_info);
+            self.write_fmt(format_args!(
+                "*   Test No. {} Failed! : {}\r\n",
+                self.execution_id.clone(),
+                test_info
+            ));
             self.is_test_failed = true;
             false
         }
