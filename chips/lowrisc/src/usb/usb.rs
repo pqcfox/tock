@@ -216,8 +216,8 @@ impl<'a> Usb<'a> {
         match transfer_type {
             TransferType::Control => EndpointState::Ctrl(CtrlEndpointState::Receive(ReceiveCtrlEndpointState::Setup)),
             TransferType::Bulk => EndpointState::Bulk,
-            TransferType::Isochronous => unimplemented!(),
-            TransferType::Interrupt => unimplemented!(),
+            TransferType::Isochronous => EndpointState::Isochronous,
+            TransferType::Interrupt => EndpointState::Interrupt,
         }
     }
 
@@ -225,6 +225,8 @@ impl<'a> Usb<'a> {
         match endpoint_state {
             EndpointState::Ctrl(_) => TransferType::Control,
             EndpointState::Bulk => TransferType::Bulk,
+            EndpointState::Interrupt => TransferType::Interrupt,
+            EndpointState::Isochronous => TransferType::Isochronous,
         }
     }
 
@@ -285,6 +287,18 @@ impl<'a> Usb<'a> {
         self.registers
             .rxenable_setup
             .modify(endpoint_index.to_set_rxenable_setup_field_value());
+    }
+
+    fn internal_enable_in_isochronous(&self, endpoint_index: EndpointIndex) {
+        self.registers
+            .in_iso
+            .modify(endpoint_index.to_set_in_iso_field_value());
+    }
+
+    fn internal_enable_out_isochronous(&self, endpoint_index: EndpointIndex) {
+        self.registers
+            .out_iso
+            .modify(endpoint_index.to_set_out_iso_field_value());
     }
 
     /// Get a chunk from the controller's buffer
@@ -712,7 +726,7 @@ impl<'a> Usb<'a> {
             EndpointState::Ctrl(ctrl_state) => {
                 self.handle_control_setup_packet(setup_packet, ctrl_state, endpoint)
             }
-            EndpointState::Bulk => unreachable!("SETUP packet received on bulk endpoint. This is an implementation bug , due to incorrect configuration in endpoint_out_enable()"),
+            state @ EndpointState::Bulk | state @ EndpointState::Interrupt | state @ EndpointState::Isochronous => unreachable!("SETUP packet received on {:?} endpoint. This is an implementation bug, due to incorrect configuration in endpoint_out_enable()", state),
         }
     }
 
@@ -871,6 +885,46 @@ impl<'a> Usb<'a> {
         });
     }
 
+    fn handle_interrupt_out_packet(
+        &self,
+        endpoint_index: EndpointIndex,
+        buffer_index: BufferIndex,
+        packet_size: PacketSize,
+    ) {
+        kernel::debug!("OUT interrupt");
+
+        self.client.map(|client| {
+            match client.packet_out(TransferType::Interrupt, endpoint_index.to_usize(), packet_size.to_usize() as u32) {
+                OutResult::Ok => {
+                    self.free_buffer(buffer_index);
+                    self.fill_available_buffer_fifo();
+                }
+                OutResult::Delay => unimplemented!(),
+                OutResult::Error => unimplemented!(),
+            }
+        });
+    }
+
+    fn handle_isochronous_out_packet(
+        &self,
+        endpoint_index: EndpointIndex,
+        buffer_index: BufferIndex,
+        packet_size: PacketSize,
+    ) {
+        kernel::debug!("OUT isochronous");
+
+        self.client.map(|client| {
+            match client.packet_out(TransferType::Isochronous, endpoint_index.to_usize(), packet_size.to_usize() as u32) {
+                OutResult::Ok => {
+                    self.free_buffer(buffer_index);
+                    self.fill_available_buffer_fifo();
+                }
+                OutResult::Delay => unimplemented!(),
+                OutResult::Error => unimplemented!(),
+            }
+        });
+    }
+
     /// Handler for an OUT packet.
     ///
     /// # Parameters
@@ -893,6 +947,8 @@ impl<'a> Usb<'a> {
                 self.handle_control_out_packet(out_packet, ctrl_state, endpoint)
             }
             EndpointState::Bulk => self.handle_bulk_out_packet(endpoint_index, buffer_index, packet_size),
+            EndpointState::Interrupt => self.handle_interrupt_out_packet(endpoint_index, buffer_index, packet_size),
+            EndpointState::Isochronous => self.handle_isochronous_out_packet(endpoint_index, buffer_index, packet_size),
         }
     }
 
@@ -1193,6 +1249,28 @@ impl<'a> Usb<'a> {
         });
     }
 
+    fn handle_interrupt_in_packet(&self, endpoint_index: EndpointIndex) {
+        kernel::debug!("IN interrupt");
+        let buffer_index = self.get_transmit_buffer(endpoint_index);
+        self.free_buffer(buffer_index);
+        self.fill_available_buffer_fifo();
+
+        self.client.map(|client| {
+            client.packet_transmitted(endpoint_index.to_usize());
+        });
+    }
+
+    fn handle_isochronous_in_packet(&self, endpoint_index: EndpointIndex) {
+        kernel::debug!("IN isochronous") ;
+        let buffer_index = self.get_transmit_buffer(endpoint_index);
+        self.free_buffer(buffer_index);
+        self.fill_available_buffer_fifo();
+
+        self.client.map(|client| {
+            client.packet_transmitted(endpoint_index.to_usize());
+        });
+    }
+
     /// Handler for an IN packet.
     ///
     /// # Parameters
@@ -1207,6 +1285,8 @@ impl<'a> Usb<'a> {
                 self.handle_ctrl_in_packet(ctrl_endpoint_state, endpoint_index, endpoint)
             }
             EndpointState::Bulk => self.handle_bulk_in_packet(endpoint_index, endpoint),
+            EndpointState::Interrupt => self.handle_interrupt_in_packet(endpoint_index),
+            EndpointState::Isochronous => self.handle_isochronous_in_packet(endpoint_index),
         }
     }
 
@@ -1439,6 +1519,10 @@ impl<'a> UsbController<'a> for Usb<'a> {
         };
 
         self.internal_endpoint_in_enable(transfer_type, endpoint_index);
+
+        if transfer_type == TransferType::Isochronous {
+            self.internal_enable_in_isochronous(endpoint_index);
+        }
     }
 
     fn endpoint_out_enable(&self, transfer_type: TransferType, raw_endpoint_index: usize) {
@@ -1453,6 +1537,8 @@ impl<'a> UsbController<'a> for Usb<'a> {
         self.internal_endpoint_rxenable_out(endpoint_index);
         if transfer_type == TransferType::Control {
             self.internal_endpoint_rxenable_setup(endpoint_index);
+        } else if transfer_type == TransferType::Isochronous {
+            self.internal_enable_out_isochronous(endpoint_index);
         }
     }
 

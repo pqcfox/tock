@@ -40,4 +40,8 @@ pub(super) enum EndpointState {
     Ctrl(CtrlEndpointState),
     /// The endpoint is configured as a bulk endpoint
     Bulk,
+    /// The endpoint is configured as an interrupt endpoint
+    Interrupt,
+    /// The endpoint is configured as an isochronous endpoint
+    Isochronous,
 }

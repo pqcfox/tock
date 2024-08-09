@@ -7,7 +7,7 @@
 
 //! Endpoint index
 
-use crate::registers::usbdev_regs::{EP_IN_ENABLE, EP_OUT_ENABLE, RXENABLE_OUT, RXENABLE_SETUP};
+use crate::registers::usbdev_regs::{EP_IN_ENABLE, EP_OUT_ENABLE, IN_ISO, OUT_ISO, RXENABLE_OUT, RXENABLE_SETUP};
 
 use kernel::utilities::registers::FieldValue;
 
@@ -163,6 +163,44 @@ impl EndpointIndex {
             EndpointIndex::Endpoint9 => RXENABLE_SETUP::SETUP_9::SET,
             EndpointIndex::Endpoint10 => RXENABLE_SETUP::SETUP_10::SET,
             EndpointIndex::Endpoint11 => RXENABLE_SETUP::SETUP_11::SET,
+        }
+    }
+
+    pub(super) const fn to_set_in_iso_field_value(
+        self,
+    ) -> FieldValue<u32, IN_ISO::Register> {
+        match self {
+            EndpointIndex::Endpoint0 => IN_ISO::ISO_0::SET,
+            EndpointIndex::Endpoint1 => IN_ISO::ISO_1::SET,
+            EndpointIndex::Endpoint2 => IN_ISO::ISO_2::SET,
+            EndpointIndex::Endpoint3 => IN_ISO::ISO_3::SET,
+            EndpointIndex::Endpoint4 => IN_ISO::ISO_4::SET,
+            EndpointIndex::Endpoint5 => IN_ISO::ISO_5::SET,
+            EndpointIndex::Endpoint6 => IN_ISO::ISO_6::SET,
+            EndpointIndex::Endpoint7 => IN_ISO::ISO_7::SET,
+            EndpointIndex::Endpoint8 => IN_ISO::ISO_8::SET,
+            EndpointIndex::Endpoint9 => IN_ISO::ISO_9::SET,
+            EndpointIndex::Endpoint10 => IN_ISO::ISO_10::SET,
+            EndpointIndex::Endpoint11 => IN_ISO::ISO_11::SET,
+        }
+    }
+
+    pub(super) const fn to_set_out_iso_field_value(
+        self,
+    ) -> FieldValue<u32, OUT_ISO::Register> {
+        match self {
+            EndpointIndex::Endpoint0 => OUT_ISO::ISO_0::SET,
+            EndpointIndex::Endpoint1 => OUT_ISO::ISO_1::SET,
+            EndpointIndex::Endpoint2 => OUT_ISO::ISO_2::SET,
+            EndpointIndex::Endpoint3 => OUT_ISO::ISO_3::SET,
+            EndpointIndex::Endpoint4 => OUT_ISO::ISO_4::SET,
+            EndpointIndex::Endpoint5 => OUT_ISO::ISO_5::SET,
+            EndpointIndex::Endpoint6 => OUT_ISO::ISO_6::SET,
+            EndpointIndex::Endpoint7 => OUT_ISO::ISO_7::SET,
+            EndpointIndex::Endpoint8 => OUT_ISO::ISO_8::SET,
+            EndpointIndex::Endpoint9 => OUT_ISO::ISO_9::SET,
+            EndpointIndex::Endpoint10 => OUT_ISO::ISO_10::SET,
+            EndpointIndex::Endpoint11 => OUT_ISO::ISO_11::SET,
         }
     }
 }
