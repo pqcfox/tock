@@ -37,7 +37,7 @@ pub trait UsbController<'a> {
     fn endpoint_resume_out(&self, endpoint: usize);
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TransferType {
     Control = 0,
     Isochronous,

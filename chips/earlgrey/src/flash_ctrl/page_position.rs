@@ -223,8 +223,7 @@ pub(super) mod tests {
         check_to_flash_ptr!(data_page_position, expected_flash_address);
 
         let raw_data_page_index = MAX_DATA_PAGE_INDEX.get();
-        let data_page_position =
-            DataPagePosition::Bank0(DataPageIndex::new(raw_data_page_index));
+        let data_page_position = DataPagePosition::Bank0(DataPageIndex::new(raw_data_page_index));
         // SAFETY:
         //
         // + raw_data_page_index * EARLGREY_PAGE_SIZE fit in isize
@@ -268,8 +267,7 @@ pub(super) mod tests {
         check_to_flash_ptr!(data_page_position, expected_flash_address);
 
         let raw_data_page_index = MAX_DATA_PAGE_INDEX.get();
-        let data_page_position =
-            DataPagePosition::Bank1(DataPageIndex::new(raw_data_page_index));
+        let data_page_position = DataPagePosition::Bank1(DataPageIndex::new(raw_data_page_index));
         // SAFETY:
         //
         // + raw_data_page_index * EARLGREY_PAGE_SIZE fit in isize
