@@ -24,6 +24,7 @@ pub struct AonTimer<'a> {
 impl<'a> AonTimer<'a> {
     pub const fn new(register_base: usize, aon_clk_freq: u32) -> AonTimer<'a> {
         AonTimer {
+            // SAFETY: We keed a reference here to the register base.
             registers: unsafe { StaticRef::new(register_base as *const AonTimerRegisters) },
             wakeup_notification: OptionalCell::empty(),
             bark_notification: OptionalCell::empty(),
@@ -199,7 +200,7 @@ impl<'a> platform::watchdog::WatchDog for AonTimer<'a> {
 
         // 2. Set thresholds.
         self.set_wdog_bark_thresh_ms(500);
-        self.set_wdog_bark_thresh_ms(1000);
+        self.set_wdog_bite_thresh_ms(1000);
 
         // 3. Commence guard duty and don't count it in sleep.
         self.wdog_start_count(false);
