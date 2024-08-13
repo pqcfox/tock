@@ -45,7 +45,7 @@ impl<'a> AonTimer<'a> {
         self.registers.wkup_ctrl.write(WKUP_CTRL::ENABLE::CLEAR);
     }
 
-    // Enable wakeup after a number of miliseconds. This can fail if the ms number is out of range.
+    // Enable wakeup after a number of milliseconds. This can fail if the ms number is out of range.
     pub fn wakeup_enable_after_ms(&self, ms: u32) -> Result<(), ErrorCode> {
         let wakeup_cycles = self.ms_to_cycles(ms);
 
@@ -151,13 +151,13 @@ impl<'a> AonTimer<'a> {
 
     /// Convert microseconds to cycles
     fn ms_to_cycles(&self, ms: u32) -> u32 {
-        // 250kHZ CW130 or 125kHz Verilator (as specified in chip config)
+        // 250kHZ CW310 or 125kHz Verilator (as specified in chip config)
         ms.saturating_mul(self.aon_clk_freq).saturating_div(1000)
     }
 
     /// Convert microseconds to cycles
     fn cycles_to_ms(&self, ms: u32) -> u32 {
-        // 250kHZ CW130 or 125kHz Verilator (as specified in chip config)
+        // 250kHZ CW310 or 125kHz Verilator (as specified in chip config)
         ms.saturating_mul(1000).saturating_div(self.aon_clk_freq)
     }
 
@@ -201,7 +201,7 @@ impl<'a> platform::watchdog::WatchDog for AonTimer<'a> {
         self.set_wdog_bark_thresh_ms(500);
         self.set_wdog_bark_thresh_ms(1000);
 
-        // 3. Commence gaurd duty and don't count it in sleep.
+        // 3. Commence guard duty and don't count it in sleep.
         self.wdog_start_count(false);
 
         // 4. Lock watchdog config
