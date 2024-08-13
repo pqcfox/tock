@@ -22,7 +22,7 @@ use crate::pinmux_config::EarlGreyPinmuxConfig;
 use crate::plic::Plic;
 use crate::plic::PLIC;
 use crate::registers::top_earlgrey;
-use crate::registers::top_earlgrey::AlertId;
+use crate::registers::top_earlgrey::{AlertId, SYSRST_CTRL_AON_BASE_ADDR};
 use crate::rstmgr::RstMgr;
 
 pub struct EarlGrey<
@@ -55,9 +55,10 @@ pub struct EarlGreyDefaultPeripherals<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyP
     pub i2c0: lowrisc::i2c::I2c<'a>,
     pub spi_host0: lowrisc::spi_host::SpiHost<'a>,
     pub spi_host1: lowrisc::spi_host::SpiHost<'a>,
-    //pub flash_ctrl: lowrisc::flash_ctrl::FlashCtrl<'a>,
+    pub flash_ctrl: crate::flash_ctrl::FlashCtrl<'a>,
     pub rng: lowrisc::csrng::CsRng<'a>,
     pub watchdog: lowrisc::aon_timer::AonTimer<'a>,
+    pub sysreset: lowrisc::sysrst_ctrl::SysRstCtrl<'a>,
     pub timer: crate::timer::RvTimer<'static, CFG>,
     pub alert_handler: AlertHandler,
     pub pattgen: lowrisc::pattgen::PattGen<'a>,
@@ -69,7 +70,9 @@ pub struct EarlGreyDefaultPeripherals<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyP
 impl<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig>
     EarlGreyDefaultPeripherals<'a, CFG, PINMUX>
 {
-    pub fn new() -> Self {
+    pub fn new(
+        flash_memory_protection_configuration: crate::flash_ctrl::MemoryProtectionConfiguration,
+    ) -> Self {
         Self {
             sram_ret: crate::sram_ret::SramCtrl::new(),
             aes: crate::aes::Aes::new(),
@@ -89,17 +92,13 @@ impl<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig>
                 crate::spi_host::SPIHOST1_BASE,
                 CFG::CPU_FREQ,
             ),
-            /*
-            flash_ctrl: lowrisc::flash_ctrl::FlashCtrl::new(
-                crate::flash_ctrl::FLASH_CTRL_BASE,
-                lowrisc::flash_ctrl::FlashRegion::REGION0,
-            ),
-            */
+            flash_ctrl: crate::flash_ctrl::FlashCtrl::new(flash_memory_protection_configuration),
             rng: lowrisc::csrng::CsRng::new(crate::csrng::CSRNG_BASE),
             watchdog: lowrisc::aon_timer::AonTimer::new(
                 top_earlgrey::AON_TIMER_AON_BASE_ADDR,
                 CFG::AON_TIMER_FREQ,
             ),
+            sysreset: lowrisc::sysrst_ctrl::SysRstCtrl::new(SYSRST_CTRL_AON_BASE_ADDR),
             timer: crate::timer::RvTimer::new(),
             alert_handler: AlertHandler::new(),
             pattgen: lowrisc::pattgen::PattGen::new(crate::pattgen::PATTGEN_BASE),
@@ -210,11 +209,29 @@ impl<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig> InterruptService
                     lowrisc::usb::UsbInterrupt::try_from_usize(raw_usb_interrupt as usize).unwrap();
                 self.usb.handle_interrupt(usb_interrupt);
             }
-            /*
-            interrupts::FLASHCTRL_PROGEMPTY..=interrupts::FLASHCTRL_OPDONE => {
-                self.flash_ctrl.handle_interrupt()
+            interrupts::FLASHCTRL_PROGEMPTY => {
+                // Since writing is done on chunks of FIFO depth level, this interrupt is useless.
+                return false;
             }
-            */
+            interrupts::FLASHCTRL_PROGLVL => {
+                // Since writing is done on chunks of FIFO depth level, this interrupt is useless.
+                return false;
+            }
+            interrupts::FLASHCTRL_RDFULL => {
+                // Since reading is done on chunks of FIFO depth level, this interrupt is useless.
+                return false;
+            }
+            interrupts::FLASHCTRL_RDLVL => {
+                // Since reading is done on chunks of FIFO depth level, this interrupt is useless.
+                return false;
+            }
+            interrupts::FLASHCTRL_OPDONE => {
+                self.flash_ctrl.handle_operation_done();
+            }
+            interrupts::FLASHCTRL_CORRERR => {
+                // This interrupt may only occur due to a driver bug.
+                return false;
+            }
             interrupts::I2C0_FMTWATERMARK..=interrupts::I2C0_HOSTTIMEOUT => {
                 self.i2c0.handle_interrupt()
             }
@@ -228,6 +245,7 @@ impl<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig> InterruptService
             interrupts::SPIHOST1_ERROR..=interrupts::SPIHOST1_SPIEVENT => {
                 self.spi_host1.handle_interrupt()
             }
+            interrupts::SYSRST_CTRL_AON_SYSRST_CTRL => self.sysreset.handle_interrupt(),
             interrupts::ALERTHANDLER_CLASSA => {
                 self.handle_alert_interrupt(AlertClass::ClassA);
             }

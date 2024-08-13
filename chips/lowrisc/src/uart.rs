@@ -316,6 +316,7 @@ impl<'a> Uart<'a> {
             while regs.status.is_set(STATUS::TXFULL) {}
             regs.wdata.write(WDATA::WDATA.val(*b as u32));
         }
+        while !regs.status.is_set(STATUS::TXIDLE) {}
     }
 
     pub fn test_alert(&self) {

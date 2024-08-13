@@ -84,6 +84,17 @@ impl OutPacket {
         EndpointIndex::try_from_usize(self.rx_fifo_content.read(RXFIFO::EP) as usize).unwrap()
     }
 
+    /// Returns the index of the endpoint on which the OUT packet was received
+    ///
+    /// # Return value
+    ///
+    /// The index of the buffer on which the OUT packet was received
+    pub(super) fn get_buffer_index(&self) -> BufferIndex {
+        // PANIC: `try_from_usize()` never panics because the BUFFER field is 5-bit wide.
+        // CAST: u32 == usize on RV32I
+        BufferIndex::try_from_usize(self.rx_fifo_content.read(RXFIFO::BUFFER) as usize).unwrap()
+    }
+
     /// Returns the size of the packet
     ///
     /// # Return value

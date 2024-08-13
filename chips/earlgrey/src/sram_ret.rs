@@ -5,9 +5,14 @@
 use crate::registers::sram_ctrl_regs;
 use crate::registers::sram_ctrl_regs::SramCtrlRegisters;
 use crate::registers::top_earlgrey::SRAM_CTRL_RET_AON_REGS_BASE_ADDR;
+use crate::rstmgr::RstMgr;
+use core::cell::Cell;
+use core::fmt::Write;
+use kernel::hil::retention_ram;
 use kernel::utilities::registers::interfaces::Readable;
 use kernel::utilities::{registers::interfaces::ReadWriteable, target_test, StaticRef};
-use kernel::{debug, ErrorCode};
+use kernel::ErrorCode;
+use lowrisc::uart::Uart;
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum DrvState {
@@ -30,6 +35,7 @@ const MULTI_BIT_BOOL_4FALSE: u32 = 0x9;
 
 pub struct SramCtrl {
     registers: StaticRef<SramCtrlRegisters>,
+    cached_state: Cell<DrvState>,
 }
 
 pub const SRAM_RET_BASE: StaticRef<SramCtrlRegisters> =
@@ -38,9 +44,12 @@ pub const SRAM_RET_BASE: StaticRef<SramCtrlRegisters> =
 impl SramCtrl {
     pub fn new() -> Self {
         // Initialize the SRAM controller
-        Self {
+        let local_self = Self {
             registers: SRAM_RET_BASE,
-        }
+            cached_state: Cell::new(DrvState::Uninitialized),
+        };
+        local_self.cached_state.set(local_self.get_state());
+        local_self
     }
     /// This function _forces_ the reinitialization of the init. Normally,this should not be necessary, but
     /// in case it is, we copy the rram data, we init and then restore the rram data.
@@ -59,7 +68,7 @@ impl SramCtrl {
         }
     }
 
-    /// This is a function used to initialize the rram and re-aquire a scrambling key.
+    /// This is a function used to initialize the rram
     /// This WILL delete all ret sram data.
     ///
     /// The return is a Result<(), ErrorCode> because it can fail depending on the regwen state.
@@ -67,18 +76,10 @@ impl SramCtrl {
         if self.is_locked_ctrl() {
             return Err(ErrorCode::FAIL);
         }
-        self.registers
-            .ctrl
-            .modify(sram_ctrl_regs::CTRL::RENEW_SCR_KEY.val(1));
-
-        while !self
-            .registers
-            .status
-            .is_set(sram_ctrl_regs::STATUS::SCR_KEY_VALID)
-        {
-            // Wait for the key to be valid before proceeding
-        }
-
+        // We are aware that the manual says we should initialize the scrambling key, but the scrambling
+        // circuitry seems not to be hooked to the AON domain and the scrambled key will be lost after a
+        // reset. Therefore, the only way we can get consistent data is if we use the "default" OTP key.
+        //
         self.registers
             .ctrl
             .modify(sram_ctrl_regs::CTRL::INIT.val(1));
@@ -90,22 +91,42 @@ impl SramCtrl {
         {
             // Wait for the key to be valid before proceeding
         }
+        self.cached_state.set(self.get_state());
         Ok(())
     }
 
     /// Interface to read rram data from the creator area. Addressed through ID's and returning u32 data.
-    pub fn get_creator_rram_data(&self, id: usize) -> u32 {
-        unsafe { RET_RAM_CREATOR[id] }
+    pub fn get_creator_rram_data(&self, id: usize) -> Result<u32, ErrorCode> {
+        unsafe {
+            if id <= RET_RAM_CREATOR.len() {
+                // Use get_unchecked in order to prevent doing a double len check, to make it a bit faster.
+                Ok(*RET_RAM_CREATOR.get_unchecked(id))
+            } else {
+                Err(ErrorCode::SIZE)
+            }
+        }
     }
     /// Interface to read rram data from the owner area. Addressed through ID's and returning u32 data.
-    pub fn get_owner_rram_data(&self, id: usize) -> u32 {
-        unsafe { RET_RAM_OWNER[id] }
+    pub fn get_owner_rram_data(&self, id: usize) -> Result<u32, ErrorCode> {
+        unsafe {
+            if id <= RET_RAM_OWNER.len() {
+                // Use get_unchecked in order to prevent doing a double len check, to make it a bit faster.
+                Ok(*RET_RAM_OWNER.get_unchecked(id))
+            } else {
+                Err(ErrorCode::SIZE)
+            }
+        }
     }
 
     /// Interface to read rram data from the owner area. Addressed through ID's and returning u32 data.
-    pub fn set_owner_rram_data(&self, id: usize, val: u32) {
+    pub fn set_owner_rram_data(&self, id: usize, val: u32) -> Result<(), ErrorCode> {
         unsafe {
-            RET_RAM_OWNER[id] = val;
+            if id <= RET_RAM_OWNER.len() {
+                RET_RAM_OWNER[id] = val;
+                Ok(())
+            } else {
+                Err(ErrorCode::SIZE)
+            }
         }
     }
 
@@ -180,22 +201,51 @@ impl SramCtrl {
     }
 
     /// Test function. It runs on target self-test, returns if the test suite failed or passed.
-    pub fn test(&self) -> bool {
+    #[cfg(feature = "test_sram_ret")]
+    pub fn test(
+        &self,
+        // test: EarlGreyDefaultPeripherals<ChipConfig, BoardPinmuxLayout>,
+        reset_manager: &RstMgr,
+        uart: &'static Uart,
+    ) -> bool {
         let mut test_runner = target_test::TestRunner::new();
-        debug!("Starting sram_ret self-test");
-        debug!("Reset reason from API is {}", self.get_creator_rram_data(1));
-
-        if (self.get_creator_rram_data(1) == 1) || (self.get_owner_rram_data(5) > 100) {
-            self.set_owner_rram_data(5, 0);
-            debug!("Force reset test cycles");
+        let binding = |foo: &str| uart.transmit_sync(foo.as_bytes());
+        test_runner.set_print_func(&binding);
+        test_runner
+            .write_str("Starting sram_ret self-test \r\n")
+            .unwrap();
+        match self.get_creator_rram_data(1) {
+            Ok(x) => test_runner
+                .write_fmt(format_args!("Reset reason from API is {} \r\n", x))
+                .unwrap(),
+            _ => test_runner
+                .write_str("Wrong init state, can't read reset reason yet!  \r\n")
+                .unwrap(),
         }
-        let test_cycle = self.get_owner_rram_data(5);
-        debug!("Reset Count is {}", test_cycle);
-        self.set_owner_rram_data(5, test_cycle + 1);
+
+        let test_cycle: u32;
+
+        if (self.get_creator_rram_data(1).unwrap() == 1)
+            || (self.get_owner_rram_data(5).unwrap() > 100)
+        {
+            let _ = self.set_owner_rram_data(5, 1);
+            test_cycle = 0;
+            test_runner
+                .write_str("Force reset test cycles \r\n")
+                .unwrap();
+        } else {
+            test_cycle = self.get_owner_rram_data(5).unwrap();
+            test_runner
+                .write_fmt(format_args!("Reset Count is {} \r\n", test_cycle))
+                .unwrap();
+
+            let _ = self.set_owner_rram_data(5, test_cycle + 1);
+        }
+
         match test_cycle {
             0 => {
                 test_runner.assert_function("Test init status!", || {
-                    self.get_state() == DrvState::Uninitialized
+                    self.get_state() == DrvState::InitializedScrambled
                 });
                 test_runner.assert_function("Test no lock on execution!", || {
                     !self.is_locked_exec()
@@ -236,20 +286,21 @@ impl SramCtrl {
                             == 0x1)
                 });
                 test_runner.assert_function("Test setter for rram id's!", || {
-                    self.set_owner_rram_data(10, 0xFF);
-                    self.get_owner_rram_data(10) == 0xFF
+                    self.set_owner_rram_data(10, 0xFF) == Ok(())
+                        && self.get_owner_rram_data(10).unwrap() == 0xFF
                 });
                 test_runner.assert_function("Test 2nd setter for rram id's!", || {
-                    self.set_owner_rram_data(10, 0x5A);
-                    self.get_owner_rram_data(10) == 0x5A
+                    self.set_owner_rram_data(10, 0x5A) == Ok(())
+                        && self.get_owner_rram_data(10).unwrap() == 0x5A
                 });
-                test_runner.assert_function("Test forced Safe Init!", || {
+                test_runner.assert(
+                    "Test forced Safe Init!",
                     self.forced_safe_init() == Ok(())
-                        && (self.get_state() == DrvState::InitializedScrambled)
-                        && (self.get_owner_rram_data(10) == 0x5A)
-                });
+                        && (self.get_state() == DrvState::InitializedScrambledDefault)
+                        && (self.get_owner_rram_data(10).unwrap() == 0x5A),
+                );
                 test_runner.assert_function("Test rram data survived!", || {
-                    self.get_owner_rram_data(10) == 0x5A
+                    self.get_owner_rram_data(10).unwrap() == 0x5A
                 });
                 test_runner.assert_function("Test lock execution!", || {
                     self.lock_ctrl();
@@ -260,37 +311,65 @@ impl SramCtrl {
                             .read(sram_ctrl_regs::CTRL_REGWEN::CTRL_REGWEN)
                             == 0x0)
                 });
-                test_runner.assert_function("Test fail Safe Init because we're locked", || {
-                    self.forced_safe_init() == Err(ErrorCode::FAIL)
-                });
+
+                test_runner.assert("Check if is Locked Ctrl.", self.is_locked_ctrl() == true);
+                test_runner.assert(
+                    "Test fail Safe Init because we're locked",
+                    self.forced_safe_init() == Err(ErrorCode::FAIL),
+                );
                 test_runner.assert_function("Test rram data setters ID 10 before reset!", || {
-                    self.set_owner_rram_data(10, 0x5A);
-                    self.get_owner_rram_data(10) == 0x5A
+                    self.set_owner_rram_data(10, 0x5A) == Ok(())
+                        && self.get_owner_rram_data(10).unwrap() == 0x5A
                 });
                 test_runner.assert_function("Test rram data setters ID 11 before reset!", || {
-                    self.set_owner_rram_data(11, 0xFEEDBEEF);
-                    self.get_owner_rram_data(11) == 0xFEEDBEEF
+                    self.set_owner_rram_data(11, 0xFEEDBEEF) == Ok(())
+                        && self.get_owner_rram_data(11).unwrap() == 0xFEEDBEEF
                 });
                 test_runner.assert_function("Test rram data setters ID 12 before reset!", || {
-                    self.set_owner_rram_data(12, 0x5A5A5A5A);
-                    self.get_owner_rram_data(12) == 0x5A5A5A5A
+                    self.set_owner_rram_data(12, 0x5A5A5A5A) == Ok(())
+                        && self.get_owner_rram_data(12).unwrap() == 0x5A5A5A5A
                 });
+                test_runner.write_str("Performing reset!  \r\n").unwrap();
+
+                reset_manager.do_software_reset();
             }
             1 => {
                 test_runner.assert_function("Test rram data ID 10 survived!", || {
-                    self.get_owner_rram_data(10) == 0x5A
+                    self.get_owner_rram_data(10).unwrap() == 0x5A
                 });
                 test_runner.assert_function("Test rram data ID 11 survived!", || {
-                    self.get_owner_rram_data(10) == 0xFEEDBEEF
+                    self.get_owner_rram_data(11).unwrap() == 0xFEEDBEEF
                 });
                 test_runner.assert_function("Test rram data ID 12 survived!", || {
-                    self.get_owner_rram_data(10) == 0x5A5A5A5A
+                    self.get_owner_rram_data(12).unwrap() == 0x5A5A5A5A
                 });
             }
             _ => {}
         }
 
-        debug!("Ending sram_ret self-test");
+        test_runner.write_str("Ending sram_ret self-test").unwrap();
         test_runner.is_test_failed
+    }
+}
+
+impl retention_ram::OwnerRetentionRam for SramCtrl {
+    type Data = u32;
+    type ID = usize;
+
+    fn read(&self, id: Self::ID) -> Result<Self::Data, ErrorCode> {
+        self.get_owner_rram_data(id)
+    }
+
+    fn write(&self, id: Self::ID, data: Self::Data) -> Result<(), ErrorCode> {
+        self.set_owner_rram_data(id, data)
+    }
+}
+
+impl retention_ram::CreatorRetentionRam for SramCtrl {
+    type Data = u32;
+    type ID = usize;
+
+    fn read(&self, id: Self::ID) -> Result<Self::Data, ErrorCode> {
+        self.get_creator_rram_data(id)
     }
 }

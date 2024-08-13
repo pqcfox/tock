@@ -14,4 +14,6 @@ kernel = { path = "../../kernel" }
 
 [features]
 test_alerthandler = []
+test_sysrst_ctrl = []
+test_sram_ret = []
 tests = []

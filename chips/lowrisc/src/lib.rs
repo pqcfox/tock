@@ -22,6 +22,7 @@ pub mod pwrmgr;
 pub mod registers;
 pub mod rsa;
 pub mod spi_host;
+pub mod sysrst_ctrl;
 pub mod uart;
 pub mod usb;
 mod utils;

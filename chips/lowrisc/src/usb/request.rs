@@ -6,6 +6,8 @@
 
 use kernel::utilities::cells::VolatileCell;
 
+use core::num::NonZeroU16;
+
 /// Standard USB device request that requires sending data to host
 pub(super) enum StandardDeviceRequestToHost {
     GetStatus = 0,
@@ -36,9 +38,18 @@ pub(super) enum StandardRequest {
     Device(StandardDeviceRequest),
 }
 
+/// Class USB request
+pub(super) enum ClassRequest {
+    /// Class request that needs to transfer data from device to host
+    ToHost(Option<NonZeroU16>),
+    /// Class request that needs to transfer data from host to device
+    FromHost(Option<NonZeroU16>),
+}
+
 /// USB request
 pub(super) enum Request {
     Standard(StandardRequest),
+    Class(ClassRequest),
 }
 
 /// Errors while decoding a SETUP packet
@@ -54,7 +65,32 @@ pub(super) enum RequestDecodeError {
     UnknownRequest,
 }
 
+/// Indicates request direction
+enum RequestDirection {
+    /// Data stage transfers are made from device to host
+    FromHost,
+    /// Data stage trnasfers are made from host to device
+    ToHost,
+}
+
 impl Request {
+    /// Determines the direction of the request
+    ///
+    /// # Parameters
+    ///
+    /// `request_type_byte`: the byte representing the request type
+    ///
+    /// # Return value
+    ///
+    /// Request direction
+    const fn get_direction(request_type_byte: u8) -> RequestDirection {
+        const REQUEST_DIRECTION_MASK: u8 = 0b1000_0000;
+        match (request_type_byte & REQUEST_DIRECTION_MASK) != 0 {
+            false => RequestDirection::FromHost,
+            true => RequestDirection::ToHost,
+        }
+    }
+
     /// Constructor for a standard device USB request that needs to transfer data from device to
     /// host
     ///
@@ -139,10 +175,9 @@ impl Request {
         request_type_byte: u8,
         request_byte: u8,
     ) -> Result<Self, RequestDecodeError> {
-        const REQUEST_DIRECTION_MASK: u8 = 0b1000_0000;
-        match (request_type_byte & REQUEST_DIRECTION_MASK) != 0 {
-            false => Self::try_standard_device_from_host(request_byte),
-            true => Self::try_standard_device_to_host(request_byte),
+        match Self::get_direction(request_type_byte) {
+            RequestDirection::FromHost => Self::try_standard_device_from_host(request_byte),
+            RequestDirection::ToHost => Self::try_standard_device_to_host(request_byte),
         }
     }
 
@@ -155,13 +190,33 @@ impl Request {
     ///
     /// # Return value
     ///
-    /// + Ok: request_type_byte is valid
-    /// + Err: request_type_byte is invalid
-    const fn try_standard(request_type_byte: u8, request_byte: u8) -> Result<Self, RequestDecodeError> {
+    /// + Ok: `request_type_byte` is valid
+    /// + Err: `request_type_byte` is invalid
+    const fn try_standard(
+        request_type_byte: u8,
+        request_byte: u8,
+    ) -> Result<Self, RequestDecodeError> {
         const REQUEST_RECIPIENT_MASK: u8 = 0b0001_1111;
         match request_type_byte & REQUEST_RECIPIENT_MASK {
             0 => Self::try_standard_device(request_type_byte, request_byte),
             _ => Err(RequestDecodeError::UnknownRecipient),
+        }
+    }
+
+    /// Constructs a class request
+    ///
+    /// # Parameters
+    ///
+    /// + ̀`request_type_byte`: byte representing the request type
+    ///
+    /// # Return value
+    ///
+    /// + Ok: `request_type_byte` is valid
+    /// + Err: `request_type_byte` is invalid
+    const fn new_class(request_type_byte: u8, length: Option<NonZeroU16>) -> Self {
+        match Self::get_direction(request_type_byte) {
+            RequestDirection::FromHost => Request::Class(ClassRequest::FromHost(length)),
+            RequestDirection::ToHost => Request::Class(ClassRequest::ToHost(length)),
         }
     }
 
@@ -186,9 +241,22 @@ impl Request {
             None => return Err(RequestDecodeError::PacketTooShort),
         };
 
+        let length_byte0 = match packet.get(6) {
+            Some(volatile_byte) => volatile_byte.get(),
+            None => return Err(RequestDecodeError::PacketTooShort),
+        };
+
+        let length_byte1 = match packet.get(7) {
+            Some(volatile_byte) => volatile_byte.get(),
+            None => return Err(RequestDecodeError::PacketTooShort),
+        };
+
+        let length = NonZeroU16::new(u16::from_ne_bytes([length_byte0, length_byte1]));
+
         const REQUEST_TYPE_MASK: u8 = 0b0110_0000;
         match request_type_byte & REQUEST_TYPE_MASK {
             0 => Self::try_standard(request_type_byte, request_byte),
+            32 => Ok(Self::new_class(request_type_byte, length)),
             _ => Err(RequestDecodeError::UnknownType),
         }
     }
