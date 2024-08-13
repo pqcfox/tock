@@ -222,8 +222,7 @@ impl SramCtrl {
                 .unwrap(),
         }
 
-        let mut test_cycle: u32;
-        let mut boot_from_rom_ext: bool;
+        let test_cycle: u32;
 
         if (self.get_creator_rram_data(1).unwrap() == 1)
             || (self.get_owner_rram_data(5).unwrap() > 100)
@@ -370,6 +369,6 @@ impl retention_ram::CreatorRetentionRam for SramCtrl {
     type ID = usize;
 
     fn read(&self, id: Self::ID) -> Result<Self::Data, ErrorCode> {
-        self.get_owner_rram_data(id)
+        self.get_creator_rram_data(id)
     }
 }
