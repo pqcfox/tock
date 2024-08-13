@@ -471,6 +471,9 @@ impl<'a> Usb<'a> {
                 });
             }
             CtrlInResult::Delay => unimplemented!(),
+            // Currently, there is no upper layer that sends CtrlInResult::Error, as a
+            // consequence this is not implemented. A future patch may add support for proper
+            // error handling.
             CtrlInResult::Error => unimplemented!(),
         }
     }
@@ -880,6 +883,9 @@ impl<'a> Usb<'a> {
                     self.fill_available_buffer_fifo();
                 },
                 OutResult::Delay => unimplemented!(),
+                // Normally, this should delay the endpoint. However, the upper layer responds with
+                // OutResult::Error only when the host misbehaves. Reproducing and testing this is
+                // hard. A future patch may implement proper error handling.
                 OutResult::Error => unimplemented!(),
             }
         });
@@ -900,6 +906,9 @@ impl<'a> Usb<'a> {
                     self.fill_available_buffer_fifo();
                 }
                 OutResult::Delay => unimplemented!(),
+                // Normally, this should delay the endpoint. However, the upper layer responds with
+                // OutResult::Error only when the host misbehaves. Reproducing and testing this is
+                // hard. A future patch may implement proper error handling.
                 OutResult::Error => unimplemented!(),
             }
         });
@@ -920,6 +929,9 @@ impl<'a> Usb<'a> {
                     self.fill_available_buffer_fifo();
                 }
                 OutResult::Delay => unimplemented!(),
+                // Normally, this should delay the endpoint. However, the upper layer responds with
+                // OutResult::Error only when the host misbehaves. Reproducing and testing this is
+                // hard. A future patch may implement proper error handling.
                 OutResult::Error => unimplemented!(),
             }
         });
@@ -1113,6 +1125,9 @@ impl<'a> Usb<'a> {
                     });
                 }
                 CtrlInResult::Delay => unimplemented!(),
+                // Currently, there is no upper layer that sends CtrlInResult::Error, as a
+                // consequence this is not implemented. A future patch may add support for proper
+                // error handling.
                 CtrlInResult::Error => unimplemented!(),
             }
         });
@@ -1244,6 +1259,9 @@ impl<'a> Usb<'a> {
                     self.free_buffer(buffer_index);
                     self.fill_available_buffer_fifo();
                 }
+                // Normally, this should delay the endpoint. However, the upper layer responds with
+                // InResult::Error only when the host misbehaves. Reproducing and testing this is
+                // hard. A future patch may implement proper error handling.
                 InResult::Error => unimplemented!(),
             }
         });
@@ -1586,6 +1604,9 @@ impl<'a> UsbController<'a> for Usb<'a> {
                     self.internal_endpoint_resume_in(endpoint_index, packet_size, endpoint);
                 }
                 InResult::Delay => unimplemented!(),
+                // Normally, this should delay the endpoint. However, the upper layer responds with
+                // InResult::Error only when the host misbehaves. Reproducing and testing this is
+                // hard. A future patch may implement proper error handling.
                 InResult::Error => unimplemented!(),
             }
         });
