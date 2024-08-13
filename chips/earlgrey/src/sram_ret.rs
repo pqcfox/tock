@@ -201,6 +201,7 @@ impl SramCtrl {
     }
 
     /// Test function. It runs on target self-test, returns if the test suite failed or passed.
+    #[cfg(feature = "test_sram_ret")]
     pub fn test(
         &self,
         // test: EarlGreyDefaultPeripherals<ChipConfig, BoardPinmuxLayout>,

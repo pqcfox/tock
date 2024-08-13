@@ -983,6 +983,7 @@ unsafe fn setup() -> (
         debug!("{:?}", err);
     });
 
+    #[cfg(feature = "test_sram_ret")]
     peripherals
         .sram_ret
         .test(&peripherals.rst_mgmt, &peripherals.uart0);
