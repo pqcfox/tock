@@ -73,13 +73,13 @@ impl<'a> TestRunner<'a> {
         if test {
             let id = self.execution_id;
             // Keep test success silent, we don't want to fill the buffer if everything is OK!
-            self.write_fmt(format_args!(
+            let _ = self.write_fmt(format_args!(
                 "*   Test No. {} passed! : {}\r\n",
                 id, test_info
             ));
             true
         } else {
-            self.write_fmt(format_args!(
+            let _ = self.write_fmt(format_args!(
                 "*  ERROR: Test No. {} failed!!! : {}\r\n",
                 self.execution_id.clone(),
                 test_info,
@@ -97,7 +97,7 @@ impl<'a> TestRunner<'a> {
     pub fn assert_function(&mut self, test_info: &str, f: impl Fn() -> bool) -> bool {
         self.execution_id += 1;
         if f() {
-            self.write_fmt(format_args!(
+            let _ = self.write_fmt(format_args!(
                 "*   Test No. {} Passed! : {}\r\n",
                 self.execution_id.clone(),
                 test_info
@@ -105,7 +105,7 @@ impl<'a> TestRunner<'a> {
             // Keep test success silent, we don't want to fill the buffer if everything is OK!
             true
         } else {
-            self.write_fmt(format_args!(
+            let _ = self.write_fmt(format_args!(
                 "*   Test No. {} Failed! : {}\r\n",
                 self.execution_id.clone(),
                 test_info
