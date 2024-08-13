@@ -1,31 +1,5 @@
-use crate::debug;
 use core::fmt::Write;
 use tock_cells::optional_cell::OptionalCell;
-
-macro_rules! println {
-    ($msg:expr) => ({
-        // If tests are running on host, there is no underlying Tock kernel, so this function becomes a
-        // NOP
-        if !cfg!(test) {
-            // SAFETY: Tock is mono threaded, so mutating a static variable is safe.
-            unsafe {
-                // The result is ignored for simplicity
-                let _ = self.write_fmt(format_args!("{}\r\n", $msg));
-            }
-        }
-    });
-    ($fmt:expr, $($arg:tt)+) => ({
-        // If tests are running on host, there is no underlying Tock kernel, so this function becomes a
-        // NOP
-        if !cfg!(test) {
-            // SAFETY: Tock is mono threaded, so mutating a static variable is safe.
-            unsafe {
-                // The result is ignored for simplicity
-                let _ = self.write_fmt(format_args!("{}\r\n", format_args!($fmt, $($arg)+)));
-            }
-        }
-    });
-}
 
 pub struct TestRunner<'a> {
     execution_id: u32,
@@ -59,10 +33,6 @@ impl<'a> TestRunner<'a> {
         self.printer.set(print);
     }
 
-    // fn print(&self, string: &'a str) {
-    //     self.printer.map(|funct| funct(string));
-    // }
-
     /// Interface to set the execution ID in case of jumps across resets.
     pub fn set_test_execution_id(&mut self, id: u32) {
         self.execution_id = id;
@@ -72,18 +42,19 @@ impl<'a> TestRunner<'a> {
         self.execution_id += 1;
         if test {
             let id = self.execution_id;
-            // Keep test success silent, we don't want to fill the buffer if everything is OK!
-            let _ = self.write_fmt(format_args!(
+            self.write_fmt(format_args!(
                 "*   Test No. {} passed! : {}\r\n",
                 id, test_info
-            ));
+            ))
+            .unwrap();
             true
         } else {
-            let _ = self.write_fmt(format_args!(
+            self.write_fmt(format_args!(
                 "*  ERROR: Test No. {} failed!!! : {}\r\n",
                 self.execution_id.clone(),
                 test_info,
-            ));
+            ))
+            .unwrap();
             self.is_test_failed = true;
             false
         }
@@ -97,19 +68,20 @@ impl<'a> TestRunner<'a> {
     pub fn assert_function(&mut self, test_info: &str, f: impl Fn() -> bool) -> bool {
         self.execution_id += 1;
         if f() {
-            let _ = self.write_fmt(format_args!(
+            self.write_fmt(format_args!(
                 "*   Test No. {} Passed! : {}\r\n",
                 self.execution_id.clone(),
                 test_info
-            ));
-            // Keep test success silent, we don't want to fill the buffer if everything is OK!
+            ))
+            .unwrap();
             true
         } else {
-            let _ = self.write_fmt(format_args!(
+            self.write_fmt(format_args!(
                 "*   Test No. {} Failed! : {}\r\n",
                 self.execution_id.clone(),
                 test_info
-            ));
+            ))
+            .unwrap();
             self.is_test_failed = true;
             false
         }
