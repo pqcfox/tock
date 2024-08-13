@@ -228,7 +228,7 @@ impl SramCtrl {
         if (self.get_creator_rram_data(1).unwrap() == 1)
             || (self.get_owner_rram_data(5).unwrap() > 100)
         {
-            let _ = self.set_owner_rram_data(5, 0);
+            let _ = self.set_owner_rram_data(5, 1);
             test_cycle = 0;
             test_runner
                 .write_str("Force reset test cycles \r\n")
