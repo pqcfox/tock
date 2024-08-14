@@ -6,14 +6,21 @@
 
 use crate::utilities::cells::VolatileCell;
 
+/// List of possible USB errors
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Error {
+    /// The provided endpoint is invalid
+    InvalidEndpoint
+}
+
 /// USB controller interface
 pub trait UsbController<'a> {
     fn set_client(&self, client: &'a dyn Client<'a>);
 
     // Should be called before `enable_as_device()`
     fn endpoint_set_ctrl_buffer(&self, buf: &'a [VolatileCell<u8>]);
-    fn endpoint_set_in_buffer(&self, endpoint: usize, buf: &'a [VolatileCell<u8>]);
-    fn endpoint_set_out_buffer(&self, endpoint: usize, buf: &'a [VolatileCell<u8>]);
+    fn endpoint_set_in_buffer(&self, endpoint: usize, buf: &'a [VolatileCell<u8>]) -> Result<(), Error>;
+    fn endpoint_set_out_buffer(&self, endpoint: usize, buf: &'a [VolatileCell<u8>]) -> Result<(), Error>;
 
     // Must be called before `attach()`
     fn enable_as_device(&self, speed: DeviceSpeed);
@@ -26,15 +33,15 @@ pub trait UsbController<'a> {
 
     fn enable_address(&self);
 
-    fn endpoint_in_enable(&self, transfer_type: TransferType, endpoint: usize);
+    fn endpoint_in_enable(&self, transfer_type: TransferType, endpoint: usize) -> Result<(), Error>;
 
-    fn endpoint_out_enable(&self, transfer_type: TransferType, endpoint: usize);
+    fn endpoint_out_enable(&self, transfer_type: TransferType, endpoint: usize) -> Result<(), Error>;
 
-    fn endpoint_in_out_enable(&self, transfer_type: TransferType, endpoint: usize);
+    fn endpoint_in_out_enable(&self, transfer_type: TransferType, endpoint: usize) -> Result<(), Error>;
 
-    fn endpoint_resume_in(&self, endpoint: usize);
+    fn endpoint_resume_in(&self, endpoint: usize) -> Result<(), Error>;
 
-    fn endpoint_resume_out(&self, endpoint: usize);
+    fn endpoint_resume_out(&self, endpoint: usize) -> Result<(), Error>;
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -56,6 +63,11 @@ pub trait Client<'a> {
     fn enable(&'a self);
     fn attach(&'a self);
     fn bus_reset(&'a self);
+    fn link_suspended(&'a self);
+    fn link_resume(&'a self);
+    fn disconnected(&'a self);
+    fn host_lost(&'a self);
+    fn bus_powered(&'a self);
 
     fn ctrl_setup(&'a self, endpoint: usize) -> CtrlSetupResult;
     fn ctrl_in(&'a self, endpoint: usize) -> CtrlInResult;

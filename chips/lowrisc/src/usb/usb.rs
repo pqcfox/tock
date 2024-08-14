@@ -27,7 +27,7 @@ use crate::registers::usbdev_regs::{
 };
 
 use kernel::hil::usb::{
-    Client, CtrlInResult, CtrlOutResult, CtrlSetupResult, DeviceSpeed, InResult, OutResult, TransferType, UsbController,
+    self, Client, CtrlInResult, CtrlOutResult, CtrlSetupResult, DeviceSpeed, InResult, OutResult, TransferType, UsbController,
 };
 use kernel::utilities::cells::{OptionalCell, VolatileCell};
 use kernel::utilities::registers::interfaces::{ReadWriteable, Readable, Writeable};
@@ -471,6 +471,9 @@ impl<'a> Usb<'a> {
                 });
             }
             CtrlInResult::Delay => unimplemented!(),
+            // Currently, there is no upper layer that sends CtrlInResult::Error, as a
+            // consequence this is not implemented. A future patch may add support for proper
+            // error handling.
             CtrlInResult::Error => unimplemented!(),
         }
     }
@@ -880,6 +883,9 @@ impl<'a> Usb<'a> {
                     self.fill_available_buffer_fifo();
                 },
                 OutResult::Delay => unimplemented!(),
+                // Normally, this should delay the endpoint. However, the upper layer responds with
+                // OutResult::Error only when the host misbehaves. Reproducing and testing this is
+                // hard. A future patch may implement proper error handling.
                 OutResult::Error => unimplemented!(),
             }
         });
@@ -900,6 +906,9 @@ impl<'a> Usb<'a> {
                     self.fill_available_buffer_fifo();
                 }
                 OutResult::Delay => unimplemented!(),
+                // Normally, this should delay the endpoint. However, the upper layer responds with
+                // OutResult::Error only when the host misbehaves. Reproducing and testing this is
+                // hard. A future patch may implement proper error handling.
                 OutResult::Error => unimplemented!(),
             }
         });
@@ -920,6 +929,9 @@ impl<'a> Usb<'a> {
                     self.fill_available_buffer_fifo();
                 }
                 OutResult::Delay => unimplemented!(),
+                // Normally, this should delay the endpoint. However, the upper layer responds with
+                // OutResult::Error only when the host misbehaves. Reproducing and testing this is
+                // hard. A future patch may implement proper error handling.
                 OutResult::Error => unimplemented!(),
             }
         });
@@ -1113,6 +1125,9 @@ impl<'a> Usb<'a> {
                     });
                 }
                 CtrlInResult::Delay => unimplemented!(),
+                // Currently, there is no upper layer that sends CtrlInResult::Error, as a
+                // consequence this is not implemented. A future patch may add support for proper
+                // error handling.
                 CtrlInResult::Error => unimplemented!(),
             }
         });
@@ -1244,6 +1259,9 @@ impl<'a> Usb<'a> {
                     self.free_buffer(buffer_index);
                     self.fill_available_buffer_fifo();
                 }
+                // Normally, this should delay the endpoint. However, the upper layer responds with
+                // InResult::Error only when the host misbehaves. Reproducing and testing this is
+                // hard. A future patch may implement proper error handling.
                 InResult::Error => unimplemented!(),
             }
         });
@@ -1448,26 +1466,30 @@ impl<'a> UsbController<'a> for Usb<'a> {
         self.set_buffer_out(DEFAULT_ENDPOINT_INDEX, buffer);
     }
 
-    fn endpoint_set_in_buffer(&self, raw_endpoint_index: usize, buffer: &'a [VolatileCell<u8>]) {
+    fn endpoint_set_in_buffer(&self, raw_endpoint_index: usize, buffer: &'a [VolatileCell<u8>]) -> Result<(), usb::Error> {
         let endpoint_index = match EndpointIndex::try_from_usize(raw_endpoint_index) {
             Err(()) => {
-                return;
+                return Err(usb::Error::InvalidEndpoint);
             }
             Ok(endpoint_index) => endpoint_index,
         };
 
         self.set_buffer_in(endpoint_index, buffer);
+
+        Ok(())
     }
 
-    fn endpoint_set_out_buffer(&self, raw_endpoint_index: usize, buffer: &'a [VolatileCell<u8>]) {
+    fn endpoint_set_out_buffer(&self, raw_endpoint_index: usize, buffer: &'a [VolatileCell<u8>]) -> Result<(), usb::Error> {
         let endpoint_index = match EndpointIndex::try_from_usize(raw_endpoint_index) {
             Err(()) => {
-                return;
+                return Err(usb::Error::InvalidEndpoint);
             }
             Ok(endpoint_index) => endpoint_index,
         };
 
         self.set_buffer_out(endpoint_index, buffer);
+
+        Ok(())
     }
 
     fn enable_as_device(&self, _speed: DeviceSpeed) {
@@ -1508,12 +1530,10 @@ impl<'a> UsbController<'a> for Usb<'a> {
             .modify(USBCTRL::DEVICE_ADDRESS.val(usb_address.to_u8() as u32));
     }
 
-    fn endpoint_in_enable(&self, transfer_type: TransferType, raw_endpoint_index: usize) {
-        kernel::debug!("{}", raw_endpoint_index);
-
+    fn endpoint_in_enable(&self, transfer_type: TransferType, raw_endpoint_index: usize) -> Result<(), usb::Error> {
         let endpoint_index = match EndpointIndex::try_from_usize(raw_endpoint_index) {
             Err(()) => {
-                return;
+                return Err(usb::Error::InvalidEndpoint);
             }
             Ok(endpoint_index) => endpoint_index,
         };
@@ -1523,12 +1543,14 @@ impl<'a> UsbController<'a> for Usb<'a> {
         if transfer_type == TransferType::Isochronous {
             self.internal_enable_in_isochronous(endpoint_index);
         }
+
+        Ok(())
     }
 
-    fn endpoint_out_enable(&self, transfer_type: TransferType, raw_endpoint_index: usize) {
+    fn endpoint_out_enable(&self, transfer_type: TransferType, raw_endpoint_index: usize) -> Result<(), usb::Error> {
         let endpoint_index = match EndpointIndex::try_from_usize(raw_endpoint_index) {
             Err(()) => {
-                return;
+                return Err(usb::Error::InvalidEndpoint);
             }
             Ok(endpoint_index) => endpoint_index,
         };
@@ -1540,12 +1562,14 @@ impl<'a> UsbController<'a> for Usb<'a> {
         } else if transfer_type == TransferType::Isochronous {
             self.internal_enable_out_isochronous(endpoint_index);
         }
+
+        Ok(())
     }
 
-    fn endpoint_in_out_enable(&self, transfer_type: TransferType, raw_endpoint_index: usize) {
+    fn endpoint_in_out_enable(&self, transfer_type: TransferType, raw_endpoint_index: usize) -> Result<(), usb::Error> {
         let endpoint_index = match EndpointIndex::try_from_usize(raw_endpoint_index) {
             Err(()) => {
-                return;
+                return Err(usb::Error::InvalidEndpoint);
             }
             Ok(endpoint_index) => endpoint_index,
         };
@@ -1556,12 +1580,14 @@ impl<'a> UsbController<'a> for Usb<'a> {
         if transfer_type == TransferType::Control {
             self.internal_endpoint_rxenable_setup(endpoint_index);
         }
+
+        Ok(())
     }
 
-    fn endpoint_resume_in(&self, raw_endpoint_index: usize) {
+    fn endpoint_resume_in(&self, raw_endpoint_index: usize) -> Result<(), usb::Error> {
         let endpoint_index = match EndpointIndex::try_from_usize(raw_endpoint_index) {
             Ok(endpoint_index) => endpoint_index,
-            Err(()) => todo!("Return error on invalid raw endpoint index"),
+            Err(()) => return Err(usb::Error::InvalidEndpoint),
         };
         let endpoint = self.get_endpoint(endpoint_index);
         let endpoint_state = endpoint.get_state();
@@ -1578,12 +1604,17 @@ impl<'a> UsbController<'a> for Usb<'a> {
                     self.internal_endpoint_resume_in(endpoint_index, packet_size, endpoint);
                 }
                 InResult::Delay => unimplemented!(),
+                // Normally, this should delay the endpoint. However, the upper layer responds with
+                // InResult::Error only when the host misbehaves. Reproducing and testing this is
+                // hard. A future patch may implement proper error handling.
                 InResult::Error => unimplemented!(),
             }
         });
+
+        Ok(())
     }
 
-    fn endpoint_resume_out(&self, _endpoint: usize) {
+    fn endpoint_resume_out(&self, _endpoint: usize) -> Result<(), usb::Error> {
         unimplemented!()
     }
 }

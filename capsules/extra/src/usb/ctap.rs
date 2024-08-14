@@ -206,7 +206,7 @@ impl<'a, U: hil::usb::UsbController<'a>> hil::usb_hid::UsbHid<'a, [u8; 64]> for 
         let len = send.len();
 
         self.send_buffer.replace(send);
-        self.controller().endpoint_resume_in(ENDPOINT_NUM);
+        self.controller().endpoint_resume_in(ENDPOINT_NUM).unwrap();
 
         Ok(len)
     }
@@ -237,7 +237,7 @@ impl<'a, U: hil::usb::UsbController<'a>> hil::usb_hid::UsbHid<'a, [u8; 64]> for 
             }
         } else {
             // If we have nothing to process, accept more data
-            self.controller().endpoint_resume_out(ENDPOINT_NUM);
+            self.controller().endpoint_resume_out(ENDPOINT_NUM).unwrap();
         }
 
         Ok(())
@@ -259,11 +259,11 @@ impl<'a, U: hil::usb::UsbController<'a>> hil::usb::Client<'a> for CtapHid<'a, U>
 
         // Setup buffers for IN and OUT data transfer.
         self.controller()
-            .endpoint_set_out_buffer(ENDPOINT_NUM, &self.buffers[OUT_BUFFER].buf);
+            .endpoint_set_out_buffer(ENDPOINT_NUM, &self.buffers[OUT_BUFFER].buf).unwrap();
         self.controller()
-            .endpoint_set_in_buffer(ENDPOINT_NUM, &self.buffers[IN_BUFFER].buf);
+            .endpoint_set_in_buffer(ENDPOINT_NUM, &self.buffers[IN_BUFFER].buf).unwrap();
         self.controller()
-            .endpoint_in_out_enable(TransferType::Interrupt, ENDPOINT_NUM);
+            .endpoint_in_out_enable(TransferType::Interrupt, ENDPOINT_NUM).unwrap();
     }
 
     fn attach(&'a self) {
@@ -271,6 +271,16 @@ impl<'a, U: hil::usb::UsbController<'a>> hil::usb::Client<'a> for CtapHid<'a, U>
     }
 
     fn bus_reset(&'a self) {}
+
+    fn link_suspended(&'a self) {}
+
+    fn link_resume(&'a self) {}
+
+    fn disconnected(&'a self) {}
+
+    fn host_lost(&'a self) {}
+
+    fn bus_powered(&'a self) {}
 
     /// Handle a Control Setup transaction.
     fn ctrl_setup(&'a self, endpoint: usize) -> hil::usb::CtrlSetupResult {
@@ -294,7 +304,7 @@ impl<'a, U: hil::usb::UsbController<'a>> hil::usb::Client<'a> for CtapHid<'a, U>
     /// Handle the completion of a Control transfer
     fn ctrl_status_complete(&'a self, endpoint: usize) {
         if self.send_buffer.is_some() {
-            self.controller().endpoint_resume_in(ENDPOINT_NUM);
+            self.controller().endpoint_resume_in(ENDPOINT_NUM).unwrap();
         }
 
         self.client_ctrl.ctrl_status_complete(endpoint)
