@@ -66,8 +66,10 @@ impl<'a> AonTimer<'a> {
         self.registers.wkup_count.set(0x00);
     }
 
+    /// Get the ms remaining until wakeup will happen.
     pub fn get_ms_to_wkup(&self) -> u32 {
         self.cycles_to_ms(
+            // The wakeup register addition can not overflow because of the possible range of the prescaler register.
             self.registers
                 .wkup_thold
                 .read(WKUP_THOLD::THRESHOLD)
@@ -80,6 +82,7 @@ impl<'a> AonTimer<'a> {
         )
     }
 
+    /// Function to register a callback for the wakeup event.
     pub fn register_wakeup_callback(&self, callback: Option<&'a dyn Fn()>) {
         self.wakeup_notification.insert(callback);
     }
@@ -128,6 +131,7 @@ impl<'a> AonTimer<'a> {
             .write(WDOG_BARK_THOLD::THRESHOLD.val(bark_cycles));
     }
 
+    /// Function to register a callback for the watchdog bark event.
     pub fn register_watchdog_bark_callback(&self, callback: Option<&'a dyn Fn()>) {
         self.bark_notification.insert(callback);
     }
@@ -137,10 +141,12 @@ impl<'a> AonTimer<'a> {
         self.registers.wdog_count.set(0x00);
     }
 
+    /// Temporarily disable the watchdog without resetting the counter register.
     fn wdog_suspend(&self) {
         self.registers.wdog_ctrl.write(WDOG_CTRL::ENABLE::CLEAR);
     }
 
+    /// Resume the watchdog and continue from where the counter register left off.
     fn wdog_resume(&self) {
         self.registers.wdog_ctrl.write(WDOG_CTRL::ENABLE::SET);
     }
@@ -150,18 +156,19 @@ impl<'a> AonTimer<'a> {
         self.registers.wdog_regwen.write(WDOG_REGWEN::REGWEN::SET)
     }
 
-    /// Convert microseconds to cycles
+    /// Convert miliseconds to clock cycles
     fn ms_to_cycles(&self, ms: u32) -> u32 {
         // 250kHZ CW310 or 125kHz Verilator (as specified in chip config)
         ms.saturating_mul(self.aon_clk_freq).saturating_div(1000)
     }
 
-    /// Convert microseconds to cycles
+    /// Convert clock cycles to miliseconds
     fn cycles_to_ms(&self, ms: u32) -> u32 {
         // 250kHZ CW310 or 125kHz Verilator (as specified in chip config)
         ms.saturating_mul(1000).saturating_div(self.aon_clk_freq)
     }
 
+    /// Function for handling interrupts related to wakeup and watchdog barks.
     pub fn handle_interrupt(&self) {
         let regs = self.registers;
         let intr = self.registers.intr_state.extract();
