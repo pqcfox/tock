@@ -1365,8 +1365,18 @@ impl<'a> Usb<'a> {
     /// Handler for disconnected interrupt
     fn handle_disconnected_interrupt(&self) {
         self.clear_disconnected_interrupt();
-        // TODO: Notify client
-        kernel::debug!("Disconnected");
+        self.client.map(|client| client.disconnected());
+    }
+
+    /// Clears host lost interrupt
+    fn clear_host_lost_interrupt(&self) {
+        self.registers.intr_state.modify(INTR::HOST_LOST::SET);
+    }
+
+    /// Handler for host lost interrupt
+    fn handle_host_lost_interrupt(&self) {
+        self.clear_host_lost_interrupt();
+        self.client.map(|client| client.host_lost());
     }
 
     /// Clears link reset interrupt
@@ -1377,8 +1387,7 @@ impl<'a> Usb<'a> {
     /// Handler for link reset interrupt
     fn handle_link_reset_interrupt(&self) {
         self.clear_link_reset_interrupt();
-        // TODO: Notify client
-        kernel::debug!("Link reset");
+        self.client.map(|client| client.bus_reset());
     }
 
     /// Clears link suspended interrupt
@@ -1389,8 +1398,7 @@ impl<'a> Usb<'a> {
     /// Handler for link suspended interrupt
     fn handle_link_suspended_interrupt(&self) {
         self.clear_link_suspended_interrupt();
-        // TODO: Notify client
-        kernel::debug!("Link suspended");
+        self.client.map(|client| client.link_suspended());
     }
 
     /// Clears link resume interrupt
@@ -1401,8 +1409,18 @@ impl<'a> Usb<'a> {
     /// Handler for link resume interrupt
     fn handle_link_resume_interrupt(&self) {
         self.clear_link_resume_interrupt();
-        // TODO: Notify client
-        kernel::debug!("Link resumed");
+        self.client.map(|client| client.link_resume());
+    }
+
+    /// Clears link in err interrupt
+    fn clear_link_in_err_interrupt(&self) {
+        self.registers.intr_state.modify(INTR::LINK_IN_ERR::SET);
+    }
+
+    /// Handle for link in err interrupt
+    fn handle_link_in_err_interrupt(&self) {
+        self.clear_link_in_err_interrupt();
+        kernel::debug!("Link in error");
     }
 
     /// Clears frame interrupt
@@ -1424,8 +1442,7 @@ impl<'a> Usb<'a> {
     /// Handler for powered interrupt
     fn handle_powered_interrupt(&self) {
         self.clear_powered_interrupt();
-        // TODO: Notify client
-        kernel::debug!("Powered");
+        self.client.map(|client| client.bus_powered());
     }
 
     /// USB driver interrupt handler.
@@ -1438,14 +1455,14 @@ impl<'a> Usb<'a> {
             UsbInterrupt::PacketReceived => self.handle_packet_received_interrupt(),
             UsbInterrupt::PacketSent => self.handle_packet_sent_interrupt(),
             UsbInterrupt::Disconnected => self.handle_disconnected_interrupt(),
-            UsbInterrupt::HostLost => unimplemented!(),
+            UsbInterrupt::HostLost => self.handle_host_lost_interrupt(),
             UsbInterrupt::LinkReset => self.handle_link_reset_interrupt(),
             UsbInterrupt::LinkSuspended => self.handle_link_suspended_interrupt(),
             UsbInterrupt::LinkResume => self.handle_link_resume_interrupt(),
             UsbInterrupt::AvEmpty => unimplemented!(),
             UsbInterrupt::RxFull => unimplemented!(),
             UsbInterrupt::AvOverflow => unimplemented!(),
-            UsbInterrupt::LinkInErr => unimplemented!(),
+            UsbInterrupt::LinkInErr => self.handle_link_in_err_interrupt(),
             UsbInterrupt::RxCrcErr => unimplemented!(),
             UsbInterrupt::RxPidErr => unimplemented!(),
             UsbInterrupt::RxBitstuffErr => unimplemented!(),
