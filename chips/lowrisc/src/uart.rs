@@ -9,7 +9,7 @@ use kernel::ErrorCode;
 
 use kernel::deferred_call::{DeferredCall, DeferredCallClient};
 use kernel::hil;
-use kernel::hil::uart;
+use kernel::hil::uart::{self, TransmitSynch};
 use kernel::utilities::cells::OptionalCell;
 use kernel::utilities::cells::TakeCell;
 use kernel::utilities::registers::interfaces::{ReadWriteable, Readable, Writeable};
@@ -462,6 +462,12 @@ impl<'a> DeferredCallClient for Uart<'a> {
 
     fn register(&'static self) {
         self.rx_deferred_call.register(self);
+    }
+}
+
+impl<'a> TransmitSynch for Uart<'a> {
+    fn transmit_sync(&self, bytes: &[u8]) {
+        self.transmit_sync(bytes);
     }
 }
 

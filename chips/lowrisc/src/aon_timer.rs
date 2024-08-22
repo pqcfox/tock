@@ -5,15 +5,18 @@
 //! AON/Watchdog Timer Driver
 
 use crate::registers::aon_timer_regs::{
-    AonTimerRegisters, ALERT_TEST, INTR_STATE, WDOG_BARK_THOLD, WDOG_BITE_THOLD, WDOG_CTRL,
-    WDOG_REGWEN, WKUP_COUNT, WKUP_CTRL, WKUP_THOLD,
+    AonTimerRegisters, ALERT_TEST, INTR_STATE, INTR_TEST, WDOG_BARK_THOLD, WDOG_BITE_THOLD,
+    WDOG_CTRL, WDOG_REGWEN, WKUP_COUNT, WKUP_CTRL, WKUP_THOLD,
 };
+use core::fmt::Write;
+use kernel::hil::reset_managment::ResetManagment;
+use kernel::hil::retention_ram::{CreatorRetentionRam, OwnerRetentionRam};
+use kernel::hil::uart::{TransmitSynch, Uart};
 use kernel::utilities::cells::OptionalCell;
 use kernel::utilities::registers::interfaces::{Readable, Writeable};
 use kernel::utilities::target_test::{self, TargetTests};
 use kernel::utilities::StaticRef;
 use kernel::{debug, platform, ErrorCode};
-
 pub struct AonTimer<'a> {
     registers: StaticRef<AonTimerRegisters>,
     wakeup_notification: OptionalCell<&'a dyn Fn()>,
@@ -190,6 +193,84 @@ impl<'a> AonTimer<'a> {
             self.bark_notification.map(|a| a());
         }
     }
+
+    pub fn test(
+        &self,
+        reset_manager: &dyn ResetManagment<ResetInfo = [u32; 19]>,
+        uart: &dyn TransmitSynch,
+        creator_ram: &dyn CreatorRetentionRam<Data = u32, ID = usize>,
+        owner_ram: &dyn OwnerRetentionRam<Data = u32, ID = usize>,
+    ) -> bool {
+        let mut test_runner = target_test::TestRunner::new();
+        let binding = |foo: &str| uart.transmit_sync(foo.as_bytes());
+        test_runner.set_print_func(&binding);
+        test_runner
+            .write_str("Starting aon_timer self-test \r\n")
+            .unwrap();
+        let mut test_cycle: u32 = 0;
+        match creator_ram.read(1) {
+            Ok(1) => {
+                test_runner
+                    .write_str("Reset reason from API is PURES! Resetting run counter! \r\n")
+                    .unwrap();
+                owner_ram.write(1, 1).unwrap();
+                test_cycle = 0;
+            }
+            Ok(x) => {
+                test_runner
+                    .write_fmt(format_args!("Reset reason from API is {} \r\n", x))
+                    .unwrap();
+                test_cycle = owner_ram.read(1).unwrap();
+                owner_ram.write(1, test_cycle + 1).unwrap();
+            }
+            _ => test_runner
+                .write_str("Wrong init state, can't read reset reason yet!  \r\n")
+                .unwrap(),
+        }
+
+        match test_cycle {
+            0 => {
+                test_runner.assert_function(
+                    "Test wakeup prescaler boundries check negative case!",
+                    || self.wakeup_set_prescaler_and_enable(4096) == Err(ErrorCode::INVAL),
+                );
+                test_runner.assert_function(
+                    "Test wakeup prescaler boundries check OK case!",
+                    || {
+                        self.wakeup_set_prescaler_and_enable(4095) == Ok(())
+                            && self.registers.wkup_ctrl.read(WKUP_CTRL::PRESCALER) == 4095
+                            && self.registers.wkup_ctrl.read(WKUP_CTRL::ENABLE) == 1
+                    },
+                );
+                test_runner.assert_function("Test wakeup_disable!", || {
+                    self.wakeup_disable();
+                    self.registers.wkup_ctrl.read(WKUP_CTRL::ENABLE) == 0
+                });
+
+                test_runner
+                    .assert_function("Test wakeup prescaler boundries check OK case!", || {
+                        self.wakeup_set_prescaler_and_enable(0) == Ok(())
+                    });
+
+                test_runner.assert_function("Enable wakeup fail because of boundaries!", || {
+                    self.wakeup_enable_after_ms(1000) == Err(ErrorCode::INVAL)
+                });
+
+                test_runner.assert_function("Enable wakeup fail because of boundaries!", || {
+                    self.wakeup_enable_after_ms(1000) == Err(ErrorCode::INVAL)
+                });
+            }
+            1 => {
+                // runner.assert_function("We woke up after sleep!", || {
+                //     self.get_owner_rram_data(10) == 0x5A
+                // });
+            }
+            _ => {}
+        }
+
+        debug!("Ending aon_timer self-test");
+        test_runner.is_test_failed
+    }
 }
 
 impl<'a> platform::watchdog::WatchDog for AonTimer<'a> {
@@ -230,62 +311,4 @@ impl<'a> platform::watchdog::WatchDog for AonTimer<'a> {
     fn resume(&self) {
         self.wdog_resume();
     }
-}
-
-impl<'a> TargetTests for AonTimer<'a> {
-    fn test(&self) -> bool {
-        let mut runner = target_test::TestRunner::new();
-
-        debug!("Starting aon_timer self-test");
-        let test_cycle = 0;
-        // debug!("Reset reason from API is {}", self.get_creator_rram_data(1));
-
-        // if (self.get_creator_rram_data(1) == 1) || (self.get_owner_rram_data(5) > 100) {
-        //     self.set_owner_rram_data(5, 0);
-        //     debug!("Force reset test cycles");
-        // }
-        // let test_cycle = self.get_owner_rram_data(5);
-        // debug!("Reset Count is {}", test_cycle);
-        // self.set_owner_rram_data(5, test_cycle + 1);
-        match test_cycle {
-            0 => {
-                runner.assert_function(
-                    "Test wakeup prescaler boundries check negative case!",
-                    || self.wakeup_set_prescaler_and_enable(4096) == Err(ErrorCode::INVAL),
-                );
-                runner.assert_function("Test wakeup prescaler boundries check OK case!", || {
-                    self.wakeup_set_prescaler_and_enable(4095) == Ok(())
-                        && self.registers.wkup_ctrl.read(WKUP_CTRL::PRESCALER) == 4095
-                        && self.registers.wkup_ctrl.read(WKUP_CTRL::ENABLE) == 1
-                });
-                runner.assert_function("Test wakeup_disable!", || {
-                    self.wakeup_disable();
-                    self.registers.wkup_ctrl.read(WKUP_CTRL::ENABLE) == 0
-                });
-
-                runner.assert_function("Test wakeup prescaler boundries check OK case!", || {
-                    self.wakeup_set_prescaler_and_enable(0) == Ok(())
-                });
-
-                runner.assert_function("Enable wakeup fail because of boundaries!", || {
-                    self.wakeup_enable_after_ms(1000) == Err(ErrorCode::INVAL)
-                });
-
-                runner.assert_function("Enable wakeup fail because of boundaries!", || {
-                    self.wakeup_enable_after_ms(1000) == Err(ErrorCode::INVAL)
-                });
-            }
-            1 => {
-                // runner.assert_function("We woke up after sleep!", || {
-                //     self.get_owner_rram_data(10) == 0x5A
-                // });
-            }
-            _ => {}
-        }
-
-        debug!("Ending aon_timer self-test");
-        runner.is_test_failed
-    }
-
-    // fn set_rram
 }

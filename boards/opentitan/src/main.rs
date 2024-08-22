@@ -24,9 +24,9 @@ use capsules_core::driver;
 use capsules_core::reset_manager::ResetManager;
 use capsules_core::virtualizers::virtual_aes_ccm;
 use capsules_core::virtualizers::virtual_alarm::{MuxAlarm, VirtualMuxAlarm};
-use core::num::NonZeroU16;
 use capsules_extra::opentitan_alerthandler::AlertHandlerCapsule;
 use capsules_extra::opentitan_sysrst::SystemReset;
+use core::num::NonZeroU16;
 use earlgrey::alert_handler;
 use earlgrey::chip::EarlGreyDefaultPeripherals;
 use earlgrey::chip_config::EarlGreyConfig;
@@ -201,7 +201,12 @@ struct EarlGrey {
         VirtualMuxAlarm<'static, earlgrey::timer::RvTimer<'static, ChipConfig>>,
     >,
     hmac: &'static capsules_extra::hmac::HmacDriver<'static, lowrisc::hmac::Hmac<'static>, 32>,
-    info_flash: Option<&'static capsules_extra::info_flash::InfoFlash<'static, earlgrey::flash_ctrl::FlashCtrl<'static>>>,
+    info_flash: Option<
+        &'static capsules_extra::info_flash::InfoFlash<
+            'static,
+            earlgrey::flash_ctrl::FlashCtrl<'static>,
+        >,
+    >,
     lldb: &'static capsules_core::low_level_debug::LowLevelDebug<
         'static,
         capsules_core::virtualizers::virtual_uart::UartDevice<'static>,
@@ -281,7 +286,7 @@ impl SyscallDriverLookup for EarlGrey {
             capsules_extra::info_flash::DRIVER_NUMBER => match self.info_flash {
                 Some(info_flash) => f(Some(info_flash)),
                 None => f(None),
-            }
+            },
             //capsules_extra::kv_driver::DRIVER_NUM => f(Some(self.kv_driver)),
             capsules_extra::pattgen::DRIVER_NUM => f(Some(self.pattgen)),
             capsules_extra::opentitan_alerthandler::DRIVER_NUM => {
@@ -1119,11 +1124,18 @@ unsafe fn setup() -> (
     peripherals
         .sram_ret
         .test(&peripherals.rst_mgmt, &peripherals.uart0);
+
+    peripherals.watchdog.test(
+        &peripherals.rst_mgmt,
+        &peripherals.uart0,
+        &peripherals.sram_ret,
+        &peripherals.sram_ret,
+    );
+
     debug!("OpenTitan initialisation complete. Entering main loop");
 
     (board_kernel, earlgrey, chip, peripherals)
 }
-
 
 #[cfg(feature = "test_sysrst_ctrl")]
 fn test_sysrst_ctrl(peripherals: &EarlGreyDefaultPeripherals<ChipConfig, BoardPinmuxLayout>) {
