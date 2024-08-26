@@ -1434,12 +1434,18 @@ impl<'a> Usb<'a> {
             let endpoint = self.get_endpoint(endpoint_index);
             let endpoint_state = endpoint.get_state();
 
-            if endpoint_state == EndpointState::Interrupt {
+            if endpoint_state == EndpointState::Interrupt || endpoint_state == EndpointState::Isochronous {
                 let endpoint_buffer_in = endpoint.get_buffer_in();
 
                 endpoint_buffer_in.map(|buffer_in| {
                     self.client.map(|client| {
-                        match client.packet_in(TransferType::Interrupt, endpoint_index.to_usize()) {
+                        let transfer_type = if endpoint_state == EndpointState::Interrupt {
+                            TransferType::Interrupt
+                        } else {
+                            TransferType::Isochronous
+                        };
+
+                        match client.packet_in(transfer_type, endpoint_index.to_usize()) {
                             InResult::Packet(raw_packet_size) => {
                                 let packet_size = match PacketSize::try_from_usize(raw_packet_size) {
                                     Ok(packet_size) => packet_size,
