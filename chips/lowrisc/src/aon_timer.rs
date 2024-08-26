@@ -17,6 +17,7 @@ use kernel::utilities::registers::interfaces::{Readable, Writeable};
 use kernel::utilities::target_test::{self, TargetTests};
 use kernel::utilities::StaticRef;
 use kernel::{debug, platform, ErrorCode};
+
 pub struct AonTimer<'a> {
     registers: StaticRef<AonTimerRegisters>,
     wakeup_notification: OptionalCell<&'a dyn Fn()>,
@@ -86,8 +87,8 @@ impl<'a> AonTimer<'a> {
     }
 
     /// Function to register a callback for the wakeup event.
-    pub fn register_wakeup_callback(&self, callback: Option<&'a dyn Fn()>) {
-        self.wakeup_notification.insert(callback);
+    pub fn register_wakeup_callback(&self, callback: &'a dyn Fn()) {
+        self.wakeup_notification.set(callback);
     }
 
     /// Reset watch dog timer count value.
@@ -135,8 +136,8 @@ impl<'a> AonTimer<'a> {
     }
 
     /// Function to register a callback for the watchdog bark event.
-    pub fn register_watchdog_bark_callback(&self, callback: Option<&'a dyn Fn()>) {
-        self.bark_notification.insert(callback);
+    pub fn register_watchdog_bark_callback(&self, callback: &'a dyn Fn()) {
+        self.bark_notification.set(callback);
     }
 
     // Reset watch dog timer
@@ -270,6 +271,73 @@ impl<'a> AonTimer<'a> {
 
         debug!("Ending aon_timer self-test");
         test_runner.is_test_failed
+    }
+}
+
+pub mod tests {
+    use kernel::hil;
+    use kernel::hil::reset_managment::ResetManagment;
+    use kernel::hil::retention_ram::OwnerRetentionRam;
+    use kernel::hil::time::Alarm;
+    use kernel::hil::time::AlarmClient;
+    use kernel::hil::time::ConvertTicks;
+    use kernel::hil::uart::TransmitSynch;
+
+    pub struct Tests<'a, A: Alarm<'a>> {
+        reset_manager: &'a dyn ResetManagment<ResetInfo = [u32; 19]>,
+        uart: &'a dyn TransmitSynch,
+        owner_ram: &'a dyn OwnerRetentionRam<Data = u32, ID = usize>,
+        alarm: &'a A,
+    }
+
+    impl<'a, A: Alarm<'a>> Tests<'a, A> {
+        pub fn new(
+            reset_manager: &'a dyn ResetManagment<ResetInfo = [u32; 19]>,
+            uart: &'a dyn TransmitSynch,
+            owner_ram: &'a dyn OwnerRetentionRam<Data = u32, ID = usize>,
+            alarm: &'a A,
+        ) -> Self {
+            let aon_tests = Self {
+                reset_manager,
+                uart,
+                owner_ram,
+                alarm,
+            };
+
+            // hil::time::Alarm::set_alarm_client(alarm, &aon_tests);
+
+            // alarm.set_alarm(alarm.now(), alarm.ticks_from_ms(1000));
+            aon_tests
+        }
+
+        pub fn setup(&'static self) {
+            hil::time::Alarm::set_alarm_client(self.alarm, self);
+
+            self.alarm
+                .set_alarm(self.alarm.now(), self.alarm.ticks_from_ms(1000));
+        }
+        // pub fn enable_cyclic_tests(&self) {
+        //     kernel::debug!("TEST aon_timer start!");
+
+        //     // // test alert handling by generating alerts and observing the generated interrupts
+        //     // self.test_alerthandler_uartfatalfault();
+        //     // self.test_alerthandler_fail_shadow_reg();
+
+        //     // prepare an alarm that in 100ms will check if the faults are handled or not
+        //     self.alarm
+        //         .set_alarm(self.alarm.now(), self.alarm.ticks_from_ms(10));
+        // }
+        pub fn cyclic_tests(&self) {
+            kernel::debug!("Cyclic stuff!!");
+        }
+    }
+
+    impl<'a, A: Alarm<'a>> AlarmClient for Tests<'a, A> {
+        fn alarm(&self) {
+            self.cyclic_tests();
+            self.alarm
+                .set_alarm(self.alarm.now(), self.alarm.ticks_from_ms(1000));
+        }
     }
 }
 

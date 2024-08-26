@@ -33,6 +33,7 @@ use earlgrey::chip_config::EarlGreyConfig;
 use earlgrey::flash_ctrl;
 use earlgrey::pinmux_config::EarlGreyPinmuxConfig;
 use earlgrey::timer::RvTimer;
+use lowrisc::aon_timer;
 
 use kernel::capabilities;
 use kernel::component::Component;
@@ -1100,6 +1101,9 @@ unsafe fn setup() -> (
         test_sysrst_ctrl(peripherals);
     }
 
+    // test_aon_timer(&peripherals.watchdog,
+    test_aon_timer(peripherals, mux_alarm);
+
     kernel::process::load_processes(
         board_kernel,
         chip,
@@ -1125,12 +1129,12 @@ unsafe fn setup() -> (
         .sram_ret
         .test(&peripherals.rst_mgmt, &peripherals.uart0);
 
-    peripherals.watchdog.test(
-        &peripherals.rst_mgmt,
-        &peripherals.uart0,
-        &peripherals.sram_ret,
-        &peripherals.sram_ret,
-    );
+    // peripherals.watchdog.test(
+    //     &peripherals.rst_mgmt,
+    //     &peripherals.uart0,
+    //     &peripherals.sram_ret,
+    //     &peripherals.sram_ret,
+    // );
 
     debug!("OpenTitan initialisation complete. Entering main loop");
 
@@ -1263,4 +1267,44 @@ fn test_runner(tests: &[&dyn Fn()]) {
 
     // Exit QEMU with a return code of 0
     crate::tests::semihost_command_exit_success()
+}
+
+// #[cfg(feature = "test_aon_timer")]
+unsafe fn test_aon_timer(
+    // aon_timer: &'static aon_timer::AonTimer,
+    peripherals: &'static EarlGreyDefaultPeripherals<ChipConfig, BoardPinmuxLayout>,
+    mux_alarm: &'static MuxAlarm<'static, RvTimer<ChipConfig>>,
+) {
+    use kernel::hil::time::Alarm;
+    use kernel::hil::time::ConvertTicks;
+    use kernel::hil::time::Time;
+
+    debug!("We init stuff!");
+
+    // an Alarm is needed for some of the tests as alert handling works using interrupts
+    let virtual_alarm_tests = static_init!(
+        VirtualMuxAlarm<'static, earlgrey::timer::RvTimer<ChipConfig>>,
+        VirtualMuxAlarm::new(mux_alarm)
+    );
+    virtual_alarm_tests.setup();
+
+    let aon_timer_tests = static_init!(
+        aon_timer::tests::Tests<VirtualMuxAlarm<'static, RvTimer<ChipConfig>>>,
+        aon_timer::tests::Tests::new(
+            &peripherals.rst_mgmt,
+            &peripherals.uart0,
+            &peripherals.sram_ret,
+            virtual_alarm_tests,
+        )
+    );
+
+    aon_timer_tests.setup();
+    hil::time::Alarm::set_alarm_client(virtual_alarm_tests, aon_timer_tests);
+
+    virtual_alarm_tests.set_alarm(
+        virtual_alarm_tests.now(),
+        virtual_alarm_tests.ticks_from_ms(1000),
+    );
+
+    // alert_handler_tests.run_tests();
 }
