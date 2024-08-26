@@ -275,7 +275,6 @@ impl<'a> AonTimer<'a> {
 }
 
 pub mod tests {
-    use kernel::hil;
     use kernel::hil::reset_managment::ResetManagment;
     use kernel::hil::retention_ram::OwnerRetentionRam;
     use kernel::hil::time::Alarm;
@@ -283,50 +282,40 @@ pub mod tests {
     use kernel::hil::time::ConvertTicks;
     use kernel::hil::uart::TransmitSynch;
 
+    use super::AonTimer;
+
     pub struct Tests<'a, A: Alarm<'a>> {
+        aon_timer: &'a AonTimer<'a>,
         reset_manager: &'a dyn ResetManagment<ResetInfo = [u32; 19]>,
         uart: &'a dyn TransmitSynch,
         owner_ram: &'a dyn OwnerRetentionRam<Data = u32, ID = usize>,
         alarm: &'a A,
+        cycles: u32,
     }
 
     impl<'a, A: Alarm<'a>> Tests<'a, A> {
         pub fn new(
+            aon_timer: &'a AonTimer<'a>,
             reset_manager: &'a dyn ResetManagment<ResetInfo = [u32; 19]>,
             uart: &'a dyn TransmitSynch,
             owner_ram: &'a dyn OwnerRetentionRam<Data = u32, ID = usize>,
             alarm: &'a A,
         ) -> Self {
-            let aon_tests = Self {
+            Self {
+                aon_timer,
                 reset_manager,
                 uart,
                 owner_ram,
                 alarm,
-            };
-
-            // hil::time::Alarm::set_alarm_client(alarm, &aon_tests);
-
-            // alarm.set_alarm(alarm.now(), alarm.ticks_from_ms(1000));
-            aon_tests
+                cycles: 0,
+            }
         }
 
-        pub fn setup(&'static self) {
-            hil::time::Alarm::set_alarm_client(self.alarm, self);
-
+        pub fn start_alarm(&self, ms: u32) {
             self.alarm
-                .set_alarm(self.alarm.now(), self.alarm.ticks_from_ms(1000));
+                .set_alarm(self.alarm.now(), self.alarm.ticks_from_ms(ms));
         }
-        // pub fn enable_cyclic_tests(&self) {
-        //     kernel::debug!("TEST aon_timer start!");
 
-        //     // // test alert handling by generating alerts and observing the generated interrupts
-        //     // self.test_alerthandler_uartfatalfault();
-        //     // self.test_alerthandler_fail_shadow_reg();
-
-        //     // prepare an alarm that in 100ms will check if the faults are handled or not
-        //     self.alarm
-        //         .set_alarm(self.alarm.now(), self.alarm.ticks_from_ms(10));
-        // }
         pub fn cyclic_tests(&self) {
             kernel::debug!("Cyclic stuff!!");
         }
@@ -335,8 +324,7 @@ pub mod tests {
     impl<'a, A: Alarm<'a>> AlarmClient for Tests<'a, A> {
         fn alarm(&self) {
             self.cyclic_tests();
-            self.alarm
-                .set_alarm(self.alarm.now(), self.alarm.ticks_from_ms(1000));
+            self.start_alarm(1000);
         }
     }
 }

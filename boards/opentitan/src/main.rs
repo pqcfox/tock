@@ -1291,6 +1291,7 @@ unsafe fn test_aon_timer(
     let aon_timer_tests = static_init!(
         aon_timer::tests::Tests<VirtualMuxAlarm<'static, RvTimer<ChipConfig>>>,
         aon_timer::tests::Tests::new(
+            &peripherals.watchdog,
             &peripherals.rst_mgmt,
             &peripherals.uart0,
             &peripherals.sram_ret,
@@ -1298,13 +1299,7 @@ unsafe fn test_aon_timer(
         )
     );
 
-    aon_timer_tests.setup();
     hil::time::Alarm::set_alarm_client(virtual_alarm_tests, aon_timer_tests);
 
-    virtual_alarm_tests.set_alarm(
-        virtual_alarm_tests.now(),
-        virtual_alarm_tests.ticks_from_ms(1000),
-    );
-
-    // alert_handler_tests.run_tests();
+    aon_timer_tests.start_alarm(1000);
 }
