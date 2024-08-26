@@ -10,6 +10,7 @@ use super::chunk_index::ChunkIndex;
 use super::chunk_index_iterator::ChunkIndexIterator;
 use super::endpoint::Endpoint;
 use super::endpoint_index::EndpointIndex;
+use super::endpoint_index_iterator::EndpointIndexIterator;
 use super::endpoint_state::{
     CtrlEndpointState, EndpointState, ReceiveCtrlEndpointState, TransmitCtrlEndpointState,
 };
@@ -40,9 +41,7 @@ use core::num::{NonZeroUsize, NonZeroU16};
 /// Default endpoint index.
 const DEFAULT_ENDPOINT_INDEX: EndpointIndex = EndpointIndex::Endpoint0;
 /// Number of endpoints.
-const NUMBER_ENDPOINTS: NonZeroUsize = utils::create_non_zero_usize(12);
-/// Size of a word
-const WORD_SIZE: NonZeroUsize = utils::create_non_zero_usize(core::mem::size_of::<usize>());
+pub(super) const NUMBER_ENDPOINTS: NonZeroUsize = utils::create_non_zero_usize(12);
 
 /// USB driver
 pub struct Usb<'a> {
@@ -1431,7 +1430,41 @@ impl<'a> Usb<'a> {
     /// Handler for frame interrupt
     fn handle_frame_interrupt(&self) {
         self.clear_frame_interrupt();
-        // TODO: Properly implement frame interrupt
+        for endpoint_index in EndpointIndexIterator::new() {
+            let endpoint = self.get_endpoint(endpoint_index);
+            let endpoint_state = endpoint.get_state();
+
+            if endpoint_state == EndpointState::Interrupt {
+                let endpoint_buffer_in = endpoint.get_buffer_in();
+
+                endpoint_buffer_in.map(|buffer_in| {
+                    self.client.map(|client| {
+                        match client.packet_in(TransferType::Interrupt, endpoint_index.to_usize()) {
+                            InResult::Packet(raw_packet_size) => {
+                                let packet_size = match PacketSize::try_from_usize(raw_packet_size) {
+                                    Ok(packet_size) => packet_size,
+                                    Err(()) => panic!("Invalid packet size {}", raw_packet_size),
+                                };
+                                let buffer_index = if self.is_transmit_pending(endpoint_index) {
+                                    self.get_transmit_buffer(endpoint_index)
+                                } else {
+                                    self.available_buffer_list.next_and_occupy()
+                                };
+
+                                self.send_packet(
+                                    endpoint_index,
+                                    buffer_index,
+                                    packet_size,
+                                    buffer_in
+                                );
+                            }
+                            InResult::Delay => unimplemented!(),
+                            InResult::Error => unimplemented!(),
+                        }
+                    });
+                });
+            }
+        }
     }
 
     /// Clears powered interrupt
