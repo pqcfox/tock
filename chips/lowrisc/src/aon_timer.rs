@@ -87,8 +87,8 @@ impl<'a> AonTimer<'a> {
     }
 
     /// Function to register a callback for the wakeup event.
-    pub fn register_wakeup_callback(&self, callback: &'a dyn Fn()) {
-        self.wakeup_notification.set(callback);
+    pub fn register_wakeup_callback(&self, callback: Option<&'a dyn Fn()>) {
+        self.wakeup_notification.insert(callback);
     }
 
     /// Reset watch dog timer count value.
@@ -136,8 +136,8 @@ impl<'a> AonTimer<'a> {
     }
 
     /// Function to register a callback for the watchdog bark event.
-    pub fn register_watchdog_bark_callback(&self, callback: &'a dyn Fn()) {
-        self.bark_notification.set(callback);
+    pub fn register_watchdog_bark_callback(&self, callback: Option<&'a dyn Fn()>) {
+        self.bark_notification.insert(callback);
     }
 
     // Reset watch dog timer
@@ -176,7 +176,6 @@ impl<'a> AonTimer<'a> {
     pub fn handle_interrupt(&self) {
         let regs = self.registers;
         let intr = self.registers.intr_state.extract();
-
         if intr.is_set(INTR_STATE::WKUP_TIMER_EXPIRED) {
             // Wake up timer has expired, sw must ack and clear
             regs.wkup_cause.set(0x00);
@@ -275,12 +274,20 @@ impl<'a> AonTimer<'a> {
 }
 
 pub mod tests {
+    use core::cell::Cell;
+
+    use kernel::debug;
     use kernel::hil::reset_managment::ResetManagment;
     use kernel::hil::retention_ram::OwnerRetentionRam;
     use kernel::hil::time::Alarm;
     use kernel::hil::time::AlarmClient;
     use kernel::hil::time::ConvertTicks;
     use kernel::hil::uart::TransmitSynch;
+    use kernel::utilities::registers::interfaces::Readable;
+
+    use crate::registers::aon_timer_regs::WDOG_COUNT;
+    use crate::registers::aon_timer_regs::WKUP_COUNT;
+    use crate::registers::aon_timer_regs::WKUP_CTRL;
 
     use super::AonTimer;
 
@@ -290,7 +297,24 @@ pub mod tests {
         uart: &'a dyn TransmitSynch,
         owner_ram: &'a dyn OwnerRetentionRam<Data = u32, ID = usize>,
         alarm: &'a A,
-        cycles: u32,
+        cycles: Cell<u32>,
+    }
+
+    static mut WAKEUP_CALLED: bool = false;
+    static mut BARK_CALLED: bool = false;
+
+    fn wakeup_callback() {
+        unsafe {
+            WAKEUP_CALLED = true;
+        }
+        kernel::debug!("Wakeup callback!!!");
+    }
+
+    fn bark_callback() {
+        unsafe {
+            BARK_CALLED = true;
+        }
+        kernel::debug!("Wdog bark!!!");
     }
 
     impl<'a, A: Alarm<'a>> Tests<'a, A> {
@@ -307,7 +331,7 @@ pub mod tests {
                 uart,
                 owner_ram,
                 alarm,
-                cycles: 0,
+                cycles: Cell::new(0),
             }
         }
 
@@ -317,14 +341,84 @@ pub mod tests {
         }
 
         pub fn cyclic_tests(&self) {
-            kernel::debug!("Cyclic stuff!!");
+            match self.cycles.get() {
+                0 => {
+                    debug!("Set bark interval at 99ms and see that we get the bark before 100ms ");
+                    self.aon_timer
+                        .register_watchdog_bark_callback(Some(&self::bark_callback));
+                    unsafe {
+                        BARK_CALLED = false;
+                    }
+                    self.aon_timer.reset_wdog();
+                    self.aon_timer.set_wdog_bark_thresh_ms(99);
+                    self.aon_timer.wdog_start_count(true);
+                    self.start_alarm(100);
+                }
+                1 => {
+                    unsafe {
+                        assert!(BARK_CALLED == true);
+                    }
+                    debug!("Set bark interval at 110ms and see that we do NOT get the bark before 100ms ");
+                    self.aon_timer.reset_wdog();
+                    self.aon_timer.set_wdog_bark_thresh_ms(110);
+                    unsafe {
+                        BARK_CALLED = false;
+                    }
+                    self.start_alarm(100);
+                }
+                2 => {
+                    unsafe {
+                        assert!(BARK_CALLED == false);
+                    }
+                    debug!("Cleanup wdog bark settings ");
+                    self.aon_timer.reset_wdog();
+                    self.aon_timer.register_watchdog_bark_callback(None);
+                    self.aon_timer.set_wdog_bark_thresh_ms(500);
+                    debug!(
+                        "Set wakeup interval at 90 ms and see that we get the wakeup before 100ms "
+                    );
+                    assert!(self.aon_timer.wakeup_enable_after_ms(90) == Ok(()));
+                    self.aon_timer
+                        .register_wakeup_callback(Some(&wakeup_callback));
+                    unsafe {
+                        WAKEUP_CALLED = false;
+                    }
+                    self.start_alarm(100);
+                }
+                3 => {
+                    unsafe {
+                        assert!(WAKEUP_CALLED == true);
+                    }
+                    debug!(
+                        "Set wakeup interval at 110 ms and see that we do NOT get the wakeup before 100ms "
+                    );
+                    assert!(self.aon_timer.wakeup_enable_after_ms(110) == Ok(()));
+                    self.aon_timer.reset_wkup();
+                    unsafe {
+                        WAKEUP_CALLED = false;
+                    }
+                    self.start_alarm(100);
+                }
+                4 => {
+                    unsafe {
+                        assert!(WAKEUP_CALLED == false);
+                    }
+                    debug!("Cleanup wakeup callback.");
+                    self.aon_timer.reset_wkup();
+                    self.aon_timer.register_wakeup_callback(None);
+                    self.aon_timer.wakeup_disable();
+                    self.aon_timer.reset_wkup();
+                    debug!("aon_timer tests passed OK!");
+                }
+                _ => {}
+            }
+            self.cycles.set(self.cycles.get() + 1);
         }
     }
 
     impl<'a, A: Alarm<'a>> AlarmClient for Tests<'a, A> {
         fn alarm(&self) {
             self.cyclic_tests();
-            self.start_alarm(1000);
         }
     }
 }

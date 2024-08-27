@@ -1279,7 +1279,7 @@ unsafe fn test_aon_timer(
     use kernel::hil::time::ConvertTicks;
     use kernel::hil::time::Time;
 
-    debug!("We init stuff!");
+    debug!("Start aon_timer kernel runtime tests!");
 
     // an Alarm is needed for some of the tests as alert handling works using interrupts
     let virtual_alarm_tests = static_init!(
