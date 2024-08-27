@@ -194,6 +194,7 @@ impl<'a> AonTimer<'a> {
         }
     }
 
+    #[cfg(feature = "test_aon_timer")]
     pub fn test(
         &self,
         reset_manager: &dyn ResetManagment<ResetInfo = [u32; 19]>,
@@ -268,14 +269,15 @@ impl<'a> AonTimer<'a> {
             _ => {}
         }
 
-        debug!("Ending aon_timer self-test");
+        test_runner.write_str("Ending aon_timer pre-kernel self-test \r\n");
         test_runner.is_test_failed
     }
 }
 
+#[cfg(feature = "test_aon_timer")]
 pub mod tests {
+    use super::AonTimer;
     use core::cell::Cell;
-
     use kernel::debug;
     use kernel::hil::reset_managment::ResetManagment;
     use kernel::hil::retention_ram::OwnerRetentionRam;
@@ -283,13 +285,6 @@ pub mod tests {
     use kernel::hil::time::AlarmClient;
     use kernel::hil::time::ConvertTicks;
     use kernel::hil::uart::TransmitSynch;
-    use kernel::utilities::registers::interfaces::Readable;
-
-    use crate::registers::aon_timer_regs::WDOG_COUNT;
-    use crate::registers::aon_timer_regs::WKUP_COUNT;
-    use crate::registers::aon_timer_regs::WKUP_CTRL;
-
-    use super::AonTimer;
 
     pub struct Tests<'a, A: Alarm<'a>> {
         aon_timer: &'a AonTimer<'a>,
@@ -423,6 +418,19 @@ pub mod tests {
     }
 }
 
+#[cfg(feature = "test_aon_timer")]
+impl<'a> platform::watchdog::WatchDog for AonTimer<'a> {
+    /// Blank implementation for tests to that the kernel interactions do not interfere with the tests.
+    fn setup(&self) {}
+
+    fn tickle(&self) {}
+
+    fn suspend(&self) {}
+
+    fn resume(&self) {}
+}
+
+#[cfg(not(feature = "test_aon_timer"))]
 impl<'a> platform::watchdog::WatchDog for AonTimer<'a> {
     /// The always-on timer will run on a ~125KHz (Verilator) or ~250kHz clock.
     /// The timers themselves are 32b wide, giving a maximum timeout
