@@ -73,7 +73,6 @@ impl parse::Component for Chip {
     fn after_init(&self) -> Option<parse::proc_macro2::TokenStream> {
         None
     }
-
 }
 
 impl parse::Chip for Chip {

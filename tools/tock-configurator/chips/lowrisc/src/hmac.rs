@@ -18,7 +18,6 @@ impl parse::Component for Hmac {
     fn ty(&self) -> Result<proc_macro2::TokenStream, parse::Error> {
         Ok(quote::quote!(lowrisc::hmac::Hmac<'static>))
     }
-
 }
 
 impl std::fmt::Display for Hmac {

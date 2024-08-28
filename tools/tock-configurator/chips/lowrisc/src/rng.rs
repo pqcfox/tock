@@ -18,7 +18,6 @@ impl parse::Component for CsRng {
     fn ty(&self) -> Result<proc_macro2::TokenStream, parse::Error> {
         Ok(quote::quote!(lowrisc::csrng::CsRng<'static>))
     }
-
 }
 
 impl std::fmt::Display for CsRng {

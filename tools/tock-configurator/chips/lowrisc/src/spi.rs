@@ -18,7 +18,6 @@ impl parse::Component for SpiHost {
     fn ty(&self) -> Result<proc_macro2::TokenStream, parse::Error> {
         Ok(quote::quote!(lowrisc::spi_host::SpiHost<'static>))
     }
-
 }
 
 impl std::fmt::Display for SpiHost {

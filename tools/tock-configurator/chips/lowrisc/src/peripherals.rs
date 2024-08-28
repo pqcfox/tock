@@ -67,7 +67,6 @@ impl parse::Component for Peripherals {
     fn dependencies(&self) -> Option<Vec<Rc<dyn parse::Component>>> {
         Some(vec![self.flash_memory_protection_configuration.clone()])
     }
-
 }
 
 impl parse::DefaultPeripherals for Peripherals {

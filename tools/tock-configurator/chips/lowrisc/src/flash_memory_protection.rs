@@ -19,5 +19,4 @@ impl parse::Component for FlashMemoryProtectionConfiguration {
             get_flash_memory_protection_configuration()
         ))
     }
-
 }

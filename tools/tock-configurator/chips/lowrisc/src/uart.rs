@@ -1,17 +1,9 @@
-#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
-pub enum Uart {
-    Uart0
-}
-
-impl PartialEq<Uart> for Uart {
-    fn eq(&self, _other: &Uart) -> bool {
-        true
-    }
-}
+#[derive(serde::Serialize, serde::Deserialize, Debug, PartialEq)]
+pub struct Uart {}
 
 impl Uart {
     pub(crate) fn new() -> Self {
-        Uart::Uart0
+        Self {}
     }
 }
 
@@ -25,7 +17,6 @@ impl parse::Component for Uart {
     fn ty(&self) -> Result<proc_macro2::TokenStream, parse::Error> {
         Ok(quote::quote!(earlgrey::uart::Uart<'static>))
     }
-
 }
 
 impl std::fmt::Display for Uart {

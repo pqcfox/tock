@@ -18,7 +18,6 @@ impl parse::Component for Aes {
     fn ty(&self) -> Result<proc_macro2::TokenStream, parse::Error> {
         Ok(quote::quote!(earlgrey::aes::Aes<'static>))
     }
-
 }
 
 impl std::fmt::Display for Aes {

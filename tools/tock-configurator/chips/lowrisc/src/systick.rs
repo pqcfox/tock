@@ -21,5 +21,4 @@ impl parse::Component for Systick {
             )
         })
     }
-
 }
