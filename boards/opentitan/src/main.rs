@@ -24,10 +24,13 @@ use capsules_core::virtualizers::virtual_alarm::{MuxAlarm, VirtualMuxAlarm};
 use capsules_extra::opentitan_alerthandler::AlertHandlerCapsule;
 use capsules_extra::opentitan_sysrst::SystemReset;
 use capsules_extra::reset_manager::ResetManager;
+use core::borrow::Borrow;
 use core::num::NonZeroU16;
-use core::ptr::{addr_of, from_ref};
+use core::ptr::{addr_of, addr_of_mut, from_ref};
+use earlgrey::alert_handler;
 use earlgrey::chip::EarlGreyDefaultPeripherals;
 use earlgrey::chip_config::EarlGreyConfig;
+use earlgrey::epmp::EPMPDebugConfig;
 use earlgrey::flash_ctrl;
 use earlgrey::pinmux_config::EarlGreyPinmuxConfig;
 use earlgrey::timer::RvTimer;
@@ -59,36 +62,6 @@ pub mod pinmux_layout;
 #[cfg(test)]
 mod tests;
 
-/// The `earlgrey` chip crate supports multiple targets with slightly different
-/// configurations, which are encoded through implementations of the
-/// `earlgrey::chip_config::EarlGreyConfig` trait. This type provides different
-/// implementations of the `EarlGreyConfig` trait, depending on Cargo's
-/// conditional compilation feature flags. If no feature is selected,
-/// compilation will error.
-pub enum ChipConfig {}
-
-#[cfg(feature = "fpga_cw310")]
-impl EarlGreyConfig for ChipConfig {
-    const NAME: &'static str = "fpga_cw310";
-
-    // Clock frequencies as of https://github.com/lowRISC/opentitan/pull/19479
-    const CPU_FREQ: u32 = 24_000_000;
-    const PERIPHERAL_FREQ: u32 = 6_000_000;
-    const AON_TIMER_FREQ: u32 = 250_000;
-    const UART_BAUDRATE: u32 = 115200;
-}
-
-#[cfg(feature = "sim_verilator")]
-impl EarlGreyConfig for ChipConfig {
-    const NAME: &'static str = "sim_verilator";
-
-    // Clock frequencies as of https://github.com/lowRISC/opentitan/pull/19368
-    const CPU_FREQ: u32 = 500_000;
-    const PERIPHERAL_FREQ: u32 = 125_000;
-    const AON_TIMER_FREQ: u32 = 125_000;
-    const UART_BAUDRATE: u32 = 7200;
-}
-
 // Whether to check for a proper ePMP handover configuration prior to ePMP
 // initialization:
 pub const EPMP_HANDOVER_CONFIG_CHECK: bool = false;
@@ -101,18 +74,7 @@ pub const EPMP_HANDOVER_CONFIG_CHECK: bool = false;
 // Either
 // - `earlgrey::epmp::EPMPDebugEnable`, or
 // - `earlgrey::epmp::EPMPDebugDisable`.
-pub type EPMPDebugConfig = earlgrey::epmp::EPMPDebugEnable;
-
-// EarlGrey Chip type signature, including generic PMP argument and peripherals
-// type:
-pub type EarlGreyChip = earlgrey::chip::EarlGrey<
-    'static,
-    { <EPMPDebugConfig as earlgrey::epmp::EPMPDebugConfig>::TOR_USER_REGIONS },
-    EarlGreyDefaultPeripherals<'static, ChipConfig, BoardPinmuxLayout>,
-    ChipConfig,
-    BoardPinmuxLayout,
-    earlgrey::epmp::EarlGreyEPMP<{ EPMP_HANDOVER_CONFIG_CHECK }, EPMPDebugConfig>,
->;
+//pub type EPMPDebugConfig = earlgrey::epmp::EPMPDebugDisable;
 
 const NUM_PROCS: usize = 4;
 
@@ -178,6 +140,35 @@ const FAULT_RESPONSE: capsules_system::process_policies::PanicFaultPolicy =
 #[no_mangle]
 #[link_section = ".stack_buffer"]
 pub static mut STACK_MEMORY: [u8; 0x1400] = [0; 0x1400];
+
+enum ChipConfig {}
+
+#[cfg(feature = "fpga")]
+impl EarlGreyConfig for ChipConfig {
+    const NAME: &'static str = "fpga_cw310";
+    const CPU_FREQ: u32 = 24_000_000;
+    const PERIPHERAL_FREQ: u32 = 6_000_000;
+    const AON_TIMER_FREQ: u32 = 250_000;
+    const UART_BAUDRATE: u32 = 115200;
+}
+
+#[cfg(feature = "silicon")]
+impl EarlGreyConfig for ChipConfig {
+    const NAME: &'static str = "silicon";
+    const CPU_FREQ: u32 = 100_000_000;
+    const PERIPHERAL_FREQ: u32 = 24_000_000;
+    const AON_TIMER_FREQ: u32 = 200_000;
+    const UART_BAUDRATE: u32 = 115200;
+}
+
+type EarlGreyChip = earlgrey::chip::EarlGrey<
+    'static,
+    { earlgrey::epmp::EPMPDebugDisable::TOR_USER_REGIONS },
+    EarlGreyDefaultPeripherals<'static, ChipConfig, BoardPinmuxLayout>,
+    ChipConfig,
+    BoardPinmuxLayout,
+    earlgrey::epmp::EarlGreyEPMP<false, earlgrey::epmp::EPMPDebugDisable>,
+>;
 
 /// A structure representing this platform that holds references to all
 /// capsules for this platform. We've included an alarm and console.
@@ -283,7 +274,7 @@ impl SyscallDriverLookup for EarlGrey {
             capsules_core::spi_controller::DRIVER_NUM => f(Some(self.spi_controller)),
             capsules_core::rng::DRIVER_NUM => f(Some(self.rng)),
             capsules_extra::symmetric_encryption::aes::DRIVER_NUM => f(Some(self.aes)),
-            capsules_extra::kv_driver::DRIVER_NUM => f(Some(self.kv_driver)),
+            // capsules_extra::kv_driver::DRIVER_NUM => f(Some(self.kv_driver)),
             capsules_extra::info_flash::DRIVER_NUMBER => match self.info_flash {
                 Some(info_flash) => f(Some(info_flash)),
                 None => f(None),
@@ -457,7 +448,7 @@ unsafe fn setup() -> (
     // Set up memory protection immediately after setting the trap handler, to
     // ensure that much of the board initialization routine runs with ePMP
     // protection.
-    let earlgrey_epmp = earlgrey::epmp::EarlGreyEPMP::new_debug(
+    let earlgrey_epmp = earlgrey::epmp::EarlGreyEPMP::new(
         earlgrey::epmp::FlashRegion(
             rv32i::pmp::NAPOTRegionSpec::new(
                 core::ptr::addr_of!(_sflash),
@@ -483,17 +474,6 @@ unsafe fn setup() -> (
             rv32i::pmp::TORRegionSpec::new(
                 core::ptr::addr_of!(_stext),
                 core::ptr::addr_of!(_etext),
-            )
-            .unwrap(),
-        ),
-        // RV Debug Manager memory region (required for JTAG debugging).
-        // This access can be disabled by changing the EarlGreyEPMP type
-        // parameter `EPMPDebugConfig` to `EPMPDebugDisable`, in which case
-        // this expects to be passed a unit (`()`) type.
-        earlgrey::epmp::RVDMRegion(
-            rv32i::pmp::NAPOTRegionSpec::new(
-                0x00010000 as *const u8, // start
-                0x00001000,              // size
             )
             .unwrap(),
         ),
