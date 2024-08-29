@@ -219,6 +219,7 @@ struct EarlGrey {
         >,
     >,
     pattgen: &'static capsules_extra::pattgen::PattGen<'static, lowrisc::pattgen::PattGen<'static>>,
+    /*
     kv_driver: &'static capsules_extra::kv_driver::KVStoreDriver<
         'static,
         capsules_extra::virtual_kv::VirtualKVPermissions<
@@ -241,6 +242,7 @@ struct EarlGrey {
             >,
         >,
     >,
+    */
     usb: &'static capsules_extra::usb::usb_user2::UsbSyscallDriver<
         'static,
         lowrisc::usb::Usb<'static>,
@@ -699,6 +701,7 @@ unsafe fn setup() -> (
     usb_client.attach();
     */
 
+    /*
     let usb_client = static_init!(
         capsules_extra::usb::usb_user2::UsbClient<
             'static,
@@ -725,6 +728,7 @@ unsafe fn setup() -> (
         ),
     );
     usb.init();
+    */
 
     // Kernel storage region, allocated with the storage_volume!
     // macro in common/utils.rs
@@ -802,7 +806,7 @@ unsafe fn setup() -> (
     hil::flash::HasClient::set_client(&peripherals.flash_ctrl, mux_flash);
     sip_hash.set_client(tickv);
     TICKV = Some(tickv);
-
+    /*
     let kv_store = components::kv::TicKVKVStoreComponent::new(tickv).finalize(
         components::tickv_kv_store_component_static!(
             capsules_extra::tickv::TicKVSystem<
@@ -886,6 +890,7 @@ unsafe fn setup() -> (
             >,
         >
     ));
+    */
 
     let info_flash = if !FLASH_TESTS_ENABLED {
         use capsules_extra::info_flash::InfoFlash;
@@ -1072,7 +1077,7 @@ unsafe fn setup() -> (
             spi_controller,
             aes,
             usb,
-            kv_driver,
+            // kv_driver,
             pattgen,
             syscall_filter,
             scheduler,
