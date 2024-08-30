@@ -279,6 +279,7 @@ struct EarlGrey {
     watchdog: &'static lowrisc::aon_timer::AonTimer<'static>,
     opentitan_alerthandler: &'static AlertHandlerCapsule,
     reset_manager: &'static ResetManager<'static, earlgrey::rstmgr::RstMgr>,
+    ipc: kernel::ipc::IPC<{ NUM_PROCS as u8 }>,
 }
 
 /// Mapping of integer syscalls to objects that implement syscalls.
@@ -310,6 +311,7 @@ impl SyscallDriverLookup for EarlGrey {
             }
             capsules_extra::reset_manager::DRIVER_NUM => f(Some(self.reset_manager)),
             capsules_extra::opentitan_sysrst::DRIVER_NUM => f(Some(self.opentitan_sysrst)),
+            kernel::ipc::DRIVER_NUM => f(Some(&self.ipc)),
             _ => f(None),
         }
     }
@@ -1101,6 +1103,12 @@ unsafe fn setup() -> (
 
     peripherals.sysreset.enable_interrupts();
 
+    let ipc = kernel::ipc::IPC::new(
+        board_kernel,
+        kernel::ipc::DRIVER_NUM,
+        &memory_allocation_cap,
+    );
+
     let earlgrey = static_init!(
         EarlGrey,
         EarlGrey {
@@ -1125,6 +1133,7 @@ unsafe fn setup() -> (
             watchdog,
             reset_manager,
             opentitan_alerthandler: alert_handler_capsule,
+            ipc,
         }
     );
 
@@ -1323,7 +1332,7 @@ pub unsafe fn main() {
 
         let main_loop_cap = create_capability!(capabilities::MainLoopCapability);
 
-        board_kernel.kernel_loop(earlgrey, chip, None::<&kernel::ipc::IPC<0>>, &main_loop_cap);
+        board_kernel.kernel_loop(earlgrey, chip, Some(&earlgrey.ipc), &main_loop_cap);
     }
 }
 
