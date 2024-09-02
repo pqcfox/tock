@@ -83,7 +83,7 @@ pub trait Client<'a> {
         packet_bytes: u32,
     ) -> OutResult;
 
-    fn packet_transmitted(&'a self, endpoint: usize);
+    fn packet_transmitted(&'a self, endpoint: usize, result: Result<(), ()>);
 }
 
 #[derive(Debug)]

@@ -1574,7 +1574,7 @@ impl<'a> Usbd<'a> {
                     out_state,
                 ));
                 self.client
-                    .map(|client| client.packet_transmitted(endpoint));
+                    .map(|client| client.packet_transmitted(endpoint, Ok(())));
             }
         }
 
