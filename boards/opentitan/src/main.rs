@@ -32,8 +32,8 @@ use earlgrey::chip::EarlGreyDefaultPeripherals;
 use earlgrey::chip_config::EarlGreyConfig;
 use earlgrey::flash_ctrl;
 use earlgrey::pinmux_config::EarlGreyPinmuxConfig;
-use earlgrey::timer::RvTimer;
 use lowrisc::aon_timer;
+use lowrisc::timer::RvTimer;
 
 use kernel::capabilities;
 use kernel::component::Component;
@@ -140,9 +140,7 @@ static mut PLATFORM: Option<&'static EarlGrey> = None;
 #[cfg(test)]
 static mut MAIN_CAP: Option<&dyn kernel::capabilities::MainLoopCapability> = None;
 // Test access to alarm
-static mut ALARM: Option<
-    &'static MuxAlarm<'static, earlgrey::timer::RvTimer<'static, ChipConfig>>,
-> = None;
+static mut ALARM: Option<&'static MuxAlarm<'static, RvTimer<'static>>> = None;
 // Test access to TicKV
 static mut TICKV: Option<
     &capsules_extra::tickv::TicKVSystem<
@@ -199,7 +197,7 @@ struct EarlGrey {
     console: &'static capsules_core::console::Console<'static>,
     alarm: &'static capsules_core::alarm::AlarmDriver<
         'static,
-        VirtualMuxAlarm<'static, earlgrey::timer::RvTimer<'static, ChipConfig>>,
+        VirtualMuxAlarm<'static, RvTimer<'static>>,
     >,
     hmac: &'static capsules_extra::hmac::HmacDriver<'static, lowrisc::hmac::Hmac<'static>, 32>,
     info_flash: Option<
@@ -258,9 +256,7 @@ struct EarlGrey {
     opentitan_sysrst: &'static SystemReset<'static, SysRstCtrl<'static>>,
     syscall_filter: &'static TbfHeaderFilterDefaultAllow,
     scheduler: &'static PrioritySched,
-    scheduler_timer: &'static VirtualSchedulerTimer<
-        VirtualMuxAlarm<'static, earlgrey::timer::RvTimer<'static, ChipConfig>>,
-    >,
+    scheduler_timer: &'static VirtualSchedulerTimer<VirtualMuxAlarm<'static, RvTimer<'static>>>,
     watchdog: &'static lowrisc::aon_timer::AonTimer<'static>,
     opentitan_alerthandler: &'static AlertHandlerCapsule,
     reset_manager: &'static ResetManager<'static, earlgrey::rstmgr::RstMgr>,
@@ -305,8 +301,7 @@ impl KernelResources<EarlGreyChip> for EarlGrey {
     type SyscallFilter = TbfHeaderFilterDefaultAllow;
     type ProcessFault = ();
     type Scheduler = PrioritySched;
-    type SchedulerTimer =
-        VirtualSchedulerTimer<VirtualMuxAlarm<'static, RvTimer<'static, ChipConfig>>>;
+    type SchedulerTimer = VirtualSchedulerTimer<VirtualMuxAlarm<'static, RvTimer<'static>>>;
     type WatchDog = lowrisc::aon_timer::AonTimer<'static>;
     type ContextSwitchCallback = ();
 
@@ -589,7 +584,7 @@ unsafe fn setup() -> (
     // Create a shared virtualization mux layer on top of a single hardware
     // alarm.
     let mux_alarm = static_init!(
-        MuxAlarm<'static, earlgrey::timer::RvTimer<ChipConfig>>,
+        MuxAlarm<'static, RvTimer>,
         MuxAlarm::new(&peripherals.timer)
     );
     hil::time::Alarm::set_alarm_client(&peripherals.timer, mux_alarm);
@@ -598,22 +593,19 @@ unsafe fn setup() -> (
 
     // Alarm
     let virtual_alarm_user = static_init!(
-        VirtualMuxAlarm<'static, earlgrey::timer::RvTimer<ChipConfig>>,
+        VirtualMuxAlarm<'static, RvTimer>,
         VirtualMuxAlarm::new(mux_alarm)
     );
     virtual_alarm_user.setup();
 
     let scheduler_timer_virtual_alarm = static_init!(
-        VirtualMuxAlarm<'static, earlgrey::timer::RvTimer<ChipConfig>>,
+        VirtualMuxAlarm<'static, RvTimer>,
         VirtualMuxAlarm::new(mux_alarm)
     );
     scheduler_timer_virtual_alarm.setup();
 
     let alarm = static_init!(
-        capsules_core::alarm::AlarmDriver<
-            'static,
-            VirtualMuxAlarm<'static, earlgrey::timer::RvTimer<ChipConfig>>,
-        >,
+        capsules_core::alarm::AlarmDriver<'static, VirtualMuxAlarm<'static, RvTimer>>,
         capsules_core::alarm::AlarmDriver::new(
             virtual_alarm_user,
             board_kernel.create_grant(capsules_core::alarm::DRIVER_NUM, &memory_allocation_cap)
@@ -622,9 +614,7 @@ unsafe fn setup() -> (
     hil::time::Alarm::set_alarm_client(virtual_alarm_user, alarm);
 
     let scheduler_timer = static_init!(
-        VirtualSchedulerTimer<
-            VirtualMuxAlarm<'static, earlgrey::timer::RvTimer<'static, ChipConfig>>,
-        >,
+        VirtualSchedulerTimer<VirtualMuxAlarm<'static, RvTimer<'static>>>,
         VirtualSchedulerTimer::new(scheduler_timer_virtual_alarm)
     );
 
@@ -1198,17 +1188,17 @@ fn test_flash(
 #[cfg(feature = "test_alerthandler")]
 unsafe fn test_alerthandler(
     peripherals: &'static EarlGreyDefaultPeripherals<ChipConfig, BoardPinmuxLayout>,
-    mux_alarm: &'static MuxAlarm<'static, RvTimer<ChipConfig>>,
+    mux_alarm: &'static MuxAlarm<'static, RvTimer>,
 ) {
     // an Alarm is needed for some of the tests as alert handling works using interrupts
     let virtual_alarm_tests = static_init!(
-        VirtualMuxAlarm<'static, earlgrey::timer::RvTimer<ChipConfig>>,
+        VirtualMuxAlarm<'static, RvTimer>,
         VirtualMuxAlarm::new(mux_alarm)
     );
     virtual_alarm_tests.setup();
 
     let alert_handler_tests = static_init!(
-        alert_handler::tests::Tests<VirtualMuxAlarm<'static, RvTimer<ChipConfig>>>,
+        alert_handler::tests::Tests<VirtualMuxAlarm<'static, RvTimer>>,
         alert_handler::tests::Tests::new(
             &peripherals.alert_handler,
             virtual_alarm_tests,
@@ -1225,7 +1215,7 @@ unsafe fn test_alerthandler(
 unsafe fn test_aon_timer(
     // aon_timer: &'static aon_timer::AonTimer,
     peripherals: &'static EarlGreyDefaultPeripherals<ChipConfig, BoardPinmuxLayout>,
-    mux_alarm: &'static MuxAlarm<'static, RvTimer<ChipConfig>>,
+    mux_alarm: &'static MuxAlarm<'static, RvTimer>,
 ) {
     use kernel::hil::time::Alarm;
     use kernel::hil::time::ConvertTicks;
@@ -1235,13 +1225,13 @@ unsafe fn test_aon_timer(
 
     // an Alarm is needed for some of the tests as alert handling works using interrupts
     let virtual_alarm_tests = static_init!(
-        VirtualMuxAlarm<'static, earlgrey::timer::RvTimer<ChipConfig>>,
+        VirtualMuxAlarm<'static, earlgrey::timer::RvTimer>,
         VirtualMuxAlarm::new(mux_alarm)
     );
     virtual_alarm_tests.setup();
 
     let aon_timer_tests = static_init!(
-        aon_timer::tests::Tests<VirtualMuxAlarm<'static, RvTimer<ChipConfig>>>,
+        aon_timer::tests::Tests<VirtualMuxAlarm<'static, RvTimer>>,
         aon_timer::tests::Tests::new(
             &peripherals.watchdog,
             &peripherals.rst_mgmt,

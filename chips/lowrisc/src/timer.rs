@@ -3,10 +3,6 @@
 // Copyright Tock Contributors 2022.
 
 //! Timer driver.
-
-use crate::chip_config::EarlGreyConfig;
-use crate::registers::top_earlgrey::RV_TIMER_BASE_ADDR;
-use core::marker::PhantomData;
 use kernel::hil::time::{self, Ticks64};
 use kernel::utilities::cells::OptionalCell;
 use kernel::utilities::registers::interfaces::{Readable, Writeable};
@@ -54,32 +50,34 @@ register_bitfields![u32,
     ],
 ];
 
-pub struct RvTimer<'a, CFG: EarlGreyConfig> {
+pub struct RvTimer<'a> {
     registers: StaticRef<TimerRegisters>,
+    peripherial_clock_frequency: u32,
     alarm_client: OptionalCell<&'a dyn time::AlarmClient>,
     overflow_client: OptionalCell<&'a dyn time::OverflowClient>,
     mtimer: MachineTimer<'a>,
-    _cfg: PhantomData<CFG>,
 }
 
-impl<'a, CFG: EarlGreyConfig> RvTimer<'a, CFG> {
-    pub fn new() -> Self {
+impl<'a> RvTimer<'a> {
+    pub fn new(register_base: usize, clock_frequency: u32) -> Self {
         Self {
-            registers: TIMER_BASE,
+            registers: unsafe { StaticRef::new(register_base as *const TimerRegisters) },
+            peripherial_clock_frequency: clock_frequency,
             alarm_client: OptionalCell::empty(),
             overflow_client: OptionalCell::empty(),
-            mtimer: MachineTimer::new(
-                &TIMER_BASE.compare_low,
-                &TIMER_BASE.compare_high,
-                &TIMER_BASE.value_low,
-                &TIMER_BASE.value_high,
-            ),
-            _cfg: PhantomData,
+            mtimer: unsafe {
+                MachineTimer::new(
+                    &(*(register_base as *const TimerRegisters)).compare_low,
+                    &(*(register_base as *const TimerRegisters)).compare_high,
+                    &(*(register_base as *const TimerRegisters)).value_low,
+                    &(*(register_base as *const TimerRegisters)).value_high,
+                )
+            },
         }
     }
 
     pub fn setup(&self) {
-        let prescale: u16 = ((CFG::PERIPHERAL_FREQ / 10_000) - 1) as u16; // 10Khz
+        let prescale: u16 = ((self.peripherial_clock_frequency / 10_000) - 1) as u16; // 10Khz
 
         let regs = self.registers;
         // Set proper prescaler and the like
@@ -101,7 +99,7 @@ impl<'a, CFG: EarlGreyConfig> RvTimer<'a, CFG> {
     }
 }
 
-impl<CFG: EarlGreyConfig> time::Time for RvTimer<'_, CFG> {
+impl time::Time for RvTimer<'_> {
     type Frequency = Freq10KHz;
     type Ticks = Ticks64;
 
@@ -110,7 +108,7 @@ impl<CFG: EarlGreyConfig> time::Time for RvTimer<'_, CFG> {
     }
 }
 
-impl<'a, CFG: EarlGreyConfig> time::Counter<'a> for RvTimer<'a, CFG> {
+impl<'a> time::Counter<'a> for RvTimer<'a> {
     fn set_overflow_client(&self, client: &'a dyn time::OverflowClient) {
         self.overflow_client.set(client);
     }
@@ -134,7 +132,7 @@ impl<'a, CFG: EarlGreyConfig> time::Counter<'a> for RvTimer<'a, CFG> {
     }
 }
 
-impl<'a, CFG: EarlGreyConfig> time::Alarm<'a> for RvTimer<'a, CFG> {
+impl<'a> time::Alarm<'a> for RvTimer<'a> {
     fn set_alarm_client(&self, client: &'a dyn time::AlarmClient) {
         self.alarm_client.set(client);
     }
@@ -163,6 +161,3 @@ impl<'a, CFG: EarlGreyConfig> time::Alarm<'a> for RvTimer<'a, CFG> {
         self.mtimer.minimum_dt()
     }
 }
-
-const TIMER_BASE: StaticRef<TimerRegisters> =
-    unsafe { StaticRef::new(RV_TIMER_BASE_ADDR as *const TimerRegisters) };

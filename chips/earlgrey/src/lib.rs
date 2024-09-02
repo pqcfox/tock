@@ -36,7 +36,6 @@ pub mod registers;
 pub mod rstmgr;
 pub mod spi_host;
 pub mod sram_ret;
-pub mod timer;
 pub mod uart;
 pub mod usbdev;
 pub(crate) mod utils;
