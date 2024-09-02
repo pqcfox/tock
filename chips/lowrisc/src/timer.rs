@@ -3,6 +3,7 @@
 // Copyright Tock Contributors 2022.
 
 //! Timer driver.
+use crate::registers::rv_timer_regs::{RvTimerRegisters, CFG0, CTRL, INTR_ENABLE0, INTR_STATE0};
 use kernel::hil::time::{self, Ticks64};
 use kernel::utilities::cells::OptionalCell;
 use kernel::utilities::registers::interfaces::{Readable, Writeable};
@@ -19,16 +20,17 @@ impl time::Frequency for Freq10KHz {
         10_000
     }
 }
+pub struct RvTimer<'a> {
+    registers: StaticRef<RvTimerRegisters>,
+    peripherial_clock_frequency: u32,
+    alarm_client: OptionalCell<&'a dyn time::AlarmClient>,
+    overflow_client: OptionalCell<&'a dyn time::OverflowClient>,
+    mtimer: MachineTimer<'a>,
+}
 
 register_structs! {
     pub TimerRegisters {
-        (0x000 => alert_test: WriteOnly<u32>),
-        (0x004 => ctrl: ReadWrite<u32, ctrl::Register>),
-        (0x008 => _reserved),
-        (0x100 => intr_enable: ReadWrite<u32, intr::Register>),
-        (0x104 => intr_state: ReadWrite<u32, intr::Register>),
-        (0x108 => intr_test: WriteOnly<u32, intr::Register>),
-        (0x10C => config: ReadWrite<u32, config::Register>),
+        (0x000 => _reserved),
         (0x110 => value_low: ReadWrite<u32>),
         (0x114 => value_high: ReadWrite<u32>),
         (0x118 => compare_low: ReadWrite<u32>),
@@ -36,43 +38,21 @@ register_structs! {
         (0x120 => @END),
     }
 }
-
-register_bitfields![u32,
-    ctrl [
-        enable OFFSET(0) NUMBITS(1) []
-    ],
-    intr [
-        timer0 OFFSET(0) NUMBITS(1) []
-    ],
-    config [
-        prescale OFFSET(0) NUMBITS(12) [],
-        step OFFSET(16) NUMBITS(8) []
-    ],
-];
-
-pub struct RvTimer<'a> {
-    registers: StaticRef<TimerRegisters>,
-    peripherial_clock_frequency: u32,
-    alarm_client: OptionalCell<&'a dyn time::AlarmClient>,
-    overflow_client: OptionalCell<&'a dyn time::OverflowClient>,
-    mtimer: MachineTimer<'a>,
-}
-
 impl<'a> RvTimer<'a> {
     pub fn new(register_base: usize, clock_frequency: u32) -> Self {
+        let timer_base = unsafe { &(*(register_base as *const TimerRegisters)) };
+
         Self {
-            registers: unsafe { StaticRef::new(register_base as *const TimerRegisters) },
+            registers: unsafe { StaticRef::new(register_base as *const RvTimerRegisters) },
             peripherial_clock_frequency: clock_frequency,
             alarm_client: OptionalCell::empty(),
             overflow_client: OptionalCell::empty(),
-            mtimer: unsafe {
-                MachineTimer::new(
-                    &(*(register_base as *const TimerRegisters)).compare_low,
-                    &(*(register_base as *const TimerRegisters)).compare_high,
-                    &(*(register_base as *const TimerRegisters)).value_low,
-                    &(*(register_base as *const TimerRegisters)).value_high,
-                )
-            },
+            mtimer: MachineTimer::new(
+                &timer_base.compare_low,
+                &timer_base.compare_high,
+                &timer_base.value_low,
+                &timer_base.value_high,
+            ),
         }
     }
 
@@ -81,18 +61,18 @@ impl<'a> RvTimer<'a> {
 
         let regs = self.registers;
         // Set proper prescaler and the like
-        regs.config
-            .write(config::prescale.val(prescale as u32) + config::step.val(1u32));
-        regs.compare_high.set(0);
-        regs.value_low.set(0xFFFF_0000);
-        regs.intr_enable.write(intr::timer0::CLEAR);
-        regs.ctrl.write(ctrl::enable::SET);
+        regs.cfg0
+            .write(CFG0::PRESCALE.val(prescale as u32) + CFG0::STEP.val(1u32));
+        regs.compare_upper0_0.set(0);
+        regs.timer_v_lower0.set(0xFFFF_0000);
+        regs.intr_enable0[0].write(INTR_ENABLE0::IE_0::CLEAR);
+        regs.ctrl[0].write(CTRL::ACTIVE_0::SET);
     }
 
     pub fn service_interrupt(&self) {
         let regs = self.registers;
-        regs.intr_enable.write(intr::timer0::CLEAR);
-        regs.intr_state.write(intr::timer0::SET);
+        regs.intr_enable0[0].write(INTR_ENABLE0::IE_0::CLEAR);
+        regs.intr_state0[0].write(INTR_STATE0::IS_0::SET);
         self.alarm_client.map(|client| {
             client.alarm();
         });
@@ -138,7 +118,7 @@ impl<'a> time::Alarm<'a> for RvTimer<'a> {
     }
 
     fn set_alarm(&self, reference: Self::Ticks, dt: Self::Ticks) {
-        self.registers.intr_enable.write(intr::timer0::SET);
+        self.registers.intr_enable0[0].write(INTR_ENABLE0::IE_0::SET);
 
         self.mtimer.set_alarm(reference, dt)
     }
@@ -148,13 +128,13 @@ impl<'a> time::Alarm<'a> for RvTimer<'a> {
     }
 
     fn disarm(&self) -> Result<(), ErrorCode> {
-        self.registers.intr_enable.write(intr::timer0::CLEAR);
+        self.registers.intr_enable0[0].write(INTR_ENABLE0::IE_0::CLEAR);
 
         self.mtimer.disarm()
     }
 
     fn is_armed(&self) -> bool {
-        self.registers.intr_enable.is_set(intr::timer0)
+        self.registers.intr_enable0[0].is_set(INTR_ENABLE0::IE_0)
     }
 
     fn minimum_dt(&self) -> Self::Ticks {
