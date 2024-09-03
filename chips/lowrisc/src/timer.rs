@@ -142,3 +142,46 @@ impl<'a> time::Alarm<'a> for RvTimer<'a> {
         self.mtimer.minimum_dt()
     }
 }
+
+#[cfg(feature = "test_rv_timer")]
+pub mod tests {
+    use core::cell::Cell;
+    use kernel::debug;
+    use kernel::hil::reset_managment::ResetManagment;
+    use kernel::hil::retention_ram::OwnerRetentionRam;
+    use kernel::hil::time::Alarm;
+    use kernel::hil::time::AlarmClient;
+    use kernel::hil::time::ConvertTicks;
+    use kernel::hil::uart::TransmitSynch;
+
+    pub struct Tests<'a, A: Alarm<'a>> {
+        alarm: &'a A,
+        cycles: Cell<u32>,
+    }
+
+    impl<'a, A: Alarm<'a>> Tests<'a, A> {
+        pub fn new(alarm: &'a A) -> Self {
+            Self {
+                alarm,
+                cycles: Cell::new(0),
+            }
+        }
+
+        pub fn start_alarm(&self, ms: u32) {
+            self.alarm
+                .set_alarm(self.alarm.now(), self.alarm.ticks_from_ms(ms));
+        }
+
+        pub fn cyclic_tests(&self) {
+            debug!("Cyclic alarm!");
+            self.start_alarm(1000);
+            self.cycles.set(self.cycles.get() + 1);
+        }
+    }
+
+    impl<'a, A: Alarm<'a>> AlarmClient for Tests<'a, A> {
+        fn alarm(&self) {
+            self.cyclic_tests();
+        }
+    }
+}

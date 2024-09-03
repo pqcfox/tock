@@ -27,6 +27,7 @@ capsules-system = { path = "../../../capsules/system" }
 default = ["fpga_cw310"]
 test_sram_ret = ["earlgrey/test_sram_ret"]
 test_sysrst_ctrl = ["lowrisc/test_sysrst_ctrl"]
+test_rv_timer = ["lowrisc/test_rv_timer"]
 test_aon_timer = ["lowrisc/test_aon_timer"]
 test_alerthandler = ["earlgrey/test_alerthandler", "lowrisc/test_alerthandler"]
 
