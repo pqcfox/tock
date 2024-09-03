@@ -3,7 +3,10 @@
 // Copyright Tock Contributors 2022.
 
 //! Timer driver.
-use crate::registers::rv_timer_regs::{RvTimerRegisters, CFG0, CTRL, INTR_ENABLE0, INTR_STATE0};
+use crate::registers::rv_timer_regs::{
+    RvTimerRegisters, CFG0, COMPARE_LOWER0_0, COMPARE_UPPER0_0, CTRL, INTR_ENABLE0, INTR_STATE0,
+    TIMER_V_LOWER0, TIMER_V_UPPER0,
+};
 use kernel::hil::time::{self, Ticks64};
 use kernel::utilities::cells::OptionalCell;
 use kernel::utilities::registers::interfaces::{Readable, Writeable};
@@ -28,31 +31,29 @@ pub struct RvTimer<'a> {
     mtimer: MachineTimer<'a>,
 }
 
-register_structs! {
-    pub TimerRegisters {
-        (0x000 => _reserved),
-        (0x110 => value_low: ReadWrite<u32>),
-        (0x114 => value_high: ReadWrite<u32>),
-        (0x118 => compare_low: ReadWrite<u32>),
-        (0x11C => compare_high: ReadWrite<u32>),
-        (0x120 => @END),
-    }
-}
 impl<'a> RvTimer<'a> {
     pub fn new(register_base: usize, clock_frequency: u32) -> Self {
-        let timer_base = unsafe { &(*(register_base as *const TimerRegisters)) };
+        let timer_base = unsafe { &(*(register_base as *const RvTimerRegisters)) };
 
         Self {
             registers: unsafe { StaticRef::new(register_base as *const RvTimerRegisters) },
             peripherial_clock_frequency: clock_frequency,
             alarm_client: OptionalCell::empty(),
             overflow_client: OptionalCell::empty(),
-            mtimer: MachineTimer::new(
-                &timer_base.compare_low,
-                &timer_base.compare_high,
-                &timer_base.value_low,
-                &timer_base.value_high,
-            ),
+            mtimer: unsafe {
+                MachineTimer::new(
+                    &*(&timer_base.compare_lower0_0
+                        as *const ReadWrite<u32, COMPARE_LOWER0_0::Register>
+                        as *const ReadWrite<u32>),
+                    &*(&timer_base.compare_upper0_0
+                        as *const ReadWrite<u32, COMPARE_UPPER0_0::Register>
+                        as *const ReadWrite<u32>),
+                    &*(&timer_base.timer_v_lower0 as *const ReadWrite<u32, TIMER_V_LOWER0::Register>
+                        as *const ReadWrite<u32>),
+                    &*(&timer_base.timer_v_upper0 as *const ReadWrite<u32, TIMER_V_UPPER0::Register>
+                        as *const ReadWrite<u32>),
+                )
+            },
         }
     }
 
