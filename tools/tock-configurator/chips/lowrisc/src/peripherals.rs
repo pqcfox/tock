@@ -5,12 +5,14 @@ use std::rc::Rc;
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
 pub struct Peripherals {
     flash_memory_protection_configuration: Rc<crate::flash_memory_protection::FlashMemoryProtectionConfiguration>,
+    timers: [Rc<crate::timer::RvTimer>; 1],
 }
 
 impl Peripherals {
     pub fn new() -> Self {
         Self {
             flash_memory_protection_configuration: Rc::new(super::flash_memory_protection::FlashMemoryProtectionConfiguration::new()),
+            timers: [Rc::new(crate::timer::RvTimer::new())],
         }
     }
 }
@@ -48,11 +50,15 @@ impl parse::Component for Peripherals {
 impl parse::DefaultPeripherals for Peripherals {
     type Gpio = parse::NoSupport;
     type Uart = parse::NoSupport;
-    type Timer = parse::NoSupport;
+    type Timer = crate::timer::RvTimer;
     type Spi = parse::NoSupport;
     type I2c = parse::NoSupport;
     type BleAdvertisement = parse::NoSupport;
     type Flash = parse::NoSupport;
     type Temperature = parse::NoSupport;
     type Rng = parse::NoSupport;
+
+    fn timer(&self) -> Result<&[Rc<Self::Timer>], parse::Error> {
+        Ok(&self.timers)
+    }
 }

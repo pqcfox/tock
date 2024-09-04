@@ -25,11 +25,12 @@ impl<T: timer::Timer + 'static> AlarmDriver<T> {
 
 impl<T: timer::Timer> crate::Component for AlarmDriver<T> {
     fn ty(&self) -> Result<proc_macro2::TokenStream, crate::Error> {
+        let timer_type = self.mux_alarm.timer().ty()?;
         Ok(quote! { capsules_core::alarm::AlarmDriver<
               'static,
               capsules_core::virtualizers::virtual_alarm::VirtualMuxAlarm<
                   'static,
-                  nrf52::rtc::Rtc<'static>>>
+                  #timer_type>>
         })
     }
 
