@@ -6,6 +6,7 @@ use std::rc::Rc;
 pub struct Peripherals {
     flash_memory_protection_configuration: Rc<crate::flash_memory_protection::FlashMemoryProtectionConfiguration>,
     timers: [Rc<crate::timer::RvTimer>; 1],
+    uarts: [Rc<crate::uart::Uart>; 1],
 }
 
 impl Peripherals {
@@ -13,6 +14,7 @@ impl Peripherals {
         Self {
             flash_memory_protection_configuration: Rc::new(super::flash_memory_protection::FlashMemoryProtectionConfiguration::new()),
             timers: [Rc::new(crate::timer::RvTimer::new())],
+            uarts: [Rc::new(crate::uart::Uart::new())],
         }
     }
 }
@@ -49,7 +51,7 @@ impl parse::Component for Peripherals {
 
 impl parse::DefaultPeripherals for Peripherals {
     type Gpio = parse::NoSupport;
-    type Uart = parse::NoSupport;
+    type Uart = crate::uart::Uart;
     type Timer = crate::timer::RvTimer;
     type Spi = parse::NoSupport;
     type I2c = parse::NoSupport;
@@ -60,5 +62,9 @@ impl parse::DefaultPeripherals for Peripherals {
 
     fn timer(&self) -> Result<&[Rc<Self::Timer>], parse::Error> {
         Ok(&self.timers)
+    }
+
+    fn uart(&self) -> Result<&[Rc<Self::Uart>], parse::Error> {
+        Ok(&self.uarts)
     }
 }
