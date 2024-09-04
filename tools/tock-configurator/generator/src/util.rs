@@ -20,6 +20,7 @@ pub fn topological_sort(
 
     // List of the nodes sorted topologically.
     let mut nodes: Vec<Rc<dyn Component>> = Vec::new();
+
     // Loop while the stack still has untraversed nodes.
     'outer: while !stack.is_empty() {
         // SAFETY: Stack is not empty, so it contains at least one element, that the

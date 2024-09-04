@@ -23,4 +23,5 @@ mod tock_main;
 mod util;
 
 pub use nrf52833::Chip as Nrf52833;
+pub use lowrisc::Chip as Lowrisc;
 pub use tock_main::TockMain;

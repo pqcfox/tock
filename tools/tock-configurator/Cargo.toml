@@ -6,7 +6,7 @@
 # Author: Darius Jipa <darius.jipa@oxidos.io>
 
 [workspace]
-members = ["chips/nrf52833", "chips/common", "configurator", "generator", "parse", "parse-macros"]
+members = ["chips/nrf52833", "chips/common", "configurator", "generator", "parse", "parse-macros", "chips/lowrisc"]
 resolver = "2"
 
 [workspace.package]

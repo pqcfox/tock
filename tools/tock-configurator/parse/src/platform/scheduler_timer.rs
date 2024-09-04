@@ -31,3 +31,28 @@ impl<T: timer::Timer + 'static> SchedulerTimer<T> {
         self.virtual_mux_alarm.clone()
     }
 }
+
+#[derive(serde::Serialize, serde::Deserialize, Debug)]
+pub struct DefaultSchedulerTimer;
+
+impl DefaultSchedulerTimer {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
+
+impl crate::Ident for DefaultSchedulerTimer {
+    fn ident(&self) -> Result<String, crate::error::Error> {
+        Ok(String::from("scheduler_timer"))
+    }
+}
+
+impl Component for DefaultSchedulerTimer {
+    fn ty(&self) -> Result<proc_macro2::TokenStream, crate::Error> {
+        Ok(quote::quote!(()))
+    }
+
+    fn init_expr(&self) -> Result<proc_macro2::TokenStream, crate::Error> {
+        Ok(quote::quote!(&()))
+    }
+}

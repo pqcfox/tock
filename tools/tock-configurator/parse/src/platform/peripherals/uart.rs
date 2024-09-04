@@ -75,3 +75,5 @@ impl<U: Uart + 'static> crate::Component for MuxUart<U> {
         })
     }
 }
+
+impl Uart for super::NoSupport {}
