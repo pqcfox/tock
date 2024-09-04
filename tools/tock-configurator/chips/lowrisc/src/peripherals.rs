@@ -5,6 +5,7 @@ use std::rc::Rc;
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
 pub struct Peripherals {
     flash_memory_protection_configuration: Rc<crate::flash_memory_protection::FlashMemoryProtectionConfiguration>,
+    gpios: [Rc<crate::gpio::GpioPort>; 1],
     timers: [Rc<crate::timer::RvTimer>; 1],
     uarts: [Rc<crate::uart::Uart>; 1],
 }
@@ -13,6 +14,7 @@ impl Peripherals {
     pub fn new() -> Self {
         Self {
             flash_memory_protection_configuration: Rc::new(super::flash_memory_protection::FlashMemoryProtectionConfiguration::new()),
+            gpios: [Rc::new(crate::gpio::GpioPort::new())],
             timers: [Rc::new(crate::timer::RvTimer::new())],
             uarts: [Rc::new(crate::uart::Uart::new())],
         }
@@ -50,7 +52,7 @@ impl parse::Component for Peripherals {
 }
 
 impl parse::DefaultPeripherals for Peripherals {
-    type Gpio = parse::NoSupport;
+    type Gpio = crate::gpio::GpioPort;
     type Uart = crate::uart::Uart;
     type Timer = crate::timer::RvTimer;
     type Spi = parse::NoSupport;
@@ -59,6 +61,10 @@ impl parse::DefaultPeripherals for Peripherals {
     type Flash = parse::NoSupport;
     type Temperature = parse::NoSupport;
     type Rng = parse::NoSupport;
+
+    fn gpio(&self) -> Result<&[Rc<Self::Gpio>], parse::Error> {
+        Ok(&self.gpios)
+    }
 
     fn timer(&self) -> Result<&[Rc<Self::Timer>], parse::Error> {
         Ok(&self.timers)

@@ -1,6 +1,7 @@
 mod chip;
 mod epmp;
 mod flash_memory_protection;
+mod gpio;
 mod peripherals;
 mod timer;
 mod uart;
