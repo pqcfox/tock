@@ -15,7 +15,7 @@ pub mod led;
 pub use led::*;
 
 pub mod spi_controller;
-pub use spi_controller::*;
+pub use spi_controller::SpiController as SpiCapsule;
 
 pub mod ble_radio;
 pub use ble_radio::*;

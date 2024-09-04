@@ -4,6 +4,7 @@ mod flash_memory_protection;
 mod gpio;
 mod peripherals;
 mod rng;
+mod spi;
 mod timer;
 mod uart;
 
