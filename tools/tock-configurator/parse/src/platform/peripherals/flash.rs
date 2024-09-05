@@ -9,5 +9,15 @@ use crate::Component;
 
 use super::NoSupport;
 
-pub trait Flash: Component + std::fmt::Display {}
-impl Flash for NoSupport {}
+pub trait Flash: Component + std::fmt::Display {
+    type Page: Component;
+
+    fn page() -> Self::Page;
+}
+impl Flash for NoSupport {
+    type Page = NoSupport;
+
+    fn page() -> Self::Page {
+        NoSupport {}
+    }
+}

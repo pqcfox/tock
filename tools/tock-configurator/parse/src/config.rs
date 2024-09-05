@@ -37,6 +37,7 @@ capsules_config!(
         RNG => Rng { rng: Rc<P::Rng> },
         GPIO => Gpio { pins: Vec<<P::Gpio as crate::Gpio>::PinId> },
         HMAC => Hmac { hmac: Rc<P::Hmac>, length: usize },
+        INFO_FLASH => InfoFlash { flash: Rc<P::Flash> },
     }
 );
 
@@ -169,6 +170,10 @@ impl<P: DefaultPeripherals> Configuration<P> {
         self.capsules.insert(Index::HMAC, Capsule::Hmac { hmac, length });
     }
 
+    pub fn update_info_flash(&mut self, flash: Rc<P::Flash>) {
+        self.capsules.insert(Index::INFO_FLASH, Capsule::InfoFlash { flash });
+    }
+
     /// Update the scheduler configuration.
     pub fn update_scheduler(&mut self, scheduler_type: SchedulerType) {
         self.scheduler = scheduler_type;
@@ -247,5 +252,9 @@ impl<P: DefaultPeripherals> Configuration<P> {
 
     pub fn remove_hmac(&mut self) {
         self.capsules.remove(&Index::HMAC);
+    }
+
+    pub fn remove_info_flash(&mut self) {
+        self.capsules.remove(&Index::INFO_FLASH);
     }
 }

@@ -1,6 +1,7 @@
 mod chip;
 mod epmp;
 mod flash_memory_protection;
+mod flash;
 mod gpio;
 mod hmac;
 mod i2c;

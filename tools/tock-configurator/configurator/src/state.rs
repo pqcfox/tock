@@ -339,6 +339,9 @@ pub(crate) fn on_capsule_submit<C: Chip + 'static + serde::ser::Serialize>(
         config::Index::HMAC => {
             push_layer::<_, C>(siv, crate::capsule::hmac::HmacConfig::config(chip))
         }
+        config::Index::INFO_FLASH => {
+            push_layer::<_, C>(siv, crate::capsule::info_flash::InfoFlashConfig::config(chip))
+        }
         _ => unreachable!(),
     }
 }

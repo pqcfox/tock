@@ -39,3 +39,7 @@ pub use gpio::GPIO;
 // Avoid name conflicts
 mod hmac;
 pub use hmac::HmacCapsule;
+
+// Avoid name conflicts
+mod info_flash;
+pub use info_flash::InfoFlash;

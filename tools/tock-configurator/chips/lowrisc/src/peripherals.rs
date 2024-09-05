@@ -5,6 +5,7 @@ use std::rc::Rc;
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
 pub struct Peripherals {
     flash_memory_protection_configuration: Rc<crate::flash_memory_protection::FlashMemoryProtectionConfiguration>,
+    flashes: [Rc<crate::flash::FlashCtrl>; 1],
     gpios: [Rc<crate::gpio::GpioPort>; 1],
     hmacs: [Rc<crate::hmac::Hmac>; 1],
     i2cs: [Rc<crate::i2c::I2c>; 1],
@@ -18,6 +19,7 @@ impl Peripherals {
     pub fn new() -> Self {
         Self {
             flash_memory_protection_configuration: Rc::new(super::flash_memory_protection::FlashMemoryProtectionConfiguration::new()),
+            flashes: [Rc::new(crate::flash::FlashCtrl::new())],
             gpios: [Rc::new(crate::gpio::GpioPort::new())],
             hmacs: [Rc::new(crate::hmac::Hmac::new())],
             i2cs: [Rc::new(crate::i2c::I2c::new())],
@@ -66,10 +68,14 @@ impl parse::DefaultPeripherals for Peripherals {
     type Spi = crate::spi::SpiHost;
     type I2c = crate::i2c::I2c;
     type BleAdvertisement = parse::NoSupport;
-    type Flash = parse::NoSupport;
+    type Flash = crate::flash::FlashCtrl;
     type Temperature = parse::NoSupport;
     type Rng = crate::rng::CsRng;
     type Hmac = crate::hmac::Hmac;
+
+    fn flash(&self) -> Result<&[Rc<Self::Flash>], parse::Error> {
+        Ok(&self.flashes)
+    }
 
     fn gpio(&self) -> Result<&[Rc<Self::Gpio>], parse::Error> {
         Ok(&self.gpios)
