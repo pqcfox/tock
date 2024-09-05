@@ -9,7 +9,7 @@ use std::error::Error;
 use std::rc::Rc;
 
 use crate::config::{Capsule, Configuration};
-use crate::{AlarmDriver, Console, MuxAlarm, MuxUart, RngCapsule, TemperatureCapsule, SpiCapsule};
+use crate::{AlarmDriver, Console, MuxAlarm, MuxUart, RngCapsule, TemperatureCapsule, SpiCapsule, I2CMasterDriver};
 use crate::{Chip, Platform, Scheduler};
 
 /// The context provided for Tock's `main` file.
@@ -50,6 +50,8 @@ impl<C: Chip> Context<C> {
                 }
                 Capsule::Spi { spi } =>
                     capsules.push(SpiCapsule::get(Rc::clone(spi)) as Rc<dyn crate::Capsule>),
+                Capsule::I2c { i2c } =>
+                    capsules.push(I2CMasterDriver::get(Rc::clone(i2c)) as Rc<dyn crate::Capsule>),
                 _ => {}
             };
         }

@@ -6,6 +6,7 @@ use std::rc::Rc;
 pub struct Peripherals {
     flash_memory_protection_configuration: Rc<crate::flash_memory_protection::FlashMemoryProtectionConfiguration>,
     gpios: [Rc<crate::gpio::GpioPort>; 1],
+    i2cs: [Rc<crate::i2c::I2c>; 1],
     rngs: [Rc<crate::rng::CsRng>; 1],
     spis: [Rc<crate::spi::SpiHost>; 1],
     timers: [Rc<crate::timer::RvTimer>; 1],
@@ -17,6 +18,7 @@ impl Peripherals {
         Self {
             flash_memory_protection_configuration: Rc::new(super::flash_memory_protection::FlashMemoryProtectionConfiguration::new()),
             gpios: [Rc::new(crate::gpio::GpioPort::new())],
+            i2cs: [Rc::new(crate::i2c::I2c::new())],
             rngs: [Rc::new(crate::rng::CsRng::new())],
             spis: [Rc::new(crate::spi::SpiHost::new())],
             timers: [Rc::new(crate::timer::RvTimer::new())],
@@ -60,7 +62,7 @@ impl parse::DefaultPeripherals for Peripherals {
     type Uart = crate::uart::Uart;
     type Timer = crate::timer::RvTimer;
     type Spi = crate::spi::SpiHost;
-    type I2c = parse::NoSupport;
+    type I2c = crate::i2c::I2c;
     type BleAdvertisement = parse::NoSupport;
     type Flash = parse::NoSupport;
     type Temperature = parse::NoSupport;
@@ -68,6 +70,10 @@ impl parse::DefaultPeripherals for Peripherals {
 
     fn gpio(&self) -> Result<&[Rc<Self::Gpio>], parse::Error> {
         Ok(&self.gpios)
+    }
+
+    fn i2c(&self) -> Result<&[Rc<Self::I2c>], parse::Error> {
+        Ok(&self.i2cs)
     }
 
     fn rng(&self) -> Result<&[Rc<Self::Rng>], parse::Error> {

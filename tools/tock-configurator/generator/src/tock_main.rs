@@ -277,6 +277,7 @@ impl<C: Chip + 'static> TockMain<C> {
                 #platform_ty,
                 &'static #chip_ty
             ) {
+                let memory_allocation_cap = kernel::create_capability!(kernel::capabilities::MemoryAllocationCapability);
                 let board_kernel = kernel::static_init!(kernel::Kernel, kernel::Kernel::new(&*core::ptr::addr_of!(PROCESSES)));
                 #(#initializations)*
 

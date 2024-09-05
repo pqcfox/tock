@@ -28,3 +28,7 @@ pub use temperature::Temperature as TemperatureCapsule;
 
 pub mod rng_capsule;
 pub use rng_capsule::*;
+
+// Avoid name conflicts
+mod i2c;
+pub use i2c::*;
