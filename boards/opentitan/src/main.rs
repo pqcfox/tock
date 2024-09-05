@@ -1114,6 +1114,11 @@ unsafe fn setup() -> (
         debug!("Error loading processes!");
         debug!("{:?}", err);
     });
+
+    #[cfg(feature = "test_sram_ret")]
+    peripherals
+        .sram_ret
+        .test(&peripherals.rst_mgmt, &peripherals.uart0);
     debug!("OpenTitan initialisation complete. Entering main loop");
 
     (board_kernel, earlgrey, chip, peripherals)
