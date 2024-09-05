@@ -35,7 +35,8 @@ capsules_config!(
 
         TEMPERATURE => Temperature { temp: Rc<P::Temperature> },
         RNG => Rng { rng: Rc<P::Rng> },
-        GPIO => Gpio { pins: Vec<<P::Gpio as crate::Gpio>::PinId> }
+        GPIO => Gpio { pins: Vec<<P::Gpio as crate::Gpio>::PinId> },
+        HMAC => Hmac { hmac: Rc<P::Hmac>, length: usize },
     }
 );
 
@@ -164,6 +165,10 @@ impl<P: DefaultPeripherals> Configuration<P> {
         self.capsules.insert(Index::LED, Capsule::Led { led_type: led_type, pins });
     }
 
+    pub fn update_hmac(&mut self, hmac: Rc<P::Hmac>, length: usize) {
+        self.capsules.insert(Index::HMAC, Capsule::Hmac { hmac, length });
+    }
+
     /// Update the scheduler configuration.
     pub fn update_scheduler(&mut self, scheduler_type: SchedulerType) {
         self.scheduler = scheduler_type;
@@ -238,5 +243,9 @@ impl<P: DefaultPeripherals> Configuration<P> {
     /// Remove the LED configuration.
     pub fn remove_led(&mut self) {
         self.capsules.remove(&Index::LED);
+    }
+
+    pub fn remove_hmac(&mut self) {
+        self.capsules.remove(&Index::HMAC);
     }
 }

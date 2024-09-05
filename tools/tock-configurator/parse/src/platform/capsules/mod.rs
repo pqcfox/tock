@@ -32,5 +32,10 @@ pub use rng_capsule::*;
 mod i2c;
 pub use i2c::*;
 
+// Avoid name conflicts
 mod gpio;
 pub use gpio::GPIO;
+
+// Avoid name conflicts
+mod hmac;
+pub use hmac::HmacCapsule;

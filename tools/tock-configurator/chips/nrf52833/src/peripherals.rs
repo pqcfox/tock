@@ -79,6 +79,7 @@ impl parse::DefaultPeripherals for Peripherals {
     type BleAdvertisement = crate::Ble;
     type Temperature = crate::Temperature;
     type Flash = crate::Flash;
+    type Hmac = parse::NoSupport;
 
     fn uart(&self) -> Result<&[Rc<Self::Uart>], parse::Error> {
         Ok(&self.uart)
