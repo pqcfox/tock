@@ -103,6 +103,7 @@ fn on_gpio_pin_submit<C: Chip + 'static + serde::Serialize>(
             });
         }
 
+
         // Create a list with all the previously selected pins that
         // are now unselected.
         let mut unselected_pins = Vec::new();

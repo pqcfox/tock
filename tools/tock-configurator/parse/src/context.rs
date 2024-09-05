@@ -9,8 +9,8 @@ use std::error::Error;
 use std::rc::Rc;
 
 use crate::config::{Capsule, Configuration};
-use crate::{AlarmDriver, Console, MuxAlarm, MuxUart, RngCapsule, TemperatureCapsule, SpiCapsule, I2CMasterDriver};
-use crate::{Chip, Platform, Scheduler};
+use crate::{AlarmDriver, Console, MuxAlarm, MuxUart, RngCapsule, TemperatureCapsule, SpiCapsule, I2CMasterDriver, GPIO};
+use crate::{Chip, DefaultPeripherals, Platform, Scheduler};
 
 /// The context provided for Tock's `main` file.
 ///
@@ -52,6 +52,8 @@ impl<C: Chip> Context<C> {
                     capsules.push(SpiCapsule::get(Rc::clone(spi)) as Rc<dyn crate::Capsule>),
                 Capsule::I2c { i2c } =>
                     capsules.push(I2CMasterDriver::get(Rc::clone(i2c)) as Rc<dyn crate::Capsule>),
+                Capsule::Gpio { pins } =>
+                    capsules.push(GPIO::<<<C as Chip>::Peripherals as DefaultPeripherals>::Gpio>::get(pins.clone()) as Rc<dyn crate::Capsule>),
                 _ => {}
             };
         }

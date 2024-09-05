@@ -5,6 +5,8 @@
 // Author: Irina Nita <irina.nita@oxidos.io>
 // Author: Darius Jipa <darius.jipa@oxidos.io>
 
+use crate::Component;
+
 use std::{fmt::Debug, rc::Rc};
 
 use super::NoSupport;
@@ -19,7 +21,8 @@ pub trait Gpio: std::fmt::Debug + PartialEq {
         + std::fmt::Display
         + Debug
         + Copy
-        + PartialEq;
+        + PartialEq
+        + Component;
 
     /// Return an array of the pins provided by the `Gpio` peripheral
     ///  FIXME: Change array to slice ASAP.
@@ -29,5 +32,5 @@ pub trait Gpio: std::fmt::Debug + PartialEq {
 }
 
 impl Gpio for NoSupport {
-    type PinId = usize;
+    type PinId = NoSupport;
 }
