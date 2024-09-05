@@ -4,7 +4,6 @@ use crate::state::{on_exit_submit, on_quit_submit, Data, PinFunction};
 use crate::views;
 use cursive::views::{Checkbox, ListChild, ListView};
 use cursive::Cursive;
-use parse::led::Led;
 use parse::peripherals::{Chip, DefaultPeripherals, Gpio};
 use std::cell::RefCell;
 use std::rc::Rc;

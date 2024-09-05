@@ -8,7 +8,6 @@
 #[macro_export]
 macro_rules! static_ident {
     ($ident: tt) => {{
-        use $crate::FormatIdent;
         ::once_cell::sync::Lazy::new(|| $ident.to_string())
     }};
 }

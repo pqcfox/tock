@@ -38,6 +38,7 @@ capsules_config!(
         GPIO => Gpio { pins: Vec<<P::Gpio as crate::Gpio>::PinId> },
         HMAC => Hmac { hmac: Rc<P::Hmac>, length: usize },
         INFO_FLASH => InfoFlash { flash: Rc<P::Flash> },
+        LLDB => Lldb { uart: Rc<P::Uart>, baud_rate: usize },
     }
 );
 
@@ -174,6 +175,10 @@ impl<P: DefaultPeripherals> Configuration<P> {
         self.capsules.insert(Index::INFO_FLASH, Capsule::InfoFlash { flash });
     }
 
+    pub fn update_lldb(&mut self, uart: Rc<P::Uart>, baud_rate: usize) {
+        self.capsules.insert(Index::LLDB, Capsule::Lldb { uart, baud_rate });
+    }
+
     /// Update the scheduler configuration.
     pub fn update_scheduler(&mut self, scheduler_type: SchedulerType) {
         self.scheduler = scheduler_type;
@@ -256,5 +261,9 @@ impl<P: DefaultPeripherals> Configuration<P> {
 
     pub fn remove_info_flash(&mut self) {
         self.capsules.remove(&Index::INFO_FLASH);
+    }
+
+    pub fn remove_lldb(&mut self) {
+        self.capsules.remove(&Index::LLDB);
     }
 }

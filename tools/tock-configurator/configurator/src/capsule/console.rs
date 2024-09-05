@@ -47,7 +47,7 @@ fn config_none<C: Chip + 'static + serde::ser::Serialize>(chip: Rc<C>) -> Linear
     match chip.peripherals().uart() {
         Ok(uart_peripherals) => crate::menu::capsule_popup::<C, _>(
             crate::views::radio_group_with_null(Vec::from(uart_peripherals), |siv, submit| {
-                on_uart_submit::<C>(siv, submit, 112500)
+                on_uart_submit::<C>(siv, submit, 115200)
             }),
         ),
         Err(_) => crate::menu::capsule_popup::<C, _>(crate::menu::no_support(PERIPHERAL)),

@@ -59,6 +59,7 @@ pub(crate) fn capsules_menu<C: Chip + 'static + serde::ser::Serialize>(
                 items::SupportedCapsule::LED.to_menu_item(),
                 items::SupportedCapsule::HMAC.to_menu_item(),
                 items::SupportedCapsule::INFO_FLASH.to_menu_item(),
+                items::SupportedCapsule::LLDB.to_menu_item(),
             ],
             state::on_capsule_submit::<C>,
         ))),

@@ -43,3 +43,7 @@ pub use hmac::HmacCapsule;
 // Avoid name conflicts
 mod info_flash;
 pub use info_flash::InfoFlash;
+
+// Avoid name conflicts
+mod lldb;
+pub use lldb::Lldb;

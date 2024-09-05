@@ -342,6 +342,9 @@ pub(crate) fn on_capsule_submit<C: Chip + 'static + serde::ser::Serialize>(
         config::Index::INFO_FLASH => {
             push_layer::<_, C>(siv, crate::capsule::info_flash::InfoFlashConfig::config(chip))
         }
+        config::Index::LLDB => {
+            push_layer::<_, C>(siv, crate::capsule::lldb::LldbConfig::config(chip))
+        }
         _ => unreachable!(),
     }
 }
