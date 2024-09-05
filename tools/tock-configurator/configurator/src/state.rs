@@ -333,6 +333,9 @@ pub(crate) fn on_capsule_submit<C: Chip + 'static + serde::ser::Serialize>(
         config::Index::GPIO => {
             push_layer::<_, C>(siv, crate::capsule::gpio::GpioConfig::config(chip))
         }
+        config::Index::LED => {
+            push_layer::<_, C>(siv, crate::capsule::led::LedConfig::config(chip))
+        }
         _ => unreachable!(),
     }
 }

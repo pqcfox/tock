@@ -9,6 +9,7 @@ use parse_macros::capsules_config;
 
 use crate::{DefaultPeripherals, SchedulerType, SyscallFilterType};
 use crate::{Lsm303AccelDataRate, Lsm303MagnetoDataRate, Lsm303Range, Lsm303Scale};
+use crate::{LedType};
 use std::{collections::HashMap, num::NonZeroUsize, rc::Rc};
 pub type CapsulesConfigurations<P> = HashMap<Index, Capsule<P>>;
 
@@ -18,6 +19,7 @@ capsules_config!(
     {
         CONSOLE => Console { uart: Rc<P::Uart>, baud_rate: usize},
         ALARM => Alarm { timer: Rc<P::Timer> },
+        LED => Led { led_type: LedType, pins: Vec<<P::Gpio as crate::Gpio>::PinId> },
         SPI => Spi { spi: Rc<P::Spi> },
         I2C => I2c { i2c: Rc<P::I2c> },
         BLE => BleRadio { ble: Rc<P::BleAdvertisement>, timer: Rc<P::Timer> },
@@ -158,6 +160,10 @@ impl<P: DefaultPeripherals> Configuration<P> {
         self.capsules.insert(Index::GPIO, Capsule::Gpio { pins });
     }
 
+    pub fn update_led(&mut self, led_type: LedType, pins: Vec<<P::Gpio as crate::Gpio>::PinId>) {
+        self.capsules.insert(Index::LED, Capsule::Led { led_type: led_type, pins });
+    }
+
     /// Update the scheduler configuration.
     pub fn update_scheduler(&mut self, scheduler_type: SchedulerType) {
         self.scheduler = scheduler_type;
@@ -227,5 +233,10 @@ impl<P: DefaultPeripherals> Configuration<P> {
     /// Remove the rng configuration.
     pub fn remove_rng(&mut self) {
         self.capsules.remove(&Index::RNG);
+    }
+
+    /// Remove the LED configuration.
+    pub fn remove_led(&mut self) {
+        self.capsules.remove(&Index::LED);
     }
 }

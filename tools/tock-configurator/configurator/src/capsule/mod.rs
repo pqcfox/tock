@@ -15,6 +15,7 @@ pub(crate) mod console;
 pub(crate) mod flash;
 pub(crate) mod gpio;
 pub(crate) mod i2c;
+pub(crate) mod led;
 pub(crate) mod lsm303agr;
 pub(crate) mod rng;
 pub(crate) mod spi;

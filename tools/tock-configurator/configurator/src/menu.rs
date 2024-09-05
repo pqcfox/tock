@@ -56,6 +56,7 @@ pub(crate) fn capsules_menu<C: Chip + 'static + serde::ser::Serialize>(
                 items::SupportedCapsule::TEMPERATURE.to_menu_item(),
                 items::SupportedCapsule::RNG.to_menu_item(),
                 items::SupportedCapsule::GPIO.to_menu_item(),
+                items::SupportedCapsule::LED.to_menu_item(),
             ],
             state::on_capsule_submit::<C>,
         ))),
