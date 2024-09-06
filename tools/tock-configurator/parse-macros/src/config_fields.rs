@@ -115,9 +115,8 @@ pub(crate) fn gen_key_val(item: TokenStream) -> TokenStream {
         }
 
         #[derive(serde::Serialize, serde::Deserialize)]
-        #[serde(untagged)]
         #[non_exhaustive]
-        #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+        #[serde(rename_all = "SCREAMING_SNAKE_CASE", tag = "type")]
         pub enum #ident2 #generics2 {
             #(#idents2),*
         }
