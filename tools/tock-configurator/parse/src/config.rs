@@ -43,6 +43,7 @@ capsules_config!(
         AES => Aes { aes: Rc<P::Aes>, number_of_blocks: usize },
         PATTGEN => Pattgen { pattgen: Rc<P::Pattgen> },
         SYSTEM_RESET_CONTROLLER => SystemResetController { system_reset_controller: Rc<P::SystemResetController> },
+        ALERT_HANDLER => AlertHandler { alert_handler: Rc<P::AlertHandler> },
     }
 );
 
@@ -199,6 +200,10 @@ impl<P: DefaultPeripherals> Configuration<P> {
         self.capsules.insert(Index::SYSTEM_RESET_CONTROLLER, Capsule::SystemResetController { system_reset_controller });
     }
 
+    pub fn update_alert_handler(&mut self, alert_handler: Rc<P::AlertHandler>) {
+        self.capsules.insert(Index::ALERT_HANDLER, Capsule::AlertHandler { alert_handler });
+    }
+
     /// Update the scheduler configuration.
     pub fn update_scheduler(&mut self, scheduler_type: SchedulerType) {
         self.scheduler = scheduler_type;
@@ -301,5 +306,9 @@ impl<P: DefaultPeripherals> Configuration<P> {
 
     pub fn remove_system_reset_controller(&mut self) {
         self.capsules.remove(&Index::SYSTEM_RESET_CONTROLLER);
+    }
+
+    pub fn remove_alert_handler(&mut self) {
+        self.capsules.remove(&Index::ALERT_HANDLER);
     }
 }

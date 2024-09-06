@@ -5,6 +5,7 @@ use std::rc::Rc;
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
 pub struct Peripherals {
     aes: [Rc<crate::aes::Aes>; 1],
+    alert_handlers: [Rc<crate::alert_handler::AlertHandler>; 1],
     flash_memory_protection_configuration: Rc<crate::flash_memory_protection::FlashMemoryProtectionConfiguration>,
     flashes: [Rc<crate::flash::FlashCtrl>; 1],
     gpios: [Rc<crate::gpio::GpioPort>; 1],
@@ -22,6 +23,7 @@ impl Peripherals {
     pub fn new() -> Self {
         Self {
             aes: [Rc::new(crate::aes::Aes::new())],
+            alert_handlers: [Rc::new(crate::alert_handler::AlertHandler::new())],
             flash_memory_protection_configuration: Rc::new(super::flash_memory_protection::FlashMemoryProtectionConfiguration::new()),
             flashes: [Rc::new(crate::flash::FlashCtrl::new())],
             gpios: [Rc::new(crate::gpio::GpioPort::new())],
@@ -81,9 +83,14 @@ impl parse::DefaultPeripherals for Peripherals {
     type Aes = crate::aes::Aes;
     type Pattgen = crate::pattgen::Pattgen;
     type SystemResetController = crate::system_reset_controller::SystemResetController;
+    type AlertHandler = crate::alert_handler::AlertHandler;
 
     fn aes(&self) -> Result<&[Rc<Self::Aes>], parse::Error> {
         Ok(&self.aes)
+    }
+
+    fn alert_handler(&self) -> Result<&[Rc<Self::AlertHandler>], parse::Error> {
+        Ok(&self.alert_handlers)
     }
 
     fn flash(&self) -> Result<&[Rc<Self::Flash>], parse::Error> {

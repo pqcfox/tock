@@ -13,6 +13,7 @@ use crate::{
     AlarmDriver, Console, Led, MuxAlarm, MuxUart, RngCapsule,
     TemperatureCapsule, SpiCapsule, I2CMasterDriver, GPIO, HmacCapsule,
     InfoFlash, Lldb, AesCapsule, KvDriver, PattgenCapsule, SystemResetControllerCapsule,
+    AlertHandlerCapsule,
 };
 use crate::{Chip, DefaultPeripherals, Platform, Scheduler};
 
@@ -79,6 +80,9 @@ impl<C: Chip> Context<C> {
                 }
                 Capsule::SystemResetController { system_reset_controller } => {
                     capsules.push(SystemResetControllerCapsule::get(system_reset_controller.clone()) as Rc<dyn crate::Capsule>);
+                }
+                Capsule::AlertHandler { alert_handler } => {
+                    capsules.push(AlertHandlerCapsule::get(alert_handler.clone()) as Rc<dyn crate::Capsule>);
                 }
                 _ => {}
             };

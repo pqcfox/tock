@@ -1,4 +1,5 @@
 mod aes;
+mod alert_handler;
 mod chip;
 mod epmp;
 mod flash_memory_protection;

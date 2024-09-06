@@ -11,6 +11,7 @@ use std::rc::Rc;
 
 pub(crate) mod aes;
 pub(crate) mod alarm;
+pub(crate) mod alert_handler;
 pub(crate) mod ble;
 pub(crate) mod console;
 pub(crate) mod flash;

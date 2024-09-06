@@ -63,3 +63,7 @@ pub use pattgen::PattgenCapsule;
 // Avoid name conflicts
 mod system_reset_controller;
 pub use system_reset_controller::SystemResetControllerCapsule;
+
+// Avoid name conflicts
+mod alert_handler;
+pub use alert_handler::AlertHandlerCapsule;

@@ -369,6 +369,15 @@ pub(crate) fn on_capsule_submit<C: Chip + 'static + serde::ser::Serialize>(
             };
             push_layer::<_, C>(siv, crate::capsule::system_reset_controller::config::<C>(chip, previous_state))
         }
+        config::Index::ALERT_HANDLER => {
+            let previous_state = match data.platform.capsule(submit) {
+                Some(config::Capsule::AlertHandler { alert_handler }) => {
+                    Some(alert_handler.clone())
+                }
+                _ => None,
+            };
+            push_layer::<_, C>(siv, crate::capsule::alert_handler::config::<C>(chip, previous_state))
+        }
         _ => unreachable!(),
     }
 }
