@@ -9,6 +9,7 @@ use cursive::views::LinearLayout;
 use parse::peripherals::Chip;
 use std::rc::Rc;
 
+pub(crate) mod aes;
 pub(crate) mod alarm;
 pub(crate) mod ble;
 pub(crate) mod console;

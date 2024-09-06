@@ -6,7 +6,7 @@
 // Author: Darius Jipa <darius.jipa@oxidos.io>
 
 use super::{
-    ble::BleAdvertisement, gpio::Gpio, timer::Timer, uart::Uart, Flash, I2c, Rng, Spi, Temperature, Hmac
+    ble::BleAdvertisement, gpio::Gpio, timer::Timer, uart::Uart, Flash, I2c, Rng, Spi, Temperature, Hmac, Aes
 };
 use crate::Component;
 use std::rc::Rc;
@@ -40,6 +40,7 @@ pub trait DefaultPeripherals: Component {
     type Temperature: Temperature + for<'de> serde::Deserialize<'de> + serde::Serialize + 'static;
     type Rng: Rng + for<'de> serde::Deserialize<'de> + serde::Serialize + 'static;
     type Hmac: Hmac + for<'de> serde::Deserialize<'de> + serde::Serialize + 'static;
+    type Aes: Aes + for<'de> serde::Deserialize<'de> + serde::Serialize + 'static;
 
     /// Return an array slice of pointers to the `Gpio` peripherals or a [`crate::Error`]
     /// if the peripheral is non-existent.
@@ -96,6 +97,10 @@ pub trait DefaultPeripherals: Component {
     }
 
     fn hmac(&self) -> Result<&[Rc<Self::Hmac>], crate::Error> {
+        Err(crate::Error::NoSupport)
+    }
+
+    fn aes(&self) -> Result<&[Rc<Self::Aes>], crate::Error> {
         Err(crate::Error::NoSupport)
     }
 }

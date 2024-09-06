@@ -345,6 +345,9 @@ pub(crate) fn on_capsule_submit<C: Chip + 'static + serde::ser::Serialize>(
         config::Index::LLDB => {
             push_layer::<_, C>(siv, crate::capsule::lldb::LldbConfig::config(chip))
         }
+        config::Index::AES => {
+            push_layer::<_, C>(siv, crate::capsule::aes::AesConfig::config(chip))
+        }
         _ => unreachable!(),
     }
 }

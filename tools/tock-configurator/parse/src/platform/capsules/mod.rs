@@ -47,3 +47,7 @@ pub use info_flash::InfoFlash;
 // Avoid name conflicts
 mod lldb;
 pub use lldb::Lldb;
+
+// Avoid name conflicts
+mod aes;
+pub use aes::AesCapsule;

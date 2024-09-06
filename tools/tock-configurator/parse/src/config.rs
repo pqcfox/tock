@@ -17,6 +17,7 @@ capsules_config!(
     Index => Capsule<P: crate::DefaultPeripherals>,
     // The keys and values enums for the capsules map.
     {
+        LLDB => Lldb { uart: Rc<P::Uart>, baud_rate: usize },
         CONSOLE => Console { uart: Rc<P::Uart>, baud_rate: usize},
         ALARM => Alarm { timer: Rc<P::Timer> },
         LED => Led { led_type: LedType, pins: Vec<<P::Gpio as crate::Gpio>::PinId> },
@@ -38,7 +39,7 @@ capsules_config!(
         GPIO => Gpio { pins: Vec<<P::Gpio as crate::Gpio>::PinId> },
         HMAC => Hmac { hmac: Rc<P::Hmac>, length: usize },
         INFO_FLASH => InfoFlash { flash: Rc<P::Flash> },
-        LLDB => Lldb { uart: Rc<P::Uart>, baud_rate: usize },
+        AES => Aes { aes: Rc<P::Aes>, number_of_blocks: usize },
     }
 );
 
@@ -179,6 +180,10 @@ impl<P: DefaultPeripherals> Configuration<P> {
         self.capsules.insert(Index::LLDB, Capsule::Lldb { uart, baud_rate });
     }
 
+    pub fn update_aes(&mut self, aes: Rc<P::Aes>, number_of_blocks: usize) {
+        self.capsules.insert(Index::AES, Capsule::Aes { aes, number_of_blocks });
+    }
+
     /// Update the scheduler configuration.
     pub fn update_scheduler(&mut self, scheduler_type: SchedulerType) {
         self.scheduler = scheduler_type;
@@ -265,5 +270,9 @@ impl<P: DefaultPeripherals> Configuration<P> {
 
     pub fn remove_lldb(&mut self) {
         self.capsules.remove(&Index::LLDB);
+    }
+
+    pub fn remove_aes(&mut self) {
+        self.capsules.remove(&Index::AES);
     }
 }

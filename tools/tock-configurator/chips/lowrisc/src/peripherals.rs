@@ -4,6 +4,7 @@ use std::rc::Rc;
 
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
 pub struct Peripherals {
+    aes: [Rc<crate::aes::Aes>; 1],
     flash_memory_protection_configuration: Rc<crate::flash_memory_protection::FlashMemoryProtectionConfiguration>,
     flashes: [Rc<crate::flash::FlashCtrl>; 1],
     gpios: [Rc<crate::gpio::GpioPort>; 1],
@@ -18,6 +19,7 @@ pub struct Peripherals {
 impl Peripherals {
     pub fn new() -> Self {
         Self {
+            aes: [Rc::new(crate::aes::Aes::new())],
             flash_memory_protection_configuration: Rc::new(super::flash_memory_protection::FlashMemoryProtectionConfiguration::new()),
             flashes: [Rc::new(crate::flash::FlashCtrl::new())],
             gpios: [Rc::new(crate::gpio::GpioPort::new())],
@@ -72,6 +74,11 @@ impl parse::DefaultPeripherals for Peripherals {
     type Temperature = parse::NoSupport;
     type Rng = crate::rng::CsRng;
     type Hmac = crate::hmac::Hmac;
+    type Aes = crate::aes::Aes;
+
+    fn aes(&self) -> Result<&[Rc<Self::Aes>], parse::Error> {
+        Ok(&self.aes)
+    }
 
     fn flash(&self) -> Result<&[Rc<Self::Flash>], parse::Error> {
         Ok(&self.flashes)
