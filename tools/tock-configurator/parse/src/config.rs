@@ -38,6 +38,7 @@ capsules_config!(
         RNG => Rng { rng: Rc<P::Rng> },
         GPIO => Gpio { pins: Vec<<P::Gpio as crate::Gpio>::PinId> },
         HMAC => Hmac { hmac: Rc<P::Hmac>, length: usize },
+        KV_DRIVER => KvDriver { flash: Rc<P::Flash> },
         INFO_FLASH => InfoFlash { flash: Rc<P::Flash> },
         AES => Aes { aes: Rc<P::Aes>, number_of_blocks: usize },
     }
@@ -184,6 +185,10 @@ impl<P: DefaultPeripherals> Configuration<P> {
         self.capsules.insert(Index::AES, Capsule::Aes { aes, number_of_blocks });
     }
 
+    pub fn update_kv_driver(&mut self, flash: Rc<P::Flash>) {
+        self.capsules.insert(Index::KV_DRIVER, Capsule::KvDriver { flash });
+    }
+
     /// Update the scheduler configuration.
     pub fn update_scheduler(&mut self, scheduler_type: SchedulerType) {
         self.scheduler = scheduler_type;
@@ -274,5 +279,9 @@ impl<P: DefaultPeripherals> Configuration<P> {
 
     pub fn remove_aes(&mut self) {
         self.capsules.remove(&Index::AES);
+    }
+
+    pub fn remove_kv_driver(&mut self) {
+        self.capsules.remove(&Index::KV_DRIVER);
     }
 }

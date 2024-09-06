@@ -12,6 +12,12 @@ impl parse::Component for FlashPage {
     }
 }
 
+impl parse::flash::Page for FlashPage {
+    fn size() -> proc_macro2::TokenStream {
+        quote::quote!(lowrisc::flash_ctrl::PAGE_SIZE)
+    }
+}
+
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
 #[derive(PartialEq)]
 pub struct FlashCtrl {}
@@ -45,5 +51,9 @@ impl parse::peripherals::Flash for FlashCtrl {
 
     fn page() -> Self::Page {
         FlashPage {}
+    }
+
+    fn pages_per_bank() -> proc_macro2::TokenStream {
+        quote::quote!(lowrisc::flash_ctrl::FLASH_PAGES_PER_BANK)
     }
 }

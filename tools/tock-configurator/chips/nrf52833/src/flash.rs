@@ -26,6 +26,10 @@ impl parse::Flash for Flash {
     fn page() -> Self::Page {
         parse::NoSupport {}
     }
+
+    fn pages_per_bank() -> proc_macro2::TokenStream {
+        unimplemented!()
+    }
 }
 
 impl std::fmt::Display for Flash {

@@ -51,3 +51,7 @@ pub use lldb::Lldb;
 // Avoid name conflicts
 mod aes;
 pub use aes::AesCapsule;
+
+// Avoid name conflicts
+mod kv_driver;
+pub use kv_driver::KvDriver;

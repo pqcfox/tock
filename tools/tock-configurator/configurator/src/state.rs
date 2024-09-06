@@ -348,6 +348,9 @@ pub(crate) fn on_capsule_submit<C: Chip + 'static + serde::ser::Serialize>(
         config::Index::AES => {
             push_layer::<_, C>(siv, crate::capsule::aes::AesConfig::config(chip))
         }
+        config::Index::KV_DRIVER => {
+            push_layer::<_, C>(siv, crate::capsule::kv_driver::KvDriverConfig::config(chip))
+        }
         _ => unreachable!(),
     }
 }

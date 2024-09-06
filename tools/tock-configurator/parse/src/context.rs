@@ -12,7 +12,7 @@ use crate::config::{Capsule, Configuration};
 use crate::{
     AlarmDriver, Console, Led, MuxAlarm, MuxUart, RngCapsule,
     TemperatureCapsule, SpiCapsule, I2CMasterDriver, GPIO, HmacCapsule,
-    InfoFlash, Lldb, AesCapsule
+    InfoFlash, Lldb, AesCapsule, KvDriver,
 };
 use crate::{Chip, DefaultPeripherals, Platform, Scheduler};
 
@@ -62,6 +62,9 @@ impl<C: Chip> Context<C> {
                     capsules.push(Led::<<<C as Chip>::Peripherals as DefaultPeripherals>::Gpio>::get(*led_type, pins.clone()) as Rc<dyn crate::Capsule>),
                 Capsule::Hmac { hmac, length } =>
                     capsules.push(HmacCapsule::get(Rc::clone(hmac), *length) as Rc<dyn crate::Capsule>),
+                Capsule::KvDriver { flash } => {
+                    capsules.push(KvDriver::get(flash.clone()) as Rc<dyn crate::Capsule>);
+                }
                 Capsule::InfoFlash { flash } =>
                     capsules.push(InfoFlash::get(Rc::clone(flash)) as Rc<dyn crate::Capsule>),
                 Capsule::Lldb { uart, baud_rate } => {

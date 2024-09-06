@@ -18,6 +18,7 @@ pub(crate) mod gpio;
 pub(crate) mod hmac;
 pub(crate) mod i2c;
 pub(crate) mod info_flash;
+pub(crate) mod kv_driver;
 pub(crate) mod led;
 pub(crate) mod lldb;
 pub(crate) mod lsm303agr;
