@@ -82,6 +82,7 @@ impl parse::DefaultPeripherals for Peripherals {
     type Hmac = parse::NoSupport;
     type Aes = parse::NoSupport;
     type Pattgen = parse::NoSupport;
+    type SystemResetController = parse::NoSupport;
 
     fn uart(&self) -> Result<&[Rc<Self::Uart>], parse::Error> {
         Ok(&self.uart)

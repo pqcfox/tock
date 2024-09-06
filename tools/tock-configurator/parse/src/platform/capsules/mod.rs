@@ -59,3 +59,7 @@ pub use kv_driver::KvDriver;
 // Avoid name conflicts
 mod pattgen;
 pub use pattgen::PattgenCapsule;
+
+// Avoid name conflicts
+mod system_reset_controller;
+pub use system_reset_controller::SystemResetControllerCapsule;

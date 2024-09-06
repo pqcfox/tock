@@ -360,6 +360,15 @@ pub(crate) fn on_capsule_submit<C: Chip + 'static + serde::ser::Serialize>(
             };
             push_layer::<_, C>(siv, crate::capsule::pattgen::config::<C>(chip, previous_state))
         }
+        config::Index::SYSTEM_RESET_CONTROLLER => {
+            let previous_state = match data.platform.capsule(submit) {
+                Some(config::Capsule::SystemResetController { system_reset_controller }) => {
+                    Some(system_reset_controller.clone())
+                }
+                _ => None,
+            };
+            push_layer::<_, C>(siv, crate::capsule::system_reset_controller::config::<C>(chip, previous_state))
+        }
         _ => unreachable!(),
     }
 }

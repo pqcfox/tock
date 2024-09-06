@@ -25,6 +25,7 @@ pub(crate) mod lsm303agr;
 pub(crate) mod pattgen;
 pub(crate) mod rng;
 pub(crate) mod spi;
+pub(crate) mod system_reset_controller;
 pub(crate) mod temperature;
 
 pub trait ConfigMenu: std::fmt::Debug {

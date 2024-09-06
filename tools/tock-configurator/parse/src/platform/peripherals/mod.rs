@@ -46,3 +46,6 @@ pub use aes::*;
 
 pub mod pattgen;
 pub use pattgen::*;
+
+pub mod system_reset_controller;
+pub use system_reset_controller::*;

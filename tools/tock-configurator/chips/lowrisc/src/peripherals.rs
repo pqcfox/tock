@@ -13,6 +13,7 @@ pub struct Peripherals {
     pattgens: [Rc<crate::pattgen::Pattgen>; 1],
     rngs: [Rc<crate::rng::CsRng>; 1],
     spis: [Rc<crate::spi::SpiHost>; 1],
+    system_reset_controllers: [Rc<crate::system_reset_controller::SystemResetController>; 1],
     timers: [Rc<crate::timer::RvTimer>; 1],
     uarts: [Rc<crate::uart::Uart>; 1],
 }
@@ -28,6 +29,7 @@ impl Peripherals {
             i2cs: [Rc::new(crate::i2c::I2c::new())],
             pattgens: [Rc::new(crate::pattgen::Pattgen::new())],
             rngs: [Rc::new(crate::rng::CsRng::new())],
+            system_reset_controllers: [Rc::new(crate::system_reset_controller::SystemResetController::new())],
             spis: [Rc::new(crate::spi::SpiHost::new())],
             timers: [Rc::new(crate::timer::RvTimer::new())],
             uarts: [Rc::new(crate::uart::Uart::new())],
@@ -78,6 +80,7 @@ impl parse::DefaultPeripherals for Peripherals {
     type Hmac = crate::hmac::Hmac;
     type Aes = crate::aes::Aes;
     type Pattgen = crate::pattgen::Pattgen;
+    type SystemResetController = crate::system_reset_controller::SystemResetController;
 
     fn aes(&self) -> Result<&[Rc<Self::Aes>], parse::Error> {
         Ok(&self.aes)
@@ -109,6 +112,10 @@ impl parse::DefaultPeripherals for Peripherals {
 
     fn spi(&self) -> Result<&[Rc<Self::Spi>], parse::Error> {
         Ok(&self.spis)
+    }
+
+    fn system_reset_controller(&self) -> Result<&[Rc<Self::SystemResetController>], parse::Error> {
+        Ok(&self.system_reset_controllers)
     }
 
     fn timer(&self) -> Result<&[Rc<Self::Timer>], parse::Error> {

@@ -10,6 +10,7 @@ mod pattgen;
 mod peripherals;
 mod rng;
 mod spi;
+mod system_reset_controller;
 mod timer;
 mod uart;
 

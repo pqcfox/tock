@@ -6,7 +6,8 @@
 // Author: Darius Jipa <darius.jipa@oxidos.io>
 
 use super::{
-    ble::BleAdvertisement, gpio::Gpio, timer::Timer, uart::Uart, Flash, I2c, Rng, Spi, Temperature, Hmac, Aes, Pattgen
+    ble::BleAdvertisement, gpio::Gpio, timer::Timer, uart::Uart, Flash, I2c, Rng, Spi,
+    Temperature, Hmac, Aes, Pattgen, SystemResetController
 };
 use crate::Component;
 use std::rc::Rc;
@@ -42,6 +43,7 @@ pub trait DefaultPeripherals: Component {
     type Hmac: Hmac + for<'de> serde::Deserialize<'de> + serde::Serialize + 'static;
     type Aes: Aes + for<'de> serde::Deserialize<'de> + serde::Serialize + 'static;
     type Pattgen: Pattgen + for<'de> serde::Deserialize<'de> + serde::Serialize + 'static;
+    type SystemResetController: SystemResetController + for<'de> serde::Deserialize<'de> + serde::Serialize + 'static;
 
     /// Return an array slice of pointers to the `Gpio` peripherals or a [`crate::Error`]
     /// if the peripheral is non-existent.
@@ -106,6 +108,10 @@ pub trait DefaultPeripherals: Component {
     }
 
     fn pattgen(&self) -> Result<&[Rc<Self::Pattgen>], crate::Error> {
+        Err(crate::Error::NoSupport)
+    }
+
+    fn system_reset_controller(&self) -> Result<&[Rc<Self::SystemResetController>], crate::Error> {
         Err(crate::Error::NoSupport)
     }
 }
