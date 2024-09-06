@@ -1,6 +1,5 @@
 use crate::{peripherals::aes, Capsule, Component};
 use parse_macros::component;
-use quote::quote;
 use std::rc::Rc;
 
 #[component(curr, ident = "aes")]

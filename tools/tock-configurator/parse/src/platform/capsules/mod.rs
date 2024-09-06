@@ -55,3 +55,7 @@ pub use aes::AesCapsule;
 // Avoid name conflicts
 mod kv_driver;
 pub use kv_driver::KvDriver;
+
+// Avoid name conflicts
+mod pattgen;
+pub use pattgen::PattgenCapsule;

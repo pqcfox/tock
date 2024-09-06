@@ -22,6 +22,7 @@ pub(crate) mod kv_driver;
 pub(crate) mod led;
 pub(crate) mod lldb;
 pub(crate) mod lsm303agr;
+pub(crate) mod pattgen;
 pub(crate) mod rng;
 pub(crate) mod spi;
 pub(crate) mod temperature;

@@ -12,7 +12,7 @@ use crate::config::{Capsule, Configuration};
 use crate::{
     AlarmDriver, Console, Led, MuxAlarm, MuxUart, RngCapsule,
     TemperatureCapsule, SpiCapsule, I2CMasterDriver, GPIO, HmacCapsule,
-    InfoFlash, Lldb, AesCapsule, KvDriver,
+    InfoFlash, Lldb, AesCapsule, KvDriver, PattgenCapsule,
 };
 use crate::{Chip, DefaultPeripherals, Platform, Scheduler};
 
@@ -73,6 +73,9 @@ impl<C: Chip> Context<C> {
                 }
                 Capsule::Aes { aes, number_of_blocks } => {
                     capsules.push(AesCapsule::get(aes.clone(), *number_of_blocks) as Rc<dyn crate::Capsule>);
+                }
+                Capsule::Pattgen { pattgen } => {
+                    capsules.push(PattgenCapsule::get(pattgen.clone()) as Rc<dyn crate::Capsule>);
                 }
                 _ => {}
             };

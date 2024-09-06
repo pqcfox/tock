@@ -6,6 +6,7 @@ mod flash;
 mod gpio;
 mod hmac;
 mod i2c;
+mod pattgen;
 mod peripherals;
 mod rng;
 mod spi;

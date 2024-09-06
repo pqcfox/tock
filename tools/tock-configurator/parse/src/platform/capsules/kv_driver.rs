@@ -1,5 +1,5 @@
 use crate::peripherals::flash::{self, Page};
-use crate::{Capsule, Component, Ident as _};
+use crate::{Capsule, Component};
 use parse_macros::component;
 use std::rc::Rc;
 

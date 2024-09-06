@@ -351,6 +351,15 @@ pub(crate) fn on_capsule_submit<C: Chip + 'static + serde::ser::Serialize>(
         config::Index::KV_DRIVER => {
             push_layer::<_, C>(siv, crate::capsule::kv_driver::KvDriverConfig::config(chip))
         }
+        config::Index::PATTGEN => {
+            let previous_state = match data.platform.capsule(submit) {
+                Some(config::Capsule::Pattgen { pattgen }) => {
+                    Some(pattgen.clone())
+                }
+                _ => None,
+            };
+            push_layer::<_, C>(siv, crate::capsule::pattgen::config::<C>(chip, previous_state))
+        }
         _ => unreachable!(),
     }
 }

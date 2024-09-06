@@ -43,3 +43,6 @@ pub use hmac::*;
 
 pub mod aes;
 pub use aes::*;
+
+pub mod pattgen;
+pub use pattgen::*;

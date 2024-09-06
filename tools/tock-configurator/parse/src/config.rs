@@ -41,6 +41,7 @@ capsules_config!(
         KV_DRIVER => KvDriver { flash: Rc<P::Flash> },
         INFO_FLASH => InfoFlash { flash: Rc<P::Flash> },
         AES => Aes { aes: Rc<P::Aes>, number_of_blocks: usize },
+        PATTGEN => Pattgen { pattgen: Rc<P::Pattgen> },
     }
 );
 
@@ -189,6 +190,10 @@ impl<P: DefaultPeripherals> Configuration<P> {
         self.capsules.insert(Index::KV_DRIVER, Capsule::KvDriver { flash });
     }
 
+    pub fn update_pattgen(&mut self, pattgen: Rc<P::Pattgen>) {
+        self.capsules.insert(Index::PATTGEN, Capsule::Pattgen { pattgen });
+    }
+
     /// Update the scheduler configuration.
     pub fn update_scheduler(&mut self, scheduler_type: SchedulerType) {
         self.scheduler = scheduler_type;
@@ -283,5 +288,9 @@ impl<P: DefaultPeripherals> Configuration<P> {
 
     pub fn remove_kv_driver(&mut self) {
         self.capsules.remove(&Index::KV_DRIVER);
+    }
+
+    pub fn remove_pattgen(&mut self) {
+        self.capsules.remove(&Index::PATTGEN);
     }
 }

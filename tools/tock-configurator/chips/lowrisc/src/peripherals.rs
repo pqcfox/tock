@@ -10,6 +10,7 @@ pub struct Peripherals {
     gpios: [Rc<crate::gpio::GpioPort>; 1],
     hmacs: [Rc<crate::hmac::Hmac>; 1],
     i2cs: [Rc<crate::i2c::I2c>; 1],
+    pattgens: [Rc<crate::pattgen::Pattgen>; 1],
     rngs: [Rc<crate::rng::CsRng>; 1],
     spis: [Rc<crate::spi::SpiHost>; 1],
     timers: [Rc<crate::timer::RvTimer>; 1],
@@ -25,6 +26,7 @@ impl Peripherals {
             gpios: [Rc::new(crate::gpio::GpioPort::new())],
             hmacs: [Rc::new(crate::hmac::Hmac::new())],
             i2cs: [Rc::new(crate::i2c::I2c::new())],
+            pattgens: [Rc::new(crate::pattgen::Pattgen::new())],
             rngs: [Rc::new(crate::rng::CsRng::new())],
             spis: [Rc::new(crate::spi::SpiHost::new())],
             timers: [Rc::new(crate::timer::RvTimer::new())],
@@ -75,6 +77,7 @@ impl parse::DefaultPeripherals for Peripherals {
     type Rng = crate::rng::CsRng;
     type Hmac = crate::hmac::Hmac;
     type Aes = crate::aes::Aes;
+    type Pattgen = crate::pattgen::Pattgen;
 
     fn aes(&self) -> Result<&[Rc<Self::Aes>], parse::Error> {
         Ok(&self.aes)
@@ -94,6 +97,10 @@ impl parse::DefaultPeripherals for Peripherals {
 
     fn i2c(&self) -> Result<&[Rc<Self::I2c>], parse::Error> {
         Ok(&self.i2cs)
+    }
+
+    fn pattgen(&self) -> Result<&[Rc<Self::Pattgen>], parse::Error> {
+        Ok(&self.pattgens)
     }
 
     fn rng(&self) -> Result<&[Rc<Self::Rng>], parse::Error> {
