@@ -62,7 +62,8 @@ impl parse::Ident for PinIds {
     }
 }
 
-impl parse::Component for PinIds {}
+impl parse::Component for PinIds {
+}
 
 impl std::fmt::Display for PinIds {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

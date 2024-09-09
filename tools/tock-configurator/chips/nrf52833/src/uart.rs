@@ -8,12 +8,12 @@
 use parse::{constants::PERIPHERALS, peripheral, Ident};
 use quote::quote;
 
-#[derive(serde::Serialize, serde::Deserialize, Debug, PartialEq)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, PartialEq, Clone)]
 pub enum UartType {
     Uart0,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 #[peripheral(serde, ident = ".nrf52.uarte0")]
 pub struct Uart(UartType);
 
@@ -35,6 +35,7 @@ impl parse::Component for Uart {
            );
         })
     }
+
 }
 
 impl parse::Uart for Uart {}

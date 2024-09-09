@@ -18,6 +18,7 @@ impl parse::Component for SystemResetController {
     fn ty(&self) -> Result<proc_macro2::TokenStream, parse::Error> {
         Ok(quote::quote!(lowrisc::sysrst_ctrl::SysRstCtrl<'static>))
     }
+
 }
 
 impl std::fmt::Display for SystemResetController {

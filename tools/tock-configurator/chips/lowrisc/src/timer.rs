@@ -18,6 +18,7 @@ impl parse::Component for RvTimer {
     fn ty(&self) -> Result<proc_macro2::TokenStream, parse::Error> {
         Ok(quote::quote!(earlgrey::timer::RvTimer<'static, ChipConfig>))
     }
+
 }
 
 impl parse::peripherals::Timer for RvTimer {

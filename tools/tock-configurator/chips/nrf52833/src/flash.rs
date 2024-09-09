@@ -19,7 +19,9 @@ pub enum FlashType {
 #[peripheral(serde, ident = "flash")]
 pub struct Flash(FlashType);
 
-impl parse::Component for Flash {}
+impl parse::Component for Flash {
+}
+
 impl parse::Flash for Flash {
     type Page = parse::NoSupport;
 

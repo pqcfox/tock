@@ -22,6 +22,7 @@ impl parse::Component for Rng {
     fn ty(&self) -> Result<proc_macro2::TokenStream, parse::Error> {
         Ok(quote!(nrf52833::trng::Trng<'static>))
     }
+
 }
 
 impl parse::Rng for Rng {}

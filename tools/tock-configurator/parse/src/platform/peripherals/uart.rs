@@ -11,7 +11,7 @@ use std::rc::Rc;
 
 /// The [`Uart`] trait applies to devices that implement the Uart-related traits defined in
 /// Tock's HIL.
-pub trait Uart: Component + std::fmt::Debug + PartialEq + std::fmt::Display {}
+pub trait Uart: Component + std::fmt::Debug + PartialEq + std::fmt::Display + Clone {}
 
 /// Virtual multiplexed UART. Required by the `Console` capsule.
 #[parse_macros::component(curr, ident = "mux_uart")]
@@ -38,11 +38,12 @@ impl<U: Uart + 'static> MuxUart<U> {
     ) -> Rc<Self> {
         // Iterate over the existing nodes.
         for node in visited.iter() {
+            use std::any::Any;
             // Check if the node is of the `MuxUart` type.
-            if let Ok(mux_uart) = node.clone().downcast::<MuxUart<U>>() {
+            if let Some(mux_uart) = node.clone().as_ref().as_any().downcast_ref::<MuxUart<U>>() {
                 if mux_uart.uart() == peripheral && baud_rate == mux_uart.baud_rate() {
                     // If a mux uart with the same fields exists, return it.
-                    return mux_uart;
+                    return Rc::new(mux_uart.clone());
                 }
             }
         }

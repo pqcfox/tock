@@ -146,6 +146,7 @@ fn define_struct(
             quote! {
             #derive_default
             #derive_serde
+            #[derive(Clone)]
             #struct_vis struct #struct_ty #struct_generics {
                 #(#fields,)*
                 #serde_skip

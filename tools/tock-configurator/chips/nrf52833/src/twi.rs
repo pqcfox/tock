@@ -15,7 +15,9 @@ use parse::peripheral;
 pub struct Twi {}
 
 impl parse::I2c for Twi {}
-impl parse::Component for Twi {}
+
+impl parse::Component for Twi {
+}
 
 impl std::fmt::Display for Twi {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

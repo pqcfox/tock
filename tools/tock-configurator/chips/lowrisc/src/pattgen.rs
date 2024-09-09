@@ -18,6 +18,7 @@ impl parse::Component for Pattgen {
     fn ty(&self) -> Result<proc_macro2::TokenStream, parse::Error> {
         Ok(quote::quote!(lowrisc::pattgen::PattGen<'static>))
     }
+
 }
 
 impl std::fmt::Display for Pattgen {

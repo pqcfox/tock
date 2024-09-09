@@ -10,6 +10,7 @@ impl parse::Component for FlashPage {
     fn ty(&self) -> Result<proc_macro2::TokenStream, parse::Error> {
         Ok(quote::quote!(earlgrey::flash_ctrl::RawFlashCtrlPage))
     }
+
 }
 
 impl parse::flash::Page for FlashPage {
@@ -38,6 +39,7 @@ impl parse::Component for FlashCtrl {
     fn ty(&self) -> Result<proc_macro2::TokenStream, parse::Error> {
         Ok(quote::quote!(earlgrey::flash_ctrl::FlashCtrl<'static>))
     }
+
 }
 
 impl std::fmt::Display for FlashCtrl {

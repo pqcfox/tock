@@ -43,6 +43,7 @@ impl parse::Component for PinId {
     fn init_expr(&self) -> Result<proc_macro2::TokenStream, parse::Error> {
         todo!()
     }
+
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
@@ -65,6 +66,7 @@ impl parse::Component for GpioPort {
     fn ty(&self) -> Result<proc_macro2::TokenStream, parse::Error> {
         Ok(quote::quote!(earlgrey::gpio::Port<'static>))
     }
+
 }
 
 impl std::fmt::Display for GpioPort {

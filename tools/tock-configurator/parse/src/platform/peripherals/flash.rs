@@ -25,6 +25,7 @@ pub trait Flash: Component + std::fmt::Display {
     fn page() -> Self::Page;
     fn pages_per_bank() -> proc_macro2::TokenStream;
 }
+
 impl Flash for NoSupport {
     type Page = NoSupport;
 

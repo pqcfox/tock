@@ -18,6 +18,7 @@ impl parse::Component for I2c {
     fn ty(&self) -> Result<proc_macro2::TokenStream, parse::Error> {
         Ok(quote::quote!(lowrisc::i2c::I2c<'static>))
     }
+
 }
 
 impl std::fmt::Display for I2c {

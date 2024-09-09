@@ -72,12 +72,22 @@ impl<P: crate::DefaultPeripherals> Ident for P {
     }
 }
 
+pub trait AsAny {
+    fn as_any(&self) -> &dyn Any;
+}
+
+impl<T: Sized + 'static> AsAny for T {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
 /// A trait for objects that define variables from a function in the platform's main.
 ///
 /// Besides the [`Ident`] implementation, the *component* can optionally provide the type of the
 /// variable, the code expression that returns a new instance, and the dependencies for the
 /// initialization.
-pub trait Component: Ident + AsComponent {
+pub trait Component: Ident + AsComponent + AsAny {
     /// Return the code for the type of the component if needed, else, return `None`.
     fn ty(&self) -> Result<proc_macro2::TokenStream, crate::Error> {
         Err(crate::Error::CodeNotProvided)
@@ -124,11 +134,12 @@ pub trait Component: Ident + AsComponent {
 // Used for finding types in a list of `Component` trait objects.
 impl dyn Component {
     pub fn is<T: 'static>(&self) -> bool {
+        println!("{:?} {:?}", TypeId::of::<T>(), self.type_id());
         TypeId::of::<T>() == self.type_id()
     }
 
     pub fn downcast<T: 'static>(self: Rc<Self>) -> Result<Rc<T>, Rc<Self>> {
-        if self.is::<T>() {
+        if (&*self).is::<T>() {
             unsafe { Ok(Rc::from_raw(Rc::into_raw(self) as _)) }
         } else {
             Err(self)
