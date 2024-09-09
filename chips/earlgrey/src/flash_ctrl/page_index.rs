@@ -9,7 +9,6 @@ use super::bank::DATA_PAGES_PER_BANK;
 
 use crate::utils;
 
-use core::num::NonZeroUsize;
 use core::num::NonZeroU8;
 
 /// The maximum data page index within a bank

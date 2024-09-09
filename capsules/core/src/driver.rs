@@ -58,6 +58,7 @@ pub enum NUM {
     NvmStorage            = 0x50001,
     SdCard                = 0x50002,
     Kv                    = 0x50003,
+    InfoFlash             = 0x50004,
 
     // Sensors
     Temperature           = 0x60000,
@@ -94,5 +95,9 @@ pub enum NUM {
     KeyboardHid           = 0x90005,
     DateTime              = 0x90007,
     CycleCount            = 0x90008,
+    Pattgen               = 0x90009,
+    ResetManager          = 0x9000A,
+    OpenTitanAlertHandler = 0x9000B,
+    OpenTitanSysRst       = 0x9000C,
 }
 }

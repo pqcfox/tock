@@ -17,7 +17,7 @@ QEMU_ENTRY_POINT=0x20000400
 # earlgrey_es branch. earlgrey_es is what is being taped out in the first
 # Earlgrey chip.
 OPENTITAN_SUPPORTED_SHA := edf5e35f5d50a5377641c90a315109a351de7635
-# Enable virtual function elimination
+# Disable virtual function elimination
 VFUNC_ELIM=1
 
 
@@ -79,6 +79,9 @@ flash-app: $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/$(PLATFORM).elf
 	$(RISC_PREFIX)-objcopy --output-target=binary $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/$(PLATFORM)-app.elf $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/$(PLATFORM)-app.bin
 	$(OPENTITAN_TREE)/bazel-bin/sw/host/opentitantool/opentitantool.runfiles/lowrisc_opentitan/sw/host/opentitantool/opentitantool --interface=cw310 bootstrap $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/$(PLATFORM)-app.bin
 
+flash-debug: $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/debug/$(PLATFORM).bin
+	$(OPENTITAN_TREE)/bazel-out/k8-fastbuild/bin/sw/host/opentitantool/opentitantool.runfiles/lowrisc_opentitan/sw/host/opentitantool/opentitantool bootstrap $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/debug/$(PLATFORM).bin
+
 verilator: $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/$(PLATFORM).elf
 	$(call check_defined, OPENTITAN_TREE)
 #	Make a copy so we dont modify the original elf when linkng apps
@@ -118,3 +121,11 @@ test-verilator: ot-check
 	$(Q)cp test_layout.ld $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/deps/layout.ld
 	$(Q)cp ../../kernel_layout.ld $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/
 	$(Q)RUSTFLAGS="$(RUSTC_FLAGS_TOCK)" VERILATOR="yes" OBJCOPY=$(RISC_PREFIX)-objcopy TOCK_ROOT_DIRECTORY=${TOCK_ROOT_DIRECTORY} TARGET=${TARGET} $(CARGO) test $(CARGO_FLAGS_TOCK) $(NO_RUN) --bin $(PLATFORM) --release --features=hardware_tests,sim_verilator
+
+
+
+remote_flash:  $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/$(PLATFORM).bin
+	scp $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/$(PLATFORM).bin vladr@$(REMOTE_SERV):~/exepack/$(PLATFORM).bin
+	ssh -t vladr@$(REMOTE_SERV) "source /home/vladr/.bashrc; ~/exepack/upload.sh; "
+	ssh -f vladr@$(REMOTE_SERV) "nohup ~/exepack/openocd -f ~/exepack/cw310.cfg > foo.log 2> foo.err < /dev/null &"
+	/tools/riscv/bin/riscv32-unknown-elf-gdb $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/$(PLATFORM).elf -ex "target extended-remote $(REMOTE_SERV):3333"

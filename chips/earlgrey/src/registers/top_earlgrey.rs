@@ -1538,7 +1538,7 @@ pub enum AlertPeripheral {
 ///
 /// Enumeration of all Alert Handler Alert Sources. The alert sources belonging to
 /// the same peripheral are guaranteed to be consecutive.
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
 #[repr(u32)]
 pub enum AlertId {
     /// uart0_fatal_fault

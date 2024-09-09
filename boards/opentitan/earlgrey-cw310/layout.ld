@@ -10,6 +10,11 @@ MEMORY
    */
   prog  (rx)  : ORIGIN = 0x20030000, LENGTH = 0x60000
   fs (r)      : ORIGIN = 0x20090000, LENGTH = 0x70000
+
+  /* Retention sram that survives reset operations */
+  rram_creator(r) : ORIGIN = 0x40600000, LENGTH = 0x800
+  rram_owner  (wx)  : ORIGIN = 0x40600800, LENGTH = 0x800
+
   /* The first 0x650 bytes of RAM are reserved for the boot
    * ROM, so we have to ignore that space.
    * See https://github.com/lowRISC/opentitan/blob/master/sw/device/silicon_creator/lib/base/static_critical.ld
@@ -29,6 +34,10 @@ SECTIONS {
 
     _ssram  = ORIGIN(ram) - 0x650;
     _esram  = ORIGIN(ram) + LENGTH(ram);
+
+
+    .rram_creator (NOLOAD): {} > rram_creator
+    .rram_owner   (NOLOAD): {} > rram_owner
 
     .manifest ORIGIN(rom):
     {
