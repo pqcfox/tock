@@ -47,7 +47,7 @@ use kernel::hil::pattgen::PattGen;
 use kernel::hil::reset_managment::ResetManagment;
 use kernel::hil::rng::Rng;
 use kernel::hil::symmetric_encryption::AES128;
-use kernel::hil::usb::Client;
+use kernel::hil::usb::UsbController;
 use kernel::platform::scheduler_timer::VirtualSchedulerTimer;
 use kernel::platform::{KernelResources, SyscallDriverLookup, TbfHeaderFilterDefaultAllow};
 use kernel::scheduler::priority::PrioritySched;
@@ -249,6 +249,11 @@ struct EarlGrey {
             >,
         >,
     >,
+    usb: &'static capsules_extra::usb::usb_user2::UsbSyscallDriver<
+        'static,
+        lowrisc::usb::Usb<'static>,
+        { lowrisc::usb::MAXIMUM_PACKET_SIZE.get() },
+    >,
     opentitan_sysrst: &'static SystemReset<'static, SysRstCtrl<'static>>,
     syscall_filter: &'static TbfHeaderFilterDefaultAllow,
     scheduler: &'static PrioritySched,
@@ -282,7 +287,7 @@ impl SyscallDriverLookup for EarlGrey {
                 Some(info_flash) => f(Some(info_flash)),
                 None => f(None),
             }
-            //capsules_extra::kv_driver::DRIVER_NUM => f(Some(self.kv_driver)),
+            capsules_extra::usb::usb_user2::DRIVER_NUM => f(Some(self.usb)),
             capsules_extra::pattgen::DRIVER_NUM => f(Some(self.pattgen)),
             capsules_extra::opentitan_alerthandler::DRIVER_NUM => {
                 f(Some(self.opentitan_alerthandler))
@@ -707,6 +712,10 @@ unsafe fn setup() -> (
     // )
     // .finalize(components::usb_component_static!(earlgrey::usbdev::Usb));
 
+    // Uncomment if you want to test the USB client at the kernel level. Don't forget to uncomment
+    // the other USB client a few lines below.
+    /*
+    use kernel::hil::usb::Client;
     let usb_client = static_init!(
         capsules_extra::usb::usbc_client::Client<lowrisc::usb::Usb>,
         capsules_extra::usb::usbc_client::Client::new(&peripherals.usb, 64),
@@ -716,6 +725,36 @@ unsafe fn setup() -> (
     peripherals.usb.set_client(usb_client);
     usb_client.enable();
     usb_client.attach();
+    */
+
+    let usb_client = static_init!(
+        capsules_extra::usb::usb_user2::UsbClient<
+            'static,
+            lowrisc::usb::Usb,
+            { lowrisc::usb::MAXIMUM_PACKET_SIZE.get() },
+        >,
+        capsules_extra::usb::usb_user2::UsbClient::new(
+            &peripherals.usb
+        )
+    );
+
+    peripherals.usb.set_client(usb_client);
+
+    let usb = static_init!(
+        capsules_extra::usb::usb_user2::UsbSyscallDriver<
+            'static,
+            lowrisc::usb::Usb,
+            { lowrisc::usb::MAXIMUM_PACKET_SIZE.get() },
+        >,
+        capsules_extra::usb::usb_user2::UsbSyscallDriver::new(
+            usb_client,
+            board_kernel.create_grant(
+                capsules_extra::usb::usb_user2::DRIVER_NUM,
+                &memory_allocation_cap
+            )
+        ),
+    );
+    usb.init();
 
     // Kernel storage region, allocated with the storage_volume!
     // macro in common/utils.rs
@@ -1059,6 +1098,7 @@ unsafe fn setup() -> (
             i2c_master,
             spi_controller,
             aes,
+            usb,
             kv_driver,
             pattgen,
             syscall_filter,
