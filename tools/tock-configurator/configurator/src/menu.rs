@@ -27,11 +27,9 @@ use state::PinFunction;
 /// Select menu of supported chips.
 pub(crate) fn chip_select() -> cursive::views::SelectView<items::SupportedChip> {
     views::select_menu::<items::SupportedChip, (), String, _>(
-        vec![
-            items::ToMenuItem::to_menu_item(
-                items::SupportedChip::MicroBit
-            ),
-        ],
+        vec![items::ToMenuItem::to_menu_item(
+            items::SupportedChip::MicroBit,
+        )],
         crate::state::on_chip_submit,
     )
 }

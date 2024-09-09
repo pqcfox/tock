@@ -1,3 +1,10 @@
+// Licensed under the Apache License, Version 2.0 or the MIT License.
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+// Copyright OxidOS Automotive SRL 2024
+//
+// Author: Irina Nita <irina.nita@oxidos.io>
+// Author: Darius Jipa <darius.jipa@oxidos.io>
+
 use crate::{peripherals::aes, Capsule, Component};
 use parse_macros::component;
 use std::rc::Rc;
@@ -33,7 +40,8 @@ impl<A: aes::Aes> Component for AesCapsule<A> {
     fn before_init(&self) -> Option<proc_macro2::TokenStream> {
         let number_of_blocks = self.number_of_blocks;
         let peripheral_ty = self.peripheral.ty().unwrap();
-        let peripheral_identifier: proc_macro2::TokenStream = self.peripheral.ident().unwrap().parse().unwrap();
+        let peripheral_identifier: proc_macro2::TokenStream =
+            self.peripheral.ident().unwrap().parse().unwrap();
 
         Some(quote::quote! {
             const CRYPT_SIZE: usize = #number_of_blocks * kernel::hil::symmetric_encryption::AES128_BLOCK_SIZE;

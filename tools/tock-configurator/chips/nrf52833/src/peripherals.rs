@@ -67,7 +67,6 @@ impl parse::Component for Peripherals {
             #ident.init();
         })
     }
-
 }
 
 impl parse::DefaultPeripherals for Peripherals {

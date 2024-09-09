@@ -35,7 +35,6 @@ impl parse::Component for Uart {
            );
         })
     }
-
 }
 
 impl parse::Uart for Uart {}

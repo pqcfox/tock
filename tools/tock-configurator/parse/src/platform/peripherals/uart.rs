@@ -38,7 +38,6 @@ impl<U: Uart + 'static> MuxUart<U> {
     ) -> Rc<Self> {
         // Iterate over the existing nodes.
         for node in visited.iter() {
-            use std::any::Any;
             // Check if the node is of the `MuxUart` type.
             if let Some(mux_uart) = node.clone().as_ref().as_any().downcast_ref::<MuxUart<U>>() {
                 if mux_uart.uart() == peripheral && baud_rate == mux_uart.baud_rate() {

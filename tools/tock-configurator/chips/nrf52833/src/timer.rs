@@ -22,7 +22,6 @@ impl Component for Timer {
     fn ty(&self) -> Result<parse::proc_macro2::TokenStream, parse::Error> {
         Ok(quote!(nrf52::rtc::Rtc<'static>))
     }
-
 }
 
 impl parse::Timer for Timer {

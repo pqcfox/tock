@@ -1,5 +1,12 @@
-use crate::{component, Capsule, Component, Ident};
+// Licensed under the Apache License, Version 2.0 or the MIT License.
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+// Copyright OxidOS Automotive SRL 2024
+//
+// Author: Irina Nita <irina.nita@oxidos.io>
+// Author: Darius Jipa <darius.jipa@oxidos.io>
+
 use crate::platform::peripherals::gpio;
+use crate::{component, Capsule, Component, Ident};
 
 use std::rc::Rc;
 
@@ -27,11 +34,17 @@ impl<G: gpio::Gpio + 'static> Component for GPIO<G> {
         let driver_num = self.driver_num();
         let pin_ty = self.pins[0].ty()?;
 
-        let pin_idents: Vec<proc_macro2::TokenStream> =
-            self.pins.iter().map(|pin| pin.ident().unwrap().parse().unwrap()).collect();
+        let pin_idents: Vec<proc_macro2::TokenStream> = self
+            .pins
+            .iter()
+            .map(|pin| pin.ident().unwrap().parse().unwrap())
+            .collect();
 
-        let pin_maps: Vec<proc_macro2::TokenStream> =
-            pin_idents.iter().enumerate().map(|(index, pin_ident)| quote::quote!(#index => &#pin_ident)).collect();
+        let pin_maps: Vec<proc_macro2::TokenStream> = pin_idents
+            .iter()
+            .enumerate()
+            .map(|(index, pin_ident)| quote::quote!(#index => &#pin_ident))
+            .collect();
 
         Ok(quote::quote!(
             components::gpio::GpioComponent::new(
@@ -45,7 +58,7 @@ impl<G: gpio::Gpio + 'static> Component for GPIO<G> {
             .finalize(components::gpio_component_static!(
                 #pin_ty
             ))
-        )) 
+        ))
     }
 
     fn dependencies(&self) -> Option<Vec<Rc<dyn Component>>> {

@@ -1,3 +1,10 @@
+// Licensed under the Apache License, Version 2.0 or the MIT License.
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+// Copyright OxidOS Automotive SRL 2024
+//
+// Author: Irina Nita <irina.nita@oxidos.io>
+// Author: Darius Jipa <darius.jipa@oxidos.io>
+
 use crate::items::ToMenuItem;
 use crate::menu::{capsule_popup, no_support, pin_list_disabled};
 use crate::state::{on_exit_submit, on_quit_submit, Data, PinFunction};

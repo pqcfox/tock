@@ -22,7 +22,6 @@ impl parse::Component for Temperature {
     fn ty(&self) -> Result<parse::proc_macro2::TokenStream, parse::Error> {
         Ok(quote!(nrf52::temperature::Temp<'static>))
     }
-
 }
 
 impl parse::Temperature for Temperature {}

@@ -19,8 +19,7 @@ pub enum BleType {
 #[peripheral(serde, ident = "ble")]
 pub struct Ble(BleType);
 
-impl parse::Component for Ble {
-}
+impl parse::Component for Ble {}
 
 impl parse::BleAdvertisement for Ble {}
 

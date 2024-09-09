@@ -7,9 +7,9 @@
 
 use parse_macros::capsules_config;
 
+use crate::LedType;
 use crate::{DefaultPeripherals, SchedulerType, SyscallFilterType};
 use crate::{Lsm303AccelDataRate, Lsm303MagnetoDataRate, Lsm303Range, Lsm303Scale};
-use crate::{LedType};
 use std::{collections::HashMap, num::NonZeroUsize, rc::Rc};
 pub type CapsulesConfigurations<P> = HashMap<Index, Capsule<P>>;
 
@@ -164,19 +164,33 @@ impl<P: DefaultPeripherals> Configuration<P> {
     }
 
     pub fn update_led(&mut self, led_type: LedType, pins: Vec<<P::Gpio as crate::Gpio>::PinId>) {
-        self.capsules.insert(Index::LED, Capsule::Led { led_type: led_type, pins });
+        self.capsules.insert(
+            Index::LED,
+            Capsule::Led {
+                led_type: led_type,
+                pins,
+            },
+        );
     }
 
     pub fn update_hmac(&mut self, hmac: Rc<P::Hmac>, length: usize) {
-        self.capsules.insert(Index::HMAC, Capsule::Hmac { hmac, length });
+        self.capsules
+            .insert(Index::HMAC, Capsule::Hmac { hmac, length });
     }
 
     pub fn update_aes(&mut self, aes: Rc<P::Aes>, number_of_blocks: usize) {
-        self.capsules.insert(Index::AES, Capsule::Aes { aes, number_of_blocks });
+        self.capsules.insert(
+            Index::AES,
+            Capsule::Aes {
+                aes,
+                number_of_blocks,
+            },
+        );
     }
 
     pub fn update_kv_driver(&mut self, flash: Rc<P::Flash>) {
-        self.capsules.insert(Index::KV_DRIVER, Capsule::KvDriver { flash });
+        self.capsules
+            .insert(Index::KV_DRIVER, Capsule::KvDriver { flash });
     }
 
     /// Update the scheduler configuration.

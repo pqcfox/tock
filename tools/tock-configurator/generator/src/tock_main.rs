@@ -105,6 +105,14 @@ impl<C: Chip + 'static> TockMain<C> {
         );
 
         Ok(quote! {
+            pub const NUM_PROCS: usize = #process_count;
+            const FAULT_RESPONSE: capsules_system::process_policies::PanicFaultPolicy = capsules_system::process_policies::PanicFaultPolicy {};
+            static mut PROCESSES: [Option<&'static dyn kernel::process::Process>; NUM_PROCS] = [None; NUM_PROCS];
+            static mut PROCESS_PRINTER: Option<
+                &'static capsules_system::process_printer::ProcessPrinterText,
+            > = None;
+            static mut CHIP: Option<&#chip_type> = None;
+
             #[no_mangle]
             #[link_section = ".stack_buffer"]
             pub static mut STACK_MEMORY: [u8; #stack_size] = [0; #stack_size];
@@ -204,7 +212,7 @@ impl<C: Chip + 'static> TockMain<C> {
             struct #board_ty {
                 #(#capsules_identifiers: &'static #capsules_types,)*
                 #scheduler_id: &'static #scheduler_ty,
-                #scheduler_timer_id: &'static #scheduler_timer_type,
+                #scheduler_timer_id: #scheduler_timer_type,
             }
 
             impl SyscallDriverLookup for #board_ty {

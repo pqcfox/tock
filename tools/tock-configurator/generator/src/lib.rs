@@ -8,7 +8,7 @@
 //! A code generator for **TockOS** platforms' `main.rs` files.
 //!
 //! The generator takes as input a *TockOS configuration file* in JSON format,
-//! and generates a `main.rs` board file.  
+//! and generates a `main.rs` board file.
 //!
 //! ## Example
 //! ```rust,ignore

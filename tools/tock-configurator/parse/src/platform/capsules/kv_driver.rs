@@ -1,3 +1,10 @@
+// Licensed under the Apache License, Version 2.0 or the MIT License.
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+// Copyright OxidOS Automotive SRL 2024
+//
+// Author: Irina Nita <irina.nita@oxidos.io>
+// Author: Darius Jipa <darius.jipa@oxidos.io>
+
 use crate::peripherals::flash::{self, Page};
 use crate::{Capsule, Component};
 use parse_macros::component;
@@ -49,28 +56,29 @@ impl<F: flash::Flash> Component for KvDriver<F> {
         let page_ty = F::page().ty().unwrap();
         let page_size = F::Page::size();
         let pages_per_bank = F::pages_per_bank();
-        let peripheral_ident: proc_macro2::TokenStream = self.peripheral.ident().unwrap().parse().unwrap();
+        let peripheral_ident: proc_macro2::TokenStream =
+            self.peripheral.ident().unwrap().parse().unwrap();
         let peripheral_ty = self.peripheral.ty().unwrap();
 
         Some(quote::quote! {
             let flash_ctrl_read_buf = kernel::static_init!(
                 [u8; #page_size],
                 [0; #page_size]
-            );   
+            );
             let page_buffer = kernel::static_init!(
                 #page_ty,
                 #page_ty::default()
-            );   
+            );
 
             let mux_flash = components::flash::FlashMuxComponent::new(&#peripheral_ident).finalize(
                 components::flash_mux_component_static!(#peripheral_ty),
-            );   
+            );
 
             // SipHash
             let sip_hash = kernel::static_init!(
                 capsules_extra::sip_hash::SipHasher24,
                 capsules_extra::sip_hash::SipHasher24::new()
-            );   
+            );
             kernel::deferred_call::DeferredCallClient::register(sip_hash);
 
             // TicKV
@@ -82,7 +90,7 @@ impl<F: flash::Flash> Component for KvDriver<F> {
                 #pages_per_bank * #page_size,
                 flash_ctrl_read_buf, // Buffer used internally in TicKV
                 page_buffer,         // Buffer used with the flash controller
-            )    
+            )
             .finalize(components::tickv_component_static!(
                 #peripheral_ty,
                 capsules_extra::sip_hash::SipHasher24,
@@ -159,7 +167,6 @@ impl<F: flash::Flash> Component for KvDriver<F> {
 
     fn init_expr(&self) -> Result<proc_macro2::TokenStream, crate::Error> {
         let driver_num = self.driver_num();
-        let page_ty = F::page().ty()?;
         let page_size = F::Page::size();
         let peripheral_ty = self.peripheral.ty().unwrap();
 

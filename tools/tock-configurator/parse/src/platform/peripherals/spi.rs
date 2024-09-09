@@ -30,7 +30,8 @@ impl<S: Spi + 'static> Component for MuxSpi<S> {
 
     fn init_expr(&self) -> Result<proc_macro2::TokenStream, crate::Error> {
         let peripheral_type = self.peripheral.ty()?;
-        let peripheral_identifier: proc_macro2::TokenStream = self.peripheral.ident()?.parse().unwrap();
+        let peripheral_identifier: proc_macro2::TokenStream =
+            self.peripheral.ident()?.parse().unwrap();
         Ok(quote::quote!(
             components::spi::SpiMuxComponent::new(&#peripheral_identifier).finalize(
                 components::spi_mux_component_static!(#peripheral_type)

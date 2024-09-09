@@ -24,5 +24,4 @@ impl Component for Systick {
             cortexm4::systick::SysTick::new_with_calibration(64000000)
         })
     }
-
 }

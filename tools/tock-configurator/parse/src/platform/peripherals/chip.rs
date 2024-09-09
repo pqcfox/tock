@@ -6,8 +6,8 @@
 // Author: Darius Jipa <darius.jipa@oxidos.io>
 
 use super::{
-    ble::BleAdvertisement, gpio::Gpio, timer::Timer, uart::Uart, Flash, I2c, Rng, Spi,
-    Temperature, Hmac, Aes
+    ble::BleAdvertisement, gpio::Gpio, timer::Timer, uart::Uart, Aes, Flash, Hmac, I2c, Rng, Spi,
+    Temperature,
 };
 use crate::Component;
 use std::rc::Rc;

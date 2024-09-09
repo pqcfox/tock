@@ -106,19 +106,23 @@ impl<G: gpio::Gpio + 'static> Component for Led<G> {
     fn init_expr(&self) -> Result<proc_macro2::TokenStream, crate::Error> {
         let led_type_ty = self.led_type();
         let base_led_type_ty = self.inner.ty()?;
-        
-        let pin_idents: Vec<proc_macro2::TokenStream> =
-            self.pins.iter().map(|pin| pin.ident().unwrap().parse().unwrap()).collect();
 
-        let pin_maps: Vec<proc_macro2::TokenStream> =
-            pin_idents.iter().map(|pin| quote::quote!(#base_led_type_ty::new(&#pin))).collect();
+        let pin_idents: Vec<proc_macro2::TokenStream> = self
+            .pins
+            .iter()
+            .map(|pin| pin.ident().unwrap().parse().unwrap())
+            .collect();
 
-        Ok(quote::quote!(
-            components::led::LedsComponent::new().finalize(components::led_component_static!(
+        let pin_maps: Vec<proc_macro2::TokenStream> = pin_idents
+            .iter()
+            .map(|pin| quote::quote!(#base_led_type_ty::new(&#pin)))
+            .collect();
+
+        Ok(quote::quote!(components::led::LedsComponent::new()
+            .finalize(components::led_component_static!(
                 #led_type_ty,
                 #(#pin_maps,)*
-            ))
-        ))
+            ))))
     }
 }
 
