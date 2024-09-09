@@ -17,7 +17,6 @@ capsules_config!(
     Index => Capsule<P: crate::DefaultPeripherals>,
     // The keys and values enums for the capsules map.
     {
-        LLDB => Lldb { uart: Rc<P::Uart>, baud_rate: usize },
         CONSOLE => Console { uart: Rc<P::Uart>, baud_rate: usize},
         ALARM => Alarm { timer: Rc<P::Timer> },
         LED => Led { led_type: LedType, pins: Vec<<P::Gpio as crate::Gpio>::PinId> },
@@ -39,11 +38,7 @@ capsules_config!(
         GPIO => Gpio { pins: Vec<<P::Gpio as crate::Gpio>::PinId> },
         HMAC => Hmac { hmac: Rc<P::Hmac>, length: usize },
         KV_DRIVER => KvDriver { flash: Rc<P::Flash> },
-        INFO_FLASH => InfoFlash { flash: Rc<P::Flash> },
         AES => Aes { aes: Rc<P::Aes>, number_of_blocks: usize },
-        PATTGEN => Pattgen { pattgen: Rc<P::Pattgen> },
-        SYSTEM_RESET_CONTROLLER => SystemResetController { system_reset_controller: Rc<P::SystemResetController> },
-        ALERT_HANDLER => AlertHandler { alert_handler: Rc<P::AlertHandler> },
     }
 );
 
@@ -176,32 +171,12 @@ impl<P: DefaultPeripherals> Configuration<P> {
         self.capsules.insert(Index::HMAC, Capsule::Hmac { hmac, length });
     }
 
-    pub fn update_info_flash(&mut self, flash: Rc<P::Flash>) {
-        self.capsules.insert(Index::INFO_FLASH, Capsule::InfoFlash { flash });
-    }
-
-    pub fn update_lldb(&mut self, uart: Rc<P::Uart>, baud_rate: usize) {
-        self.capsules.insert(Index::LLDB, Capsule::Lldb { uart, baud_rate });
-    }
-
     pub fn update_aes(&mut self, aes: Rc<P::Aes>, number_of_blocks: usize) {
         self.capsules.insert(Index::AES, Capsule::Aes { aes, number_of_blocks });
     }
 
     pub fn update_kv_driver(&mut self, flash: Rc<P::Flash>) {
         self.capsules.insert(Index::KV_DRIVER, Capsule::KvDriver { flash });
-    }
-
-    pub fn update_pattgen(&mut self, pattgen: Rc<P::Pattgen>) {
-        self.capsules.insert(Index::PATTGEN, Capsule::Pattgen { pattgen });
-    }
-
-    pub fn update_system_reset_controller(&mut self, system_reset_controller: Rc<P::SystemResetController>) {
-        self.capsules.insert(Index::SYSTEM_RESET_CONTROLLER, Capsule::SystemResetController { system_reset_controller });
-    }
-
-    pub fn update_alert_handler(&mut self, alert_handler: Rc<P::AlertHandler>) {
-        self.capsules.insert(Index::ALERT_HANDLER, Capsule::AlertHandler { alert_handler });
     }
 
     /// Update the scheduler configuration.
@@ -284,31 +259,11 @@ impl<P: DefaultPeripherals> Configuration<P> {
         self.capsules.remove(&Index::HMAC);
     }
 
-    pub fn remove_info_flash(&mut self) {
-        self.capsules.remove(&Index::INFO_FLASH);
-    }
-
-    pub fn remove_lldb(&mut self) {
-        self.capsules.remove(&Index::LLDB);
-    }
-
-    pub fn remove_aes(&mut self) {
-        self.capsules.remove(&Index::AES);
-    }
-
     pub fn remove_kv_driver(&mut self) {
         self.capsules.remove(&Index::KV_DRIVER);
     }
 
-    pub fn remove_pattgen(&mut self) {
-        self.capsules.remove(&Index::PATTGEN);
-    }
-
-    pub fn remove_system_reset_controller(&mut self) {
-        self.capsules.remove(&Index::SYSTEM_RESET_CONTROLLER);
-    }
-
-    pub fn remove_alert_handler(&mut self) {
-        self.capsules.remove(&Index::ALERT_HANDLER);
+    pub fn remove_aes(&mut self) {
+        self.capsules.remove(&Index::AES);
     }
 }

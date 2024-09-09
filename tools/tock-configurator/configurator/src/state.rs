@@ -162,11 +162,6 @@ pub(crate) fn push_layer<
 /// Initialize a board configuration session based on the submitted chip.
 pub(crate) fn on_chip_submit(siv: &mut cursive::Cursive, submit: &items::SupportedChip) {
     match submit {
-        items::SupportedChip::EarlgreyCw310 => {
-            siv.set_user_data::<Data<lowrisc::Chip>>(Data::new(lowrisc::Chip::new()));
-
-            push_layer::<_, lowrisc::Chip>(siv, board_config_menu::<lowrisc::Chip>());
-        }
         items::SupportedChip::MicroBit => {
             // Initial user data.
             siv.set_user_data::<Data<nrf52833::Chip>>(Data::new(nrf52833::Chip::new()));
@@ -339,44 +334,11 @@ pub(crate) fn on_capsule_submit<C: Chip + 'static + serde::ser::Serialize>(
         config::Index::HMAC => {
             push_layer::<_, C>(siv, crate::capsule::hmac::HmacConfig::config(chip))
         }
-        config::Index::INFO_FLASH => {
-            push_layer::<_, C>(siv, crate::capsule::info_flash::InfoFlashConfig::config(chip))
-        }
-        config::Index::LLDB => {
-            push_layer::<_, C>(siv, crate::capsule::lldb::LldbConfig::config(chip))
-        }
         config::Index::AES => {
             push_layer::<_, C>(siv, crate::capsule::aes::AesConfig::config(chip))
         }
         config::Index::KV_DRIVER => {
             push_layer::<_, C>(siv, crate::capsule::kv_driver::KvDriverConfig::config(chip))
-        }
-        config::Index::PATTGEN => {
-            let previous_state = match data.platform.capsule(submit) {
-                Some(config::Capsule::Pattgen { pattgen }) => {
-                    Some(pattgen.clone())
-                }
-                _ => None,
-            };
-            push_layer::<_, C>(siv, crate::capsule::pattgen::config::<C>(chip, previous_state))
-        }
-        config::Index::SYSTEM_RESET_CONTROLLER => {
-            let previous_state = match data.platform.capsule(submit) {
-                Some(config::Capsule::SystemResetController { system_reset_controller }) => {
-                    Some(system_reset_controller.clone())
-                }
-                _ => None,
-            };
-            push_layer::<_, C>(siv, crate::capsule::system_reset_controller::config::<C>(chip, previous_state))
-        }
-        config::Index::ALERT_HANDLER => {
-            let previous_state = match data.platform.capsule(submit) {
-                Some(config::Capsule::AlertHandler { alert_handler }) => {
-                    Some(alert_handler.clone())
-                }
-                _ => None,
-            };
-            push_layer::<_, C>(siv, crate::capsule::alert_handler::config::<C>(chip, previous_state))
         }
         _ => unreachable!(),
     }

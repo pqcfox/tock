@@ -22,4 +22,3 @@ serde = { version = "1.0.197", default-features = false, features = [
 ] }
 # Supported chips
 nrf52833 = { path = "../chips/nrf52833" }
-lowrisc = { path = "../chips/lowrisc" }

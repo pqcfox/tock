@@ -29,9 +29,6 @@ pub(crate) fn chip_select() -> cursive::views::SelectView<items::SupportedChip> 
     views::select_menu::<items::SupportedChip, (), String, _>(
         vec![
             items::ToMenuItem::to_menu_item(
-                items::SupportedChip::EarlgreyCw310
-            ),
-            items::ToMenuItem::to_menu_item(
                 items::SupportedChip::MicroBit
             ),
         ],
@@ -58,13 +55,8 @@ pub(crate) fn capsules_menu<C: Chip + 'static + serde::ser::Serialize>(
                 items::SupportedCapsule::GPIO.to_menu_item(),
                 items::SupportedCapsule::LED.to_menu_item(),
                 items::SupportedCapsule::HMAC.to_menu_item(),
-                items::SupportedCapsule::INFO_FLASH.to_menu_item(),
-                items::SupportedCapsule::LLDB.to_menu_item(),
                 items::SupportedCapsule::AES.to_menu_item(),
                 items::SupportedCapsule::KV_DRIVER.to_menu_item(),
-                items::SupportedCapsule::PATTGEN.to_menu_item(),
-                items::SupportedCapsule::SYSTEM_RESET_CONTROLLER.to_menu_item(),
-                items::SupportedCapsule::ALERT_HANDLER.to_menu_item(),
             ],
             state::on_capsule_submit::<C>,
         ))),

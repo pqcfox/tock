@@ -73,10 +73,6 @@ impl<C: Chip + 'static> TockMain<C> {
             use kernel::platform::{KernelResources, SyscallDriverLookup};
 
             pub mod io;
-            mod otbn;
-            pub mod pinmux_layout;
-            #[cfg(test)]
-            mod tests;
             // use kernel::utilities::registers::interfaces::ReadWriteable as _;
         }
     }
@@ -109,146 +105,9 @@ impl<C: Chip + 'static> TockMain<C> {
         );
 
         Ok(quote! {
-            /// The `earlgrey` chip crate supports multiple targets with slightly different
-            /// configurations, which are encoded through implementations of the
-            /// `earlgrey::chip_config::EarlGreyConfig` trait. This type provides different
-            /// implementations of the `EarlGreyConfig` trait, depending on Cargo's
-            /// conditional compilation feature flags. If no feature is selected,
-            /// compilation will error.
-            pub enum ChipConfig {}
-            #[cfg(feature = "fpga_cw310")]
-            impl earlgrey::chip_config::EarlGreyConfig for ChipConfig {
-                const NAME: &'static str = "fpga_cw310";
-                const CPU_FREQ: u32 = 24_000_000;
-                const PERIPHERAL_FREQ: u32 = 6_000_000;
-                const AON_TIMER_FREQ: u32 = 250_000;
-                const UART_BAUDRATE: u32 = 115200;
-            }
-
-            pub const EPMP_HANDOVER_CONFIG_CHECK: bool = false;
-
-            pub const NUM_PROCS: usize = #process_count;
-            const FAULT_RESPONSE: capsules_system::process_policies::PanicFaultPolicy = capsules_system::process_policies::PanicFaultPolicy {};
-            static mut PROCESSES: [Option<&'static dyn kernel::process::Process>; NUM_PROCS] = [None; NUM_PROCS];
-            static mut PROCESS_PRINTER: Option<&'static capsules_system::process_printer::ProcessPrinterText> = None;
-            static mut CHIP: Option<&'static #chip_type> = None;
-
             #[no_mangle]
             #[link_section = ".stack_buffer"]
             pub static mut STACK_MEMORY: [u8; #stack_size] = [0; #stack_size];
-
-            // These symbols are defined in the linker script.
-            extern "C" {
-                /// Beginning of the ROM region containing app images.
-                static _sapps: u8;
-                /// End of the ROM region containing app images.
-                static _eapps: u8;
-                /// Beginning of the RAM region for app memory.
-                static mut _sappmem: u8;
-                /// End of the RAM region for app memory.
-                static _eappmem: u8;
-                /// The start of the kernel text (Included only for kernel PMP)
-                static _stext: u8;
-                /// The end of the kernel text (Included only for kernel PMP)
-                static _etext: u8;
-                /// The start of the kernel / app / storage flash (Included only for kernel PMP)
-                static _sflash: u8;
-                /// The end of the kernel / app / storage flash (Included only for kernel PMP)
-                static _eflash: u8;
-                /// The start of the kernel / app RAM (Included only for kernel PMP)
-                static _ssram: u8;
-                /// The end of the kernel / app RAM (Included only for kernel PMP)
-                static _esram: u8;
-                /// The start of the OpenTitan manifest
-                static _manifest: u8;
-            }
-
-            const FLASH_TESTS_ENABLED: bool = false;
-
-            fn get_flash_default_memory_protection_region() -> earlgrey::flash_ctrl::DefaultMemoryProtectionRegion {
-                earlgrey::flash_ctrl::DefaultMemoryProtectionRegion::new()
-            }
-
-            fn get_flash_memory_protection_configuration() -> earlgrey::flash_ctrl::MemoryProtectionConfiguration {
-                let flash_default_memory_protection_region = get_flash_default_memory_protection_region();
-
-                if FLASH_TESTS_ENABLED {
-                    let page_index_range =
-                        earlgrey::flash_ctrl::tests::convert_flash_slice_to_page_position_range(unsafe {
-                            core::slice::from_raw_parts(
-                                &_sapps as *const u8,
-                                &_eapps as *const u8 as usize - &_sapps as *const u8 as usize,
-                            )
-                        })
-                        .unwrap();
-
-                    use earlgrey::flash_ctrl::DataMemoryProtectionRegionBase;
-                    use earlgrey::flash_ctrl::DataMemoryProtectionRegionSize;
-
-                    let memory_protection_page0_base =
-                        DataMemoryProtectionRegionBase::new(*page_index_range.end());
-
-                    const RAW_MEMORY_PROTECTION_PAGE0_SIZE: core::num::NonZeroU16 = match core::num::NonZeroU16::new(1) {
-                        Some(non_zero_u16) => non_zero_u16,
-                        None => unreachable!(),
-                    };
-
-                    const MEMORY_PROTECTION_PAGE0_SIZE: DataMemoryProtectionRegionSize =
-                        match DataMemoryProtectionRegionSize::new(RAW_MEMORY_PROTECTION_PAGE0_SIZE) {
-                            Ok(memory_protection_page0_size) => memory_protection_page0_size,
-                            Err(()) => unreachable!(),
-                        };
-
-                    earlgrey::flash_ctrl::MemoryProtectionConfiguration::new(flash_default_memory_protection_region)
-                        .enable_and_configure_data_region(
-                            earlgrey::flash_ctrl::DataMemoryProtectionRegionIndex::Index0,
-                            memory_protection_page0_base,
-                            MEMORY_PROTECTION_PAGE0_SIZE,
-                        )
-                        .enable_erase()
-                        .enable_write()
-                        .enable_read()
-                        .enable_high_endurance()
-                        .finalize_region()
-                        .enable_and_configure_info2_region(
-                            earlgrey::flash_ctrl::tests::VALID_INFO2_MEMORY_PROTECTION_REGION_INDEX,
-                        )
-                        .enable_erase()
-                        .enable_write()
-                        .enable_read()
-                        .enable_high_endurance()
-                        .finalize_region()
-                } else {
-                    // SAFETY: &_stext represents a valid flash address in the host address space.
-                    let starting_address =
-                        earlgrey::flash_ctrl::FlashAddress::new_from_host_address(unsafe { &_stext as *const u8 })
-                            .unwrap();
-                    // SAFETY: &_etext represents a valid flash address in the host address space.
-                    let ending_address =
-                        earlgrey::flash_ctrl::FlashAddress::new_from_host_address(unsafe { &_etext as *const u8 })
-                            .unwrap();
-
-                    // Setup flash memory protection for the kernel
-                    // PANIC: the unwrap panics only if Flash(_stext) < FlashAddress(_etext), which occurs
-                    // only due to a linker script bug.
-                    earlgrey::flash_ctrl::MemoryProtectionConfiguration::new(flash_default_memory_protection_region)
-                        .enable_and_configure_data_region_from_pointers(
-                            earlgrey::flash_ctrl::DataMemoryProtectionRegionIndex::Index0,
-                            starting_address,
-                            ending_address,
-                        )
-                        .unwrap()
-                        .enable_read()
-                        .finalize_region()
-                        .enable_and_configure_info2_region(earlgrey::flash_ctrl::Info2MemoryProtectionRegionIndex::Bank1(
-                            earlgrey::flash_ctrl::Info2PageIndex::Index1,
-                        ))
-                        .enable_read()
-                        .enable_write()
-                        .enable_erase()
-                        .finalize_region()
-                }
-            }
         })
     }
 
