@@ -42,6 +42,7 @@ impl<C: Chip + 'static> crate::Component for Platform<C> {
             .collect::<Vec<_>>();
 
         dependencies.push(self.scheduler.clone());
+        dependencies.push(self.systick.clone());
 
         Some(dependencies)
     }
@@ -54,10 +55,7 @@ impl<C: Chip + 'static> crate::Component for Platform<C> {
     fn init_expr(&self) -> Result<proc_macro2::TokenStream, crate::Error> {
         let ty = self.ty()?;
         let scheduler = format_ident!("{}", self.scheduler.as_ref().ident()?);
-        let (systick_id, systick_init) = (
-            format_ident!("{}", self.systick.as_ref().ident()?),
-            self.systick.init_expr()?,
-        );
+        let systick_id = format_ident!("{}", self.systick.as_ref().ident()?);
         let capsules = self
             .capsules
             .iter()
@@ -68,7 +66,7 @@ impl<C: Chip + 'static> crate::Component for Platform<C> {
             #ty {
                 #(#capsules,)*
                 #scheduler,
-                #systick_id: #systick_init
+                #systick_id,
             }
         })
     }

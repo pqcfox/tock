@@ -1,4 +1,5 @@
 use parse::Chip as _;
+use parse::DefaultPeripherals as _;
 use parse::Ident as _;
 
 use std::rc::Rc;
@@ -7,15 +8,20 @@ use std::rc::Rc;
 pub struct Chip {
     epmp: Rc<crate::epmp::Epmp>,
     peripherals: Rc<crate::peripherals::Peripherals>,
-    scheduler_timer: Rc<parse::DefaultSchedulerTimer>,
+    scheduler_timer: Rc<parse::SchedulerTimer<crate::timer::RvTimer>>,
 }
 
 impl Default for Chip {
     fn default() -> Self {
+        let peripherals = Rc::new(crate::peripherals::Peripherals::new());
+        let timer = peripherals.timer().unwrap()[0].clone();
+        let mux_alarm = Rc::new(parse::MuxAlarm::new(timer));
+        let virtual_mux_alarm = Rc::new(parse::VirtualMuxAlarm::new(mux_alarm));
+
         Self {
             epmp: Rc::new(crate::epmp::Epmp::new()),
-            peripherals: Rc::new(crate::peripherals::Peripherals::new()),
-            scheduler_timer: Rc::new(parse::DefaultSchedulerTimer::new()),
+            peripherals,
+            scheduler_timer: parse::SchedulerTimer::new(virtual_mux_alarm),
         }
     }
 }
@@ -87,7 +93,7 @@ impl parse::Component for Chip {
 
 impl parse::Chip for Chip {
     type Peripherals = crate::peripherals::Peripherals;
-    type Systick = parse::DefaultSchedulerTimer;
+    type Systick = parse::SchedulerTimer<crate::timer::RvTimer>;
 
     fn peripherals(&self) -> Rc<Self::Peripherals> {
         self.peripherals.clone()
