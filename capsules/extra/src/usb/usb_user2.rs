@@ -357,7 +357,7 @@ impl<
         self.grant.enter(owner, |_, kernel_data| {
             kernel_data
                 .get_readonly_processbuffer(ReadOnlyBufferId::Transmit.to_usize())
-                .and_then(|buffer| {
+                .map(|buffer| {
                     let mut transmit_position = self.transmit_position.get();
                     let transmit_length = self.transmit_length.get();
                     let copy_length = core::cmp::min(MAX_PACKET_SIZE, transmit_length - transmit_position);
@@ -366,7 +366,7 @@ impl<
                         // The capsule can't do anything if the upcall fails to be scheduled, so the
                         // result is ignored.
                         let _ = kernel_data.schedule_upcall(UpcallId::Transmit.to_usize(), (transmit_length, 0, 0));
-                        return Ok(usb::InResult::Delay);
+                        return usb::InResult::Delay;
                     }
 
                     if let Err(_) = buffer.enter(|buffer| {
@@ -375,11 +375,11 @@ impl<
                             packet[index].set(byte);
                         }
                     }) {
-                        Ok(usb::InResult::Error)
+                        usb::InResult::Error
                     } else {
                         transmit_position += copy_length;
                         self.transmit_position.set(transmit_position);
-                        Ok(usb::InResult::Packet(copy_length))
+                        usb::InResult::Packet(copy_length)
                     }
                 }).unwrap_or(usb::InResult::Error)
         }).unwrap_or(usb::InResult::Error)
@@ -418,7 +418,7 @@ impl<
         self.grant.enter(owner, |_, kernel_data| {
             kernel_data
                 .get_readwrite_processbuffer(ReadWriteBufferId::Receive.to_usize())
-                .and_then(|buffer| {
+                .map(|buffer| {
                     let mut receive_position = self.receive_position.get();
                     let receive_length = self.receive_length.get();
                     let packet_length = packet.len();
@@ -429,7 +429,7 @@ impl<
                             buffer[receive_position + index].set(byte);
                         }
                     }) {
-                        Ok(usb::OutResult::Error)
+                        usb::OutResult::Error
                     } else {
                         receive_position += copy_length;
                         if receive_position == receive_length {
@@ -437,10 +437,10 @@ impl<
                             // The capsule can't do anything if the upcall fails to be scheduled, so the
                             // result is ignored.
                             let _ = kernel_data.schedule_upcall(UpcallId::Receive.to_usize(), (receive_length, 0, 0));
-                            Ok(usb::OutResult::Delay)
+                            usb::OutResult::Delay
                         } else {
                             self.receive_position.set(receive_position);
-                            Ok(usb::OutResult::Ok)
+                            usb::OutResult::Ok
                         }
                     }
                 }).unwrap_or(usb::OutResult::Error)

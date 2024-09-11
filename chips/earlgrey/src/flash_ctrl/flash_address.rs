@@ -79,7 +79,7 @@ impl FlashAddress {
             let translated_flash_address =
                 host_address as usize - FLASH_HOST_STARTING_ADDRESS_OFFSET.get();
 
-            Self::new(translated_flash_address).map_err(|_| InvalidHostAddressError::TooHigh)
+            Self::new(translated_flash_address).map_err(|()| InvalidHostAddressError::TooHigh)
         }
     }
 

@@ -157,8 +157,7 @@ fn check_page_content(page_content: &[u8; EARLGREY_PAGE_SIZE.get()], message: &s
     // split_at() can panic only for large messages, which is not the case for these test cases
     let (page_content_message_slice, page_content_fill_slice) =
         page_content.split_at(message_length);
-    assert_eq!(
-        true,
+    assert!(
         page_content_message_slice == message.as_bytes(),
         "Expected message {:?}, found {:?}",
         message.as_bytes(),

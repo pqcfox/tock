@@ -180,15 +180,14 @@ impl<const SIZE: usize, const BITS: usize, AlertType: TryFrom<u32>>
                 // flag `i` was not previously handled and now is raised
                 let id = AlertType::try_from(flag_index as u32);
                 // manually unwrap the Option< Id >, otherwise further constraints should have been added on the `AlertType` generic
-                match id {
-                    Err(_) => panic!("Invalid id = {:?} found", flag_index),
-                    Ok(id) => {
+                id.map_or_else(|_| {
+                    panic!("Invalid id = {:?} found", flag_index)
+                }, |id| {
                         // handle the flag
                         f(id);
                         self.set(flag_index);
                         at_least_one_new = true;
-                    }
-                }
+                })
             }
         }
         at_least_one_new

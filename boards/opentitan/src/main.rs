@@ -14,7 +14,7 @@
 #![test_runner(test_runner)]
 #![reexport_test_harness_main = "test_main"]
 
-use core::ptr::{addr_of, addr_of_mut};
+use core::ptr::{addr_of, addr_of_mut, from_ref};
 
 use crate::hil::symmetric_encryption::AES128_BLOCK_SIZE;
 use crate::otbn::OtbnComponent;
@@ -377,8 +377,8 @@ fn get_flash_memory_protection_configuration() -> flash_ctrl::MemoryProtectionCo
         let page_index_range =
             earlgrey::flash_ctrl::tests::convert_flash_slice_to_page_position_range(unsafe {
                 core::slice::from_raw_parts(
-                    &_sapps as *const u8,
-                    &_eapps as *const u8 as usize - &_sapps as *const u8 as usize,
+                    from_ref(&_sapps),
+                    from_ref(&_eapps) as usize - from_ref(&_sapps) as usize,
                 )
             })
             .unwrap();
@@ -422,11 +422,11 @@ fn get_flash_memory_protection_configuration() -> flash_ctrl::MemoryProtectionCo
     } else {
         // SAFETY: &_stext represents a valid flash address in the host address space.
         let starting_address =
-            flash_ctrl::FlashAddress::new_from_host_address(unsafe { &_stext as *const u8 })
+            flash_ctrl::FlashAddress::new_from_host_address(unsafe { from_ref(&_stext) })
                 .unwrap();
         // SAFETY: &_etext represents a valid flash address in the host address space.
         let ending_address =
-            flash_ctrl::FlashAddress::new_from_host_address(unsafe { &_etext as *const u8 })
+            flash_ctrl::FlashAddress::new_from_host_address(unsafe { from_ref(&_etext) })
                 .unwrap();
 
         // Setup flash memory protection for the kernel
@@ -1206,8 +1206,8 @@ fn test_flash(
     let page_index_range =
         earlgrey::flash_ctrl::tests::convert_flash_slice_to_page_position_range(unsafe {
             core::slice::from_raw_parts(
-                &_sapps as *const u8,
-                &_eapps as *const u8 as usize - &_sapps as *const u8 as usize,
+                from_ref(&_sapps),
+                from_ref(&_eapps) as usize - from_ref(&_sapps) as usize,
             )
         })
         .unwrap();

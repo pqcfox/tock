@@ -316,7 +316,7 @@ impl RstMgr {
         let a: u32 = unsafe { core::ptr::read(0x40600004 as *const u32) };
         match TryInto::<RstMgrReason>::try_into(a) {
             Ok(reason) => reason.into(),
-            Err(_) => None,
+            Err(()) => None,
         }
     }
 }

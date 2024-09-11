@@ -307,7 +307,7 @@ impl<'a, Flash: InfoFlashTrait> InfoFlash<'a, Flash> {
     /// The passed raw bank.
     fn convert_command_argument_to_raw_bank(argument1: usize) -> usize {
         // The info partition type is represented by the last 16 bits of the argument
-        (argument1 >> 16) as usize
+        argument1 >> 16
     }
 }
 
