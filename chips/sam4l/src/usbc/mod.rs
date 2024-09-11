@@ -1454,7 +1454,11 @@ impl<'a> hil::usb::UsbController<'a> for Usbc<'a> {
         self._endpoint_bank_set_buffer(EndpointIndex::new(0), BankIndex::Bank0, buf);
     }
 
-    fn endpoint_set_in_buffer(&self, endpoint: usize, buf: &'a [VolatileCell<u8>]) -> Result<(), usb::Error> {
+    fn endpoint_set_in_buffer(
+        &self,
+        endpoint: usize,
+        buf: &'a [VolatileCell<u8>],
+    ) -> Result<(), usb::Error> {
         if buf.len() < 8 {
             client_err!("Bad endpoint buffer size");
         }
@@ -1464,7 +1468,11 @@ impl<'a> hil::usb::UsbController<'a> for Usbc<'a> {
         Ok(())
     }
 
-    fn endpoint_set_out_buffer(&self, endpoint: usize, buf: &'a [VolatileCell<u8>]) -> Result<(), usb::Error> {
+    fn endpoint_set_out_buffer(
+        &self,
+        endpoint: usize,
+        buf: &'a [VolatileCell<u8>],
+    ) -> Result<(), usb::Error> {
         if buf.len() < 8 {
             client_err!("Bad endpoint buffer size");
         }
@@ -1524,7 +1532,11 @@ impl<'a> hil::usb::UsbController<'a> for Usbc<'a> {
         );
     }
 
-    fn endpoint_in_enable(&self, transfer_type: TransferType, endpoint: usize) -> Result<(), usb::Error> {
+    fn endpoint_in_enable(
+        &self,
+        transfer_type: TransferType,
+        endpoint: usize,
+    ) -> Result<(), usb::Error> {
         let endpoint_cfg = match transfer_type {
             TransferType::Control => {
                 panic!("There is no IN control endpoint");
@@ -1543,7 +1555,11 @@ impl<'a> hil::usb::UsbController<'a> for Usbc<'a> {
         Ok(())
     }
 
-    fn endpoint_out_enable(&self, transfer_type: TransferType, endpoint: usize) -> Result<(), usb::Error> {
+    fn endpoint_out_enable(
+        &self,
+        transfer_type: TransferType,
+        endpoint: usize,
+    ) -> Result<(), usb::Error> {
         let endpoint_cfg = match transfer_type {
             TransferType::Control => LocalRegisterCopy::new(From::from(
                 EndpointConfig::EPTYPE::Control
@@ -1565,7 +1581,11 @@ impl<'a> hil::usb::UsbController<'a> for Usbc<'a> {
         Ok(())
     }
 
-    fn endpoint_in_out_enable(&self, _transfer_type: TransferType, _endpoint: usize) -> Result<(), usb::Error> {
+    fn endpoint_in_out_enable(
+        &self,
+        _transfer_type: TransferType,
+        _endpoint: usize,
+    ) -> Result<(), usb::Error> {
         unimplemented!()
     }
 

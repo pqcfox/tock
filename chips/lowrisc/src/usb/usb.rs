@@ -28,7 +28,8 @@ use crate::registers::usbdev_regs::{
 };
 
 use kernel::hil::usb::{
-    self, Client, CtrlInResult, CtrlOutResult, CtrlSetupResult, DeviceSpeed, InResult, OutResult, TransferType, UsbController,
+    self, Client, CtrlInResult, CtrlOutResult, CtrlSetupResult, DeviceSpeed, InResult, OutResult,
+    TransferType, UsbController,
 };
 use kernel::utilities::cells::{OptionalCell, VolatileCell};
 use kernel::utilities::registers::interfaces::{ReadWriteable, Readable, Writeable};
@@ -36,7 +37,7 @@ use kernel::utilities::registers::ReadWrite;
 use kernel::utilities::StaticRef;
 
 use core::cell::Cell;
-use core::num::{NonZeroUsize, NonZeroU16};
+use core::num::{NonZeroU16, NonZeroUsize};
 
 /// Default endpoint index.
 const DEFAULT_ENDPOINT_INDEX: EndpointIndex = EndpointIndex::Endpoint0;
@@ -163,8 +164,7 @@ impl<'a> Usb<'a> {
                 + INTR::RX_PID_ERR::SET
                 + INTR::RX_BITSTUFF_ERR::SET
                 + INTR::FRAME::SET
-                + INTR::POWERED::SET
-                //+ INTR::LINK_OUT_ERR::SET,
+                + INTR::POWERED::SET, //+ INTR::LINK_OUT_ERR::SET,
         );
     }
 
@@ -215,7 +215,9 @@ impl<'a> Usb<'a> {
     /// The endpoint state representation of the transfer type
     fn convert_transfer_type_to_endpoint_state(transfer_type: TransferType) -> EndpointState {
         match transfer_type {
-            TransferType::Control => EndpointState::Ctrl(CtrlEndpointState::Receive(ReceiveCtrlEndpointState::Setup)),
+            TransferType::Control => {
+                EndpointState::Ctrl(CtrlEndpointState::Receive(ReceiveCtrlEndpointState::Setup))
+            }
             TransferType::Bulk => EndpointState::Bulk,
             TransferType::Isochronous => EndpointState::Isochronous,
             TransferType::Interrupt => EndpointState::Interrupt,
@@ -237,7 +239,11 @@ impl<'a> Usb<'a> {
     ///
     /// + ̀`transfer_type`: transfer type used by the endpoint
     /// + ̀`endpoint_index`: the index of the endpoint to be initialized
-    fn initialize_endpoint_state(&self, transfer_type: TransferType, endpoint_index: EndpointIndex) {
+    fn initialize_endpoint_state(
+        &self,
+        transfer_type: TransferType,
+        endpoint_index: EndpointIndex,
+    ) {
         let endpoint = self.get_endpoint(endpoint_index);
         let endpoint_state = Self::convert_transfer_type_to_endpoint_state(transfer_type);
         endpoint.set_state(endpoint_state);
@@ -249,7 +255,11 @@ impl<'a> Usb<'a> {
     ///
     /// + `transfer_type`: the type of IN transfers performed on the given endpoint
     /// + `endpoint_index`: the index of the IN endpoint interface to be enabled.
-    fn internal_endpoint_in_enable(&self, transfer_type: TransferType, endpoint_index: EndpointIndex) {
+    fn internal_endpoint_in_enable(
+        &self,
+        transfer_type: TransferType,
+        endpoint_index: EndpointIndex,
+    ) {
         self.initialize_endpoint_state(transfer_type, endpoint_index);
         self.registers
             .ep_in_enable
@@ -261,7 +271,11 @@ impl<'a> Usb<'a> {
     /// # Parameters:
     ///
     /// + `endpoint_index`: the index of the OUT endpoint interface to be enabled.
-    fn internal_endpoint_out_enable(&self, transfer_type: TransferType, endpoint_index: EndpointIndex) {
+    fn internal_endpoint_out_enable(
+        &self,
+        transfer_type: TransferType,
+        endpoint_index: EndpointIndex,
+    ) {
         self.initialize_endpoint_state(transfer_type, endpoint_index);
         self.registers
             .ep_out_enable
@@ -368,7 +382,8 @@ impl<'a> Usb<'a> {
         for (offset, chunk_index) in chunk_index_iterator.enumerate() {
             let word = self.read_chunk(chunk_index);
             for (byte_index, byte) in word.to_ne_bytes().iter().enumerate() {
-                if let Some(destination_byte) = endpoint_out_buffer.get((offset * WORD_SIZE.get()) + byte_index)
+                if let Some(destination_byte) =
+                    endpoint_out_buffer.get((offset * WORD_SIZE.get()) + byte_index)
                 {
                     destination_byte.set(*byte);
                 }
@@ -393,7 +408,9 @@ impl<'a> Usb<'a> {
             let mut bytes = [0u8; WORD_SIZE.get()];
 
             for (byte_index, byte) in bytes.iter_mut().enumerate() {
-                if let Some(source_byte) = endpoint_in_buffer.get((offset * WORD_SIZE.get()) + byte_index) {
+                if let Some(source_byte) =
+                    endpoint_in_buffer.get((offset * WORD_SIZE.get()) + byte_index)
+                {
                     *byte = source_byte.get();
                 }
             }
@@ -586,7 +603,11 @@ impl<'a> Usb<'a> {
     /// + `setup_packet`: the setup packet containing the request
     /// + `client`: USB client
     /// + ̀`length`: the length of the data stage if any
-    fn handle_class_from_host_request(&self, setup_packet: SetupPacket, length: Option<NonZeroU16>) {
+    fn handle_class_from_host_request(
+        &self,
+        setup_packet: SetupPacket,
+        length: Option<NonZeroU16>,
+    ) {
         let endpoint_index = setup_packet.get_endpoint_index();
         let buffer_index = setup_packet.get_buffer_index();
         let endpoint = self.get_endpoint(endpoint_index);
@@ -597,7 +618,7 @@ impl<'a> Usb<'a> {
                 endpoint.set_state(EndpointState::Ctrl(CtrlEndpointState::Transmit(
                     TransmitCtrlEndpointState::Status,
                 )));
-            },
+            }
             Some(_) => {
                 self.free_buffer(buffer_index);
                 self.fill_available_buffer_fifo();
@@ -620,8 +641,12 @@ impl<'a> Usb<'a> {
         client: &'a dyn Client<'a>,
     ) {
         match class_request {
-            ClassRequest::ToHost(length) => self.handle_class_to_host_request(setup_packet, client, length),
-            ClassRequest::FromHost(length) => self.handle_class_from_host_request(setup_packet, length),
+            ClassRequest::ToHost(length) => {
+                self.handle_class_to_host_request(setup_packet, client, length)
+            }
+            ClassRequest::FromHost(length) => {
+                self.handle_class_from_host_request(setup_packet, length)
+            }
         }
     }
 
@@ -790,7 +815,11 @@ impl<'a> Usb<'a> {
         let buffer_index = out_packet.get_buffer_index();
 
         match packet_size.to_usize() {
-            0 => self.handle_valid_status_receive_control_out_packet(endpoint_index, buffer_index, endpoint),
+            0 => self.handle_valid_status_receive_control_out_packet(
+                endpoint_index,
+                buffer_index,
+                endpoint,
+            ),
             _ => todo!("Retry receiving packet"),
         }
     }
@@ -807,7 +836,11 @@ impl<'a> Usb<'a> {
         self.send_empty_packet(endpoint_index, buffer_index);
     }
 
-    fn handle_data_receive_control_out_packet(&self, out_packet: OutPacket, endpoint: &Endpoint<'a>) {
+    fn handle_data_receive_control_out_packet(
+        &self,
+        out_packet: OutPacket,
+        endpoint: &Endpoint<'a>,
+    ) {
         let endpoint_index = out_packet.get_endpoint_index();
         let packet_size = out_packet.get_size();
         let buffer_index = out_packet.get_buffer_index();
@@ -820,9 +853,11 @@ impl<'a> Usb<'a> {
         self.client.map(|client| {
             // CAST: u32 == usize on RV32I
             match client.ctrl_out(endpoint_index.to_usize(), packet_size.to_usize() as u32) {
-                CtrlOutResult::Ok => {
-                    self.handle_ok_data_receive_control_out_packet(endpoint_index, buffer_index, endpoint)
-                }
+                CtrlOutResult::Ok => self.handle_ok_data_receive_control_out_packet(
+                    endpoint_index,
+                    buffer_index,
+                    endpoint,
+                ),
                 CtrlOutResult::Delay => unimplemented!(),
                 CtrlOutResult::Halted => unimplemented!(),
             }
@@ -890,16 +925,20 @@ impl<'a> Usb<'a> {
     ) {
         self.internal_endpoint_rxdisable_out(endpoint_index);
         self.client.map(|client| {
-            match client.packet_out(TransferType::Bulk, endpoint_index.to_usize(), packet_size.to_usize() as u32) {
+            match client.packet_out(
+                TransferType::Bulk,
+                endpoint_index.to_usize(),
+                packet_size.to_usize() as u32,
+            ) {
                 OutResult::Ok => {
                     self.free_buffer(buffer_index);
                     self.fill_available_buffer_fifo();
                     self.internal_endpoint_rxenable_out(endpoint_index);
-                },
+                }
                 OutResult::Delay => {
                     self.free_buffer(buffer_index);
                     self.fill_available_buffer_fifo();
-                },
+                }
                 OutResult::Error => unimplemented!(),
             }
         });
@@ -912,7 +951,11 @@ impl<'a> Usb<'a> {
         packet_size: PacketSize,
     ) {
         self.client.map(|client| {
-            match client.packet_out(TransferType::Interrupt, endpoint_index.to_usize(), packet_size.to_usize() as u32) {
+            match client.packet_out(
+                TransferType::Interrupt,
+                endpoint_index.to_usize(),
+                packet_size.to_usize() as u32,
+            ) {
                 OutResult::Ok => {
                     self.free_buffer(buffer_index);
                     self.fill_available_buffer_fifo();
@@ -933,7 +976,11 @@ impl<'a> Usb<'a> {
         packet_size: PacketSize,
     ) {
         self.client.map(|client| {
-            match client.packet_out(TransferType::Isochronous, endpoint_index.to_usize(), packet_size.to_usize() as u32) {
+            match client.packet_out(
+                TransferType::Isochronous,
+                endpoint_index.to_usize(),
+                packet_size.to_usize() as u32,
+            ) {
                 OutResult::Ok => {
                     self.free_buffer(buffer_index);
                     self.fill_available_buffer_fifo();
@@ -968,9 +1015,15 @@ impl<'a> Usb<'a> {
             EndpointState::Ctrl(ctrl_state) => {
                 self.handle_control_out_packet(out_packet, ctrl_state, endpoint)
             }
-            EndpointState::Bulk => self.handle_bulk_out_packet(endpoint_index, buffer_index, packet_size),
-            EndpointState::Interrupt => self.handle_interrupt_out_packet(endpoint_index, buffer_index, packet_size),
-            EndpointState::Isochronous => self.handle_isochronous_out_packet(endpoint_index, buffer_index, packet_size),
+            EndpointState::Bulk => {
+                self.handle_bulk_out_packet(endpoint_index, buffer_index, packet_size)
+            }
+            EndpointState::Interrupt => {
+                self.handle_interrupt_out_packet(endpoint_index, buffer_index, packet_size)
+            }
+            EndpointState::Isochronous => {
+                self.handle_isochronous_out_packet(endpoint_index, buffer_index, packet_size)
+            }
         }
     }
 
@@ -1272,12 +1325,7 @@ impl<'a> Usb<'a> {
                     let endpoint_buffer_in = endpoint.get_buffer_in();
 
                     endpoint_buffer_in.map(|buffer_in| {
-                        self.send_packet(
-                            endpoint_index,
-                            buffer_index,
-                            packet_size,
-                            buffer_in,
-                        );
+                        self.send_packet(endpoint_index, buffer_index, packet_size, buffer_in);
                     });
                 }
                 InResult::Delay => {
@@ -1326,7 +1374,12 @@ impl<'a> Usb<'a> {
         }
     }
 
-    fn internal_endpoint_resume_in(&self, endpoint_index: EndpointIndex, packet_size: PacketSize, endpoint: &Endpoint<'a>) {
+    fn internal_endpoint_resume_in(
+        &self,
+        endpoint_index: EndpointIndex,
+        packet_size: PacketSize,
+        endpoint: &Endpoint<'a>,
+    ) {
         let buffer_index = if self.is_transmit_pending(endpoint_index) {
             self.get_transmit_buffer(endpoint_index)
         } else {
@@ -1335,12 +1388,7 @@ impl<'a> Usb<'a> {
         let endpoint_buffer_in = endpoint.get_buffer_in();
 
         endpoint_buffer_in.map(|buffer_in| {
-            self.send_packet(
-                endpoint_index,
-                buffer_index,
-                packet_size,
-                buffer_in
-            );
+            self.send_packet(endpoint_index, buffer_index, packet_size, buffer_in);
         });
     }
 
@@ -1457,7 +1505,9 @@ impl<'a> Usb<'a> {
             let endpoint = self.get_endpoint(endpoint_index);
             let endpoint_state = endpoint.get_state();
 
-            if endpoint_state == EndpointState::Interrupt || endpoint_state == EndpointState::Isochronous {
+            if endpoint_state == EndpointState::Interrupt
+                || endpoint_state == EndpointState::Isochronous
+            {
                 let endpoint_buffer_in = endpoint.get_buffer_in();
 
                 endpoint_buffer_in.map(|buffer_in| {
@@ -1470,7 +1520,8 @@ impl<'a> Usb<'a> {
 
                         match client.packet_in(transfer_type, endpoint_index.to_usize()) {
                             InResult::Packet(raw_packet_size) => {
-                                let packet_size = match PacketSize::try_from_usize(raw_packet_size) {
+                                let packet_size = match PacketSize::try_from_usize(raw_packet_size)
+                                {
                                     Ok(packet_size) => packet_size,
                                     Err(()) => panic!("Invalid packet size {}", raw_packet_size),
                                 };
@@ -1484,7 +1535,7 @@ impl<'a> Usb<'a> {
                                     endpoint_index,
                                     buffer_index,
                                     packet_size,
-                                    buffer_in
+                                    buffer_in,
                                 );
                             }
                             InResult::Delay => unimplemented!(),
@@ -1556,7 +1607,11 @@ impl<'a> UsbController<'a> for Usb<'a> {
         self.set_buffer_out(DEFAULT_ENDPOINT_INDEX, buffer);
     }
 
-    fn endpoint_set_in_buffer(&self, raw_endpoint_index: usize, buffer: &'a [VolatileCell<u8>]) -> Result<(), usb::Error> {
+    fn endpoint_set_in_buffer(
+        &self,
+        raw_endpoint_index: usize,
+        buffer: &'a [VolatileCell<u8>],
+    ) -> Result<(), usb::Error> {
         let endpoint_index = match EndpointIndex::try_from_usize(raw_endpoint_index) {
             Err(()) => {
                 return Err(usb::Error::InvalidEndpoint);
@@ -1569,7 +1624,11 @@ impl<'a> UsbController<'a> for Usb<'a> {
         Ok(())
     }
 
-    fn endpoint_set_out_buffer(&self, raw_endpoint_index: usize, buffer: &'a [VolatileCell<u8>]) -> Result<(), usb::Error> {
+    fn endpoint_set_out_buffer(
+        &self,
+        raw_endpoint_index: usize,
+        buffer: &'a [VolatileCell<u8>],
+    ) -> Result<(), usb::Error> {
         let endpoint_index = match EndpointIndex::try_from_usize(raw_endpoint_index) {
             Err(()) => {
                 return Err(usb::Error::InvalidEndpoint);
@@ -1620,7 +1679,11 @@ impl<'a> UsbController<'a> for Usb<'a> {
             .modify(USBCTRL::DEVICE_ADDRESS.val(usb_address.to_u8() as u32));
     }
 
-    fn endpoint_in_enable(&self, transfer_type: TransferType, raw_endpoint_index: usize) -> Result<(), usb::Error> {
+    fn endpoint_in_enable(
+        &self,
+        transfer_type: TransferType,
+        raw_endpoint_index: usize,
+    ) -> Result<(), usb::Error> {
         let endpoint_index = match EndpointIndex::try_from_usize(raw_endpoint_index) {
             Err(()) => {
                 return Err(usb::Error::InvalidEndpoint);
@@ -1637,7 +1700,11 @@ impl<'a> UsbController<'a> for Usb<'a> {
         Ok(())
     }
 
-    fn endpoint_out_enable(&self, transfer_type: TransferType, raw_endpoint_index: usize) -> Result<(), usb::Error> {
+    fn endpoint_out_enable(
+        &self,
+        transfer_type: TransferType,
+        raw_endpoint_index: usize,
+    ) -> Result<(), usb::Error> {
         let endpoint_index = match EndpointIndex::try_from_usize(raw_endpoint_index) {
             Err(()) => {
                 return Err(usb::Error::InvalidEndpoint);
@@ -1656,7 +1723,11 @@ impl<'a> UsbController<'a> for Usb<'a> {
         Ok(())
     }
 
-    fn endpoint_in_out_enable(&self, transfer_type: TransferType, raw_endpoint_index: usize) -> Result<(), usb::Error> {
+    fn endpoint_in_out_enable(
+        &self,
+        transfer_type: TransferType,
+        raw_endpoint_index: usize,
+    ) -> Result<(), usb::Error> {
         let endpoint_index = match EndpointIndex::try_from_usize(raw_endpoint_index) {
             Err(()) => {
                 return Err(usb::Error::InvalidEndpoint);

@@ -133,7 +133,7 @@ impl AppData {
     /// Configure the pattern
     ///
     /// # Parameters
-    /// 
+    ///
     /// + `bottom_half`: the bottom half of the pattern
     /// + `top_half`: the top half of the pattern
     fn set_pattern(&mut self, bottom_half: u32, top_half: u32) {
@@ -244,8 +244,10 @@ impl<'a, PattGenPeripheral: PattGenHIL<'a>> PattGen<'a, PattGenPeripheral> {
     ///
     /// + Ok((pattern_length, repetition_count)): the extracted pattern length and repetition count
     /// + Err(()): either pattern length or repetition count is wrong
-    fn extract_pattern_length_and_repetition_count(argument1: usize) -> Result<(NonZeroUsize, NonZeroUsize), ()> {
-        let raw_pattern_length = argument1 & 0xFFFF; 
+    fn extract_pattern_length_and_repetition_count(
+        argument1: usize,
+    ) -> Result<(NonZeroUsize, NonZeroUsize), ()> {
+        let raw_pattern_length = argument1 & 0xFFFF;
         let raw_pattern_repetition_count = (argument1 & 0xFFFF0000) >> 16;
 
         let pattern_length = match NonZeroUsize::new(raw_pattern_length) {
@@ -277,7 +279,7 @@ impl<'a, PattGenPeripheral: PattGenHIL<'a>> PattGen<'a, PattGenPeripheral> {
         &self,
         bottom_half: u32,
         top_half: u32,
-        process_id: ProcessId
+        process_id: ProcessId,
     ) -> CommandReturn {
         match self.grant.enter(process_id, |app_data, _| {
             app_data.set_pattern(bottom_half, top_half);
@@ -509,7 +511,7 @@ impl<'a, PattGenPeripheral: PattGenHIL<'a>> PattGen<'a, PattGenPeripheral> {
             Some(owner_id) => {
                 let error_code = match owner_id == process_id {
                     false => ErrorCode::BUSY,
-                    true =>  ErrorCode::ALREADY,
+                    true => ErrorCode::ALREADY,
                 };
 
                 CommandReturn::failure(error_code)
@@ -533,10 +535,8 @@ impl<'a, PattGenPeripheral: PattGenHIL<'a>> PattGen<'a, PattGenPeripheral> {
         for grant in self.grant.iter() {
             if grant.processid() != owner_id {
                 grant.enter(|_, kernel_data| {
-                    let _ = kernel_data.schedule_upcall(
-                        UpcallId::CapsuleUnlocked.to_usize(),
-                        (0, 0, 0)
-                    );
+                    let _ = kernel_data
+                        .schedule_upcall(UpcallId::CapsuleUnlocked.to_usize(), (0, 0, 0));
                 });
             }
         }
@@ -591,12 +591,12 @@ impl<'a, PattGenPeripheral: PattGenHIL<'a>> PattGen<'a, PattGenPeripheral> {
     ///
     /// + Ok(channel): the conversion succeeded
     /// + Err(error): the conversion failed with `error`
-    fn get_channel_from_argument(argument: usize) ->
-        Result<
-            <PattGenPeripheral as PattGenHIL<'a>>::Channel,
-            <<PattGenPeripheral as PattGenHIL<'a>>::Channel as TryFrom<usize>>::Error,
-        >
-    {
+    fn get_channel_from_argument(
+        argument: usize,
+    ) -> Result<
+        <PattGenPeripheral as PattGenHIL<'a>>::Channel,
+        <<PattGenPeripheral as PattGenHIL<'a>>::Channel as TryFrom<usize>>::Error,
+    > {
         <PattGenPeripheral as PattGenHIL<'a>>::Channel::try_from(argument)
     }
 
@@ -609,7 +609,7 @@ impl<'a, PattGenPeripheral: PattGenHIL<'a>> PattGen<'a, PattGenPeripheral> {
     fn schedule_pattgen_done_upcall(
         &self,
         process_id: ProcessId,
-        channel: <PattGenPeripheral as PattGenHIL<'a>>::Channel
+        channel: <PattGenPeripheral as PattGenHIL<'a>>::Channel,
     ) {
         // Ignore any grant errors. There is not much that can be done about that.
         let _ = self.grant.enter(process_id, |_, kernel_data| {

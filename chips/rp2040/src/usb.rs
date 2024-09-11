@@ -2338,7 +2338,11 @@ impl<'a> hil::usb::UsbController<'a> for UsbCtrl<'a> {
         self.descriptors[0].slice_out.set(buf);
     }
 
-    fn endpoint_set_in_buffer(&self, endpoint: usize, buf: &'a [VolatileCell<u8>]) -> Result<(), usb::Error> {
+    fn endpoint_set_in_buffer(
+        &self,
+        endpoint: usize,
+        buf: &'a [VolatileCell<u8>],
+    ) -> Result<(), usb::Error> {
         if buf.len() < 8 {
             panic!("Endpoint buffer must be at least 8 bytes");
         }
@@ -2353,7 +2357,11 @@ impl<'a> hil::usb::UsbController<'a> for UsbCtrl<'a> {
         Ok(())
     }
 
-    fn endpoint_set_out_buffer(&self, endpoint: usize, buf: &'a [VolatileCell<u8>]) -> Result<(), usb::Error> {
+    fn endpoint_set_out_buffer(
+        &self,
+        endpoint: usize,
+        buf: &'a [VolatileCell<u8>],
+    ) -> Result<(), usb::Error> {
         if buf.len() < 8 {
             panic!("Endpoint buffer must be at least 8 bytes");
         }
@@ -2394,7 +2402,11 @@ impl<'a> hil::usb::UsbController<'a> for UsbCtrl<'a> {
             .modify(ADDR_ENDP::ADDRESS.val(self.address.get()));
     }
 
-    fn endpoint_in_enable(&self, transfer_type: TransferType, endpoint: usize) -> Result<(), usb::Error> {
+    fn endpoint_in_enable(
+        &self,
+        transfer_type: TransferType,
+        endpoint: usize,
+    ) -> Result<(), usb::Error> {
         match transfer_type {
             TransferType::Control => {
                 panic!("There is no IN control endpoint");
@@ -2411,7 +2423,11 @@ impl<'a> hil::usb::UsbController<'a> for UsbCtrl<'a> {
         Ok(())
     }
 
-    fn endpoint_out_enable(&self, transfer_type: TransferType, endpoint: usize) -> Result<(), usb::Error> {
+    fn endpoint_out_enable(
+        &self,
+        transfer_type: TransferType,
+        endpoint: usize,
+    ) -> Result<(), usb::Error> {
         match transfer_type {
             TransferType::Control => {
                 if endpoint != 0 {
@@ -2431,7 +2447,11 @@ impl<'a> hil::usb::UsbController<'a> for UsbCtrl<'a> {
         Ok(())
     }
 
-    fn endpoint_in_out_enable(&self, transfer_type: TransferType, endpoint: usize) -> Result<(), usb::Error> {
+    fn endpoint_in_out_enable(
+        &self,
+        transfer_type: TransferType,
+        endpoint: usize,
+    ) -> Result<(), usb::Error> {
         match transfer_type {
             TransferType::Control => {
                 panic!("There is no IN control endpoint");

@@ -7,7 +7,9 @@
 
 //! Endpoint index
 
-use crate::registers::usbdev_regs::{EP_IN_ENABLE, EP_OUT_ENABLE, IN_ISO, OUT_ISO, RXENABLE_OUT, RXENABLE_SETUP};
+use crate::registers::usbdev_regs::{
+    EP_IN_ENABLE, EP_OUT_ENABLE, IN_ISO, OUT_ISO, RXENABLE_OUT, RXENABLE_SETUP,
+};
 
 use kernel::utilities::registers::FieldValue;
 
@@ -190,9 +192,7 @@ impl EndpointIndex {
         }
     }
 
-    pub(super) const fn to_set_in_iso_field_value(
-        self,
-    ) -> FieldValue<u32, IN_ISO::Register> {
+    pub(super) const fn to_set_in_iso_field_value(self) -> FieldValue<u32, IN_ISO::Register> {
         match self {
             EndpointIndex::Endpoint0 => IN_ISO::ISO_0::SET,
             EndpointIndex::Endpoint1 => IN_ISO::ISO_1::SET,
@@ -209,9 +209,7 @@ impl EndpointIndex {
         }
     }
 
-    pub(super) const fn to_set_out_iso_field_value(
-        self,
-    ) -> FieldValue<u32, OUT_ISO::Register> {
+    pub(super) const fn to_set_out_iso_field_value(self) -> FieldValue<u32, OUT_ISO::Register> {
         match self {
             EndpointIndex::Endpoint0 => OUT_ISO::ISO_0::SET,
             EndpointIndex::Endpoint1 => OUT_ISO::ISO_1::SET,

@@ -23,5 +23,5 @@ mod usb_address;
 mod utils;
 
 pub use interrupt::UsbInterrupt;
-pub use usb::Usb;
 pub use packet_size::MAXIMUM_PACKET_SIZE;
+pub use usb::Usb;

@@ -289,7 +289,7 @@ impl SyscallDriverLookup for EarlGrey {
             capsules_extra::info_flash::DRIVER_NUMBER => match self.info_flash {
                 Some(info_flash) => f(Some(info_flash)),
                 None => f(None),
-            }
+            },
             capsules_extra::usb::usb_user2::DRIVER_NUM => f(Some(self.usb)),
             capsules_extra::pattgen::DRIVER_NUM => f(Some(self.pattgen)),
             capsules_extra::opentitan_alerthandler::DRIVER_NUM => {
@@ -420,12 +420,10 @@ fn get_flash_memory_protection_configuration() -> flash_ctrl::MemoryProtectionCo
     } else {
         // SAFETY: &_stext represents a valid flash address in the host address space.
         let starting_address =
-            flash_ctrl::FlashAddress::new_from_host_address(unsafe { from_ref(&_stext) })
-                .unwrap();
+            flash_ctrl::FlashAddress::new_from_host_address(unsafe { from_ref(&_stext) }).unwrap();
         // SAFETY: &_etext represents a valid flash address in the host address space.
         let ending_address =
-            flash_ctrl::FlashAddress::new_from_host_address(unsafe { from_ref(&_etext) })
-                .unwrap();
+            flash_ctrl::FlashAddress::new_from_host_address(unsafe { from_ref(&_etext) }).unwrap();
 
         // Setup flash memory protection for the kernel
         // PANIC: the unwrap panics only if Flash(_stext) < FlashAddress(_etext), which occurs
@@ -738,9 +736,7 @@ unsafe fn setup() -> (
             lowrisc::usb::Usb,
             { lowrisc::usb::MAXIMUM_PACKET_SIZE.get() },
         >,
-        capsules_extra::usb::usb_user2::UsbClient::new(
-            &peripherals.usb
-        )
+        capsules_extra::usb::usb_user2::UsbClient::new(&peripherals.usb)
     );
 
     peripherals.usb.set_client(usb_client);
