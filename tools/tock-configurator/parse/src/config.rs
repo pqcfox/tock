@@ -39,6 +39,10 @@ capsules_config!(
         HMAC => Hmac { hmac: Rc<P::Hmac>, length: usize },
         KV_DRIVER => KvDriver { flash: Rc<P::Flash> },
         AES => Aes { aes: Rc<P::Aes>, number_of_blocks: usize },
+        PATTGEN => Pattgen { pattgen: Rc<P::Pattgen> },
+        SYSTEM_RESET_CONTROLLER => SystemResetController { system_reset_controller: Rc<P::SystemResetController> },
+        ALERT_HANDLER => AlertHandler { alert_handler: Rc<P::AlertHandler> },
+        USB => Usb { usb: Rc<P::Usb> },
     }
 );
 
@@ -193,6 +197,10 @@ impl<P: DefaultPeripherals> Configuration<P> {
             .insert(Index::KV_DRIVER, Capsule::KvDriver { flash });
     }
 
+    pub fn update_usb(&mut self, usb: Rc<P::Usb>) {
+        self.capsules.insert(Index::USB, Capsule::Usb { usb });
+    }
+
     /// Update the scheduler configuration.
     pub fn update_scheduler(&mut self, scheduler_type: SchedulerType) {
         self.scheduler = scheduler_type;
@@ -279,5 +287,25 @@ impl<P: DefaultPeripherals> Configuration<P> {
 
     pub fn remove_aes(&mut self) {
         self.capsules.remove(&Index::AES);
+    }
+
+    pub fn remove_kv_driver(&mut self) {
+        self.capsules.remove(&Index::KV_DRIVER);
+    }
+
+    pub fn remove_pattgen(&mut self) {
+        self.capsules.remove(&Index::PATTGEN);
+    }
+
+    pub fn remove_system_reset_controller(&mut self) {
+        self.capsules.remove(&Index::SYSTEM_RESET_CONTROLLER);
+    }
+
+    pub fn remove_alert_handler(&mut self) {
+        self.capsules.remove(&Index::ALERT_HANDLER);
+    }
+
+    pub fn remove_usb(&mut self) {
+        self.capsules.remove(&Index::USB);
     }
 }

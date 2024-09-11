@@ -23,6 +23,7 @@ pub(crate) mod lsm303agr;
 pub(crate) mod rng;
 pub(crate) mod spi;
 pub(crate) mod temperature;
+pub(crate) mod usb;
 
 pub trait ConfigMenu: std::fmt::Debug {
     fn config<C: Chip + 'static + serde::ser::Serialize>(chip: Rc<C>) -> LinearLayout;

@@ -48,3 +48,19 @@ pub use aes::AesCapsule;
 // Avoid name conflicts
 mod kv_driver;
 pub use kv_driver::KvDriver;
+
+// Avoid name conflicts
+mod pattgen;
+pub use pattgen::PattgenCapsule;
+
+// Avoid name conflicts
+mod system_reset_controller;
+pub use system_reset_controller::SystemResetControllerCapsule;
+
+// Avoid name conflicts
+mod alert_handler;
+pub use alert_handler::AlertHandlerCapsule;
+
+// Avoid name conflicts
+mod usb;
+pub use usb::UsbCapsule;

@@ -6,8 +6,9 @@
 // Author: Darius Jipa <darius.jipa@oxidos.io>
 
 use super::{
-    ble::BleAdvertisement, gpio::Gpio, timer::Timer, uart::Uart, Aes, Flash, Hmac, I2c, Rng, Spi,
-    Temperature,
+    aes::Aes, ble::BleAdvertisement, gpio::Gpio, timer::Timer, uart::Uart, Flash, Hmac, I2c, Rng, Spi,
+    Temperature, alert_handler::AlertHandler, system_reset_controller::SystemResetController, pattgen::Pattgen,
+    usb::Usb,
 };
 use crate::Component;
 use std::rc::Rc;
@@ -42,6 +43,10 @@ pub trait DefaultPeripherals: Component {
     type Rng: Rng + for<'de> serde::Deserialize<'de> + serde::Serialize + 'static;
     type Hmac: Hmac + for<'de> serde::Deserialize<'de> + serde::Serialize + 'static;
     type Aes: Aes + for<'de> serde::Deserialize<'de> + serde::Serialize + 'static;
+    type Pattgen: Pattgen + for<'de> serde::Deserialize<'de> + serde::Serialize + 'static;
+    type SystemResetController: SystemResetController + for<'de> serde::Deserialize<'de> + serde::Serialize + 'static;
+    type AlertHandler: AlertHandler + for<'de> serde::Deserialize<'de> + serde::Serialize + 'static;
+    type Usb: Usb + for<'de> serde::Deserialize<'de> + serde::Serialize + 'static;
 
     /// Return an array slice of pointers to the `Gpio` peripherals or a [`crate::Error`]
     /// if the peripheral is non-existent.
@@ -102,6 +107,22 @@ pub trait DefaultPeripherals: Component {
     }
 
     fn aes(&self) -> Result<&[Rc<Self::Aes>], crate::Error> {
+        Err(crate::Error::NoSupport)
+    }
+
+    fn pattgen(&self) -> Result<&[Rc<Self::Pattgen>], crate::Error> {
+        Err(crate::Error::NoSupport)
+    }
+
+    fn system_reset_controller(&self) -> Result<&[Rc<Self::SystemResetController>], crate::Error> {
+        Err(crate::Error::NoSupport)
+    }
+
+    fn alert_handler(&self) -> Result<&[Rc<Self::AlertHandler>], crate::Error> {
+        Err(crate::Error::NoSupport)
+    }
+
+    fn usb(&self) -> Result<&[Rc<Self::Usb>], crate::Error> {
         Err(crate::Error::NoSupport)
     }
 }

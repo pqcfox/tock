@@ -81,6 +81,13 @@ impl parse::DefaultPeripherals for Peripherals {
     type Flash = crate::Flash;
     type Hmac = parse::NoSupport;
     type Aes = parse::NoSupport;
+<<<<<<< HEAD
+=======
+    type Pattgen = parse::NoSupport;
+    type SystemResetController = parse::NoSupport;
+    type AlertHandler = parse::NoSupport;
+    type Usb = parse::NoSupport;
+>>>>>>> 83b681846 (Added USB)
 
     fn uart(&self) -> Result<&[Rc<Self::Uart>], parse::Error> {
         Ok(&self.uart)

@@ -11,7 +11,8 @@ use std::rc::Rc;
 use crate::config::{Capsule, Configuration};
 use crate::{
     AesCapsule, AlarmDriver, Console, HmacCapsule, I2CMasterDriver, KvDriver, Led, MuxAlarm,
-    MuxUart, RngCapsule, SpiCapsule, TemperatureCapsule, GPIO,
+   MuxUart, RngCapsule, SpiCapsule, TemperatureCapsule, GPIO, AlertHandlerCapsule,
+    SystemResetControllerCapsule, PattgenCapsule, Lldb, InfoFlash, UsbCapsule,
 };
 use crate::{Chip, DefaultPeripherals, Platform, Scheduler};
 
@@ -81,6 +82,9 @@ impl<C: Chip> Context<C> {
                     capsules
                         .push(AesCapsule::get(aes.clone(), *number_of_blocks)
                             as Rc<dyn crate::Capsule>);
+                }
+                Capsule::Usb { usb } => {
+                    capsules.push(UsbCapsule::get(usb.clone()) as Rc<dyn crate::Capsule>);
                 }
                 _ => {}
             };
