@@ -45,6 +45,14 @@ impl<U: uart::Uart + 'static> crate::Component for Console<U> {
             .finalize(components::console_component_static!());
         })
     }
+
+    fn after_init(&self) -> Option<proc_macro2::TokenStream> {
+        let mux_uart = format_ident!("{}", self.mux_uart.ident().unwrap());
+        Some(quote::quote!(
+            components::debug_writer::DebugWriterComponent::new(#mux_uart)
+                .finalize(components::debug_writer_component_static!());
+        ))
+    }
 }
 
 impl<U: uart::Uart + 'static> crate::Capsule for Console<U> {
