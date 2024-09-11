@@ -32,8 +32,8 @@ jobs:
 
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-node@v3
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
       - name:      ci-job-format
         run:  make ci-job-format
       - name:      ci-job-markdown-toc
@@ -50,7 +50,7 @@ jobs:
 
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name:      ci-job-clippy
         run:  make ci-job-clippy
 
@@ -61,7 +61,7 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name:      ci-job-ot-syntax
         run:  make ci-job-ot-syntax
       - name:      ci-job-ot-compilation
@@ -69,7 +69,7 @@ jobs:
       - name:      ci-job-ot-collect-artifacts
         run:  make ci-job-ot-collect-artifacts
       - name: upload-build-artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: build-artifacts
           path: tools/ci-artifacts
