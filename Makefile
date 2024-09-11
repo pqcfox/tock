@@ -453,6 +453,20 @@ ci-job-collect-artifacts: ci-job-compilation
 		cp "$$f" "tools/ci-artifacts/$$f";\
 		done
 
+.PHONY: ci-job-ot-collect-artifacts
+ci-job-ot-collect-artifacts: ci-job-ot-compilation
+	$(call banner, CI-Job: Collect artifacts)
+	# Collect binary images for each board
+	#
+	# This is currently used only for code size detection changes, but in
+	# the future may also be used to support checks for deterministic builds.
+	@rm -rf "tools/ci-artifacts"
+	@mkdir tools/ci-artifacts
+	@for f in $$(find target -iname '*.bin' | grep -E "release/.*\.bin");\
+		do mkdir -p "tools/ci-artifacts/$$(dirname $$f)";\
+		cp "$$f" "tools/ci-artifacts/$$f";\
+		done
+
 
 
 ### ci-runner-github-tests jobs:
