@@ -14,7 +14,7 @@ use rv32i::csr::{mcause, mie::mie, mtvec::mtvec, CSR};
 use rv32i::pmp::{PMPUserMPU, TORUserPMP};
 use rv32i::syscall::SysCall;
 
-use crate::alert_handler::{AlertBitfield, AlertClass, LocalAlertFlags, LocalAlertId};
+use crate::alert_handler::{AlertClass, LocalAlertFlags};
 use crate::alert_handler::{AlertFlags, AlertHandler};
 use crate::chip_config::EarlGreyConfig;
 use crate::interrupts;

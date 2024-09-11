@@ -137,6 +137,11 @@ allaudit audit:
 		(cd "$$f" && cargo audit || exit 1);\
 		done
 
+.PHONY: ot-board
+ot-board:
+	@echo "$$(tput bold)Build opentitan/earlgrey-cw310";\
+		$(MAKE) -C "boards/opentitan/earlgrey-cw310" || exit 1;
+
 .PHONY: allboards boards
 allboards boards:
 	@for f in $(ALL_BOARDS);\
@@ -147,6 +152,10 @@ allboards boards:
 .PHONY: allcheck check
 allcheck check:
 	@cargo check
+
+.PHONY: ot-check
+ot-check:
+	@(cd boards/opentitan/rarlgrey-cw310 && cargo check)
 
 .PHONY: alldoc doc
 alldoc doc:
@@ -402,6 +411,16 @@ ci-job-clippy:
 ci-job-syntax:
 	$(call banner,CI-Job: Syntax)
 	@NOWARNINGS=true $(MAKE) allcheck
+
+.PHONY: ci-job-ot-syntax
+ci-job-ot-syntax:
+	$(call banner,CI-Job: OtSyntax)
+	@NOWARNINGS=true $(MAKE) ot-check
+
+.PHONY: ci-job-ot-compilation
+ci-job-ot-compilation:
+	$(call banner,CI-Job: OtCompilation)
+	@NOWARNINGS=true $(MAKE) ot-board
 
 .PHONY: ci-job-compilation
 ci-job-compilation:

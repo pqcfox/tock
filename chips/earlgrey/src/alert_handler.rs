@@ -678,7 +678,7 @@ impl AlertHandler {
     }
 
     /// function called when a local alert happened. Should return `AlertWasHandled::Yes` if the source of the alert was handled and the caller should clear the alert flag
-    pub fn handle_alert(&self, alert: LocalAlertId, _state: AlertState) -> bool {
+    pub fn handle_alert(&self, _alert: LocalAlertId, _state: AlertState) -> bool {
         #[cfg(feature = "test_alerthandler")]
         {
             //SAFETY: actually safe as the kernel is monothreaded

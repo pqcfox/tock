@@ -537,7 +537,7 @@ impl<'a> Usb<'a> {
         client: &'a dyn Client<'a>,
     ) {
         match standard_device_request {
-            StandardDeviceRequest::ToHost(_) => {
+            StandardDeviceRequest::ToHost(_standard_device_request_from_host) => {
                 self.handle_standard_device_to_host_request(setup_packet, client)
             }
             StandardDeviceRequest::FromHost(standard_device_request_from_host) => self
