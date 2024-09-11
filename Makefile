@@ -155,7 +155,7 @@ allcheck check:
 
 .PHONY: ot-check
 ot-check:
-	@(cd boards/opentitan/rarlgrey-cw310 && cargo check)
+	@(cd boards/opentitan/earlgrey-cw310 && cargo check)
 
 .PHONY: alldoc doc
 alldoc doc:
