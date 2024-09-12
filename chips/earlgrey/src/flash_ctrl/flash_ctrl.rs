@@ -199,6 +199,15 @@ impl FlashCtrl<'_> {
     ///
     /// + `memory_protection_configuration`: the flash memory protection configuration to be used
     fn init(&self, memory_protection_configuration: MemoryProtectionConfiguration) {
+        #[cfg(feature = "sival")]
+        {
+            // When using ROM_EXT, the operation done bit is set when Tock boots. Clear it.
+            self.clear_operation_done_interrupt();
+            // Operation done status is also set. Clear it.
+            self.clear_operation_done_status();
+            // It looks like a flash operation error occurs durring ROM_EXT. Clear all error codes.
+            self.clear_all_error_codes();
+        }
         self.init_fifo_levels();
         self.configure_memory_protection(memory_protection_configuration);
         self.enable_interrupts();
@@ -1718,7 +1727,12 @@ impl FlashCtrl<'_> {
         }
     }
 
-    /// Clear the given error code
+    /// Clear error status
+    fn clear_error_status(&self) {
+        self.registers.op_status.modify(OP_STATUS::ERR::CLEAR);
+    }
+
+    /// Clear the given error code. It also clears the error status.
     ///
     /// # Parameters
     ///
@@ -1736,7 +1750,14 @@ impl FlashCtrl<'_> {
         };
 
         self.registers.err_code.modify(clear_value);
-        self.registers.op_status.modify(OP_STATUS::ERR::CLEAR);
+        self.clear_error_status();
+    }
+
+    /// Clear all error codes. It also clears the error status.
+    fn clear_all_error_codes(&self) {
+        // 8 possible error codes
+        self.registers.err_code.set(0b1111_1111);
+        self.clear_error_status();
     }
 
     fn read_complete(
@@ -1785,6 +1806,7 @@ impl FlashCtrl<'_> {
         self.clear_operation_done_interrupt();
         self.clear_operation_done_status();
         self.stop_flash_operation();
+
         let finished_operation = self.get_finished_operation_type();
 
         if let Some(error_code) = self.get_error_code() {
