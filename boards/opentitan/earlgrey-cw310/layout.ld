@@ -62,8 +62,8 @@ SECTIONS {
         . += 384; /* rsa_modulus */
         LONG(0x1d4); /* . += 4;   /* address_translation (HardenedFalse) */
         . += 4;   /* identifier */
-        SHORT(0x6c47); /* . += 4;   /* manifest_version.minor */
-        SHORT(0x71c3); /* . += 4;   /* signed_region_end */
+        LONG(0x6c47); /* . += 4;   /* manifest_version.minor */
+        LONG(0x71c3); /* . += 4;   /* signed_region_end */
         . += 4;   /* length */
         . += 4;   /* version_major */
         . += 4;   /* version_minor */
