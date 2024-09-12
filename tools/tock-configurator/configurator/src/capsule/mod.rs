@@ -20,6 +20,8 @@ pub(crate) mod i2c;
 pub(crate) mod kv_driver;
 pub(crate) mod led;
 pub(crate) mod lsm303agr;
+pub(crate) mod pattgen;
+pub(crate) mod reset_manager;
 pub(crate) mod rng;
 pub(crate) mod spi;
 pub(crate) mod temperature;

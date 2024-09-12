@@ -64,3 +64,7 @@ pub use alert_handler::AlertHandlerCapsule;
 // Avoid name conflicts
 mod usb;
 pub use usb::UsbCapsule;
+
+// Avoid name conflicts
+mod reset_manager;
+pub use reset_manager::ResetManagerCapsule;

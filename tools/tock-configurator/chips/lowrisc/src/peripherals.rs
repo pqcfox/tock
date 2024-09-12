@@ -116,10 +116,7 @@ impl parse::DefaultPeripherals for Peripherals {
     type SystemResetController = crate::system_reset_controller::SystemResetController;
     type AlertHandler = crate::alert_handler::AlertHandler;
     type Usb = crate::usb::Usb;
-<<<<<<< HEAD
     type ResetManager = crate::reset_manager::ResetManager;
-=======
->>>>>>> 83b681846 (Added USB)
 
     fn aes(&self) -> Result<&[Rc<Self::Aes>], parse::Error> {
         Ok(&self.aes)

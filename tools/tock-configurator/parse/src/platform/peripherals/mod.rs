@@ -55,3 +55,6 @@ pub use alert_handler::*;
 
 pub mod usb;
 pub use usb::*;
+
+pub mod reset_manager;
+pub use reset_manager::*;

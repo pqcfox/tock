@@ -43,6 +43,7 @@ capsules_config!(
         SYSTEM_RESET_CONTROLLER => SystemResetController { system_reset_controller: Rc<P::SystemResetController> },
         ALERT_HANDLER => AlertHandler { alert_handler: Rc<P::AlertHandler> },
         USB => Usb { usb: Rc<P::Usb> },
+        RESET_MANAGER => ResetManager { reset_manager: Rc<P::ResetManager> },
     }
 );
 
@@ -201,6 +202,10 @@ impl<P: DefaultPeripherals> Configuration<P> {
         self.capsules.insert(Index::USB, Capsule::Usb { usb });
     }
 
+    pub fn update_reset_manager(&mut self, reset_manager: Rc<P::ResetManager>) {
+        self.capsules.insert(Index::RESET_MANAGER, Capsule::ResetManager { reset_manager });
+    }
+
     /// Update the scheduler configuration.
     pub fn update_scheduler(&mut self, scheduler_type: SchedulerType) {
         self.scheduler = scheduler_type;
@@ -307,5 +312,9 @@ impl<P: DefaultPeripherals> Configuration<P> {
 
     pub fn remove_usb(&mut self) {
         self.capsules.remove(&Index::USB);
+    }
+
+    pub fn remove_reset_manager(&mut self) {
+        self.capsules.remove(&Index::RESET_MANAGER);
     }
 }

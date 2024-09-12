@@ -62,6 +62,7 @@ pub(crate) fn capsules_menu<C: Chip + 'static + serde::ser::Serialize>(
                 items::SupportedCapsule::LED.to_menu_item(),
                 items::SupportedCapsule::LLDB.to_menu_item(),
                 items::SupportedCapsule::PATTGEN.to_menu_item(),
+                items::SupportedCapsule::RESET_MANAGER.to_menu_item(),
                 items::SupportedCapsule::RNG.to_menu_item(),
                 items::SupportedCapsule::SPI.to_menu_item(),
                 items::SupportedCapsule::SYSTEM_RESET_CONTROLLER.to_menu_item(),

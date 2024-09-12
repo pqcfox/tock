@@ -9,6 +9,7 @@ mod hmac;
 mod i2c;
 mod pattgen;
 mod peripherals;
+mod reset_manager;
 mod rng;
 mod spi;
 mod system_reset_controller;

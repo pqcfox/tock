@@ -371,6 +371,15 @@ pub(crate) fn on_capsule_submit<C: Chip + 'static + serde::ser::Serialize>(
             };
             push_layer::<_, C>(siv, crate::capsule::usb::config::<C>(chip, previous_state))
         }
+        config::Index::RESET_MANAGER => {
+            let previous_state = match data.platform.capsule(submit) {
+                Some(config::Capsule::ResetManager { reset_manager }) => {
+                    Some(reset_manager.clone())
+                }
+                _ => None,
+            };
+            push_layer::<_, C>(siv, crate::capsule::reset_manager::config::<C>(chip, previous_state))
+        }
         _ => unreachable!(),
     }
 }

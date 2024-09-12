@@ -8,7 +8,7 @@
 use super::{
     aes::Aes, ble::BleAdvertisement, gpio::Gpio, timer::Timer, uart::Uart, Flash, Hmac, I2c, Rng, Spi,
     Temperature, alert_handler::AlertHandler, system_reset_controller::SystemResetController, pattgen::Pattgen,
-    usb::Usb,
+    usb::Usb, reset_manager::ResetManager,
 };
 use crate::Component;
 use std::rc::Rc;
@@ -47,6 +47,7 @@ pub trait DefaultPeripherals: Component {
     type SystemResetController: SystemResetController + for<'de> serde::Deserialize<'de> + serde::Serialize + 'static;
     type AlertHandler: AlertHandler + for<'de> serde::Deserialize<'de> + serde::Serialize + 'static;
     type Usb: Usb + for<'de> serde::Deserialize<'de> + serde::Serialize + 'static;
+    type ResetManager: ResetManager + for<'de> serde::Deserialize<'de> + serde::Serialize + 'static;
 
     /// Return an array slice of pointers to the `Gpio` peripherals or a [`crate::Error`]
     /// if the peripheral is non-existent.
@@ -123,6 +124,10 @@ pub trait DefaultPeripherals: Component {
     }
 
     fn usb(&self) -> Result<&[Rc<Self::Usb>], crate::Error> {
+        Err(crate::Error::NoSupport)
+    }
+
+    fn reset_manager(&self) -> Result<&[Rc<Self::ResetManager>], crate::Error> {
         Err(crate::Error::NoSupport)
     }
 }
