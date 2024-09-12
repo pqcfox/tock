@@ -162,11 +162,10 @@ pub(crate) fn push_layer<
 /// Initialize a board configuration session based on the submitted chip.
 pub(crate) fn on_chip_submit(siv: &mut cursive::Cursive, submit: &items::SupportedChip) {
     match submit {
-        items::SupportedChip::MicroBit => {
-            // Initial user data.
-            siv.set_user_data::<Data<nrf52833::Chip>>(Data::new(nrf52833::Chip::new()));
+        items::SupportedChip::EarlgreyCw310 => {
+            siv.set_user_data::<Data<lowrisc::Chip>>(Data::new(lowrisc::Chip::new()));
 
-            push_layer::<_, nrf52833::Chip>(siv, board_config_menu::<nrf52833::Chip>());
+            push_layer::<_, lowrisc::Chip>(siv, board_config_menu::<lowrisc::Chip>());
         }
     };
 }

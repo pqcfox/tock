@@ -27,9 +27,17 @@ use state::PinFunction;
 /// Select menu of supported chips.
 pub(crate) fn chip_select() -> cursive::views::SelectView<items::SupportedChip> {
     views::select_menu::<items::SupportedChip, (), String, _>(
+<<<<<<< HEAD
         vec![items::ToMenuItem::to_menu_item(
             items::SupportedChip::MicroBit,
         )],
+=======
+        vec![
+            items::ToMenuItem::to_menu_item(
+                items::SupportedChip::EarlgreyCw310
+            ),
+        ],
+>>>>>>> 4d3ccefc5 (Removed non-OpenTitan-related code)
         crate::state::on_chip_submit,
     )
 }
@@ -41,23 +49,22 @@ pub(crate) fn capsules_menu<C: Chip + 'static + serde::ser::Serialize>(
     views::main_dialog(
         LinearLayout::vertical().child(cursive::views::ScrollView::new(views::select_menu(
             vec![
-                items::SupportedCapsule::ALARM.to_menu_item(),
-                items::SupportedCapsule::SPI.to_menu_item(),
-                items::SupportedCapsule::I2C.to_menu_item(),
-                items::SupportedCapsule::BLE.to_menu_item(),
-                items::SupportedCapsule::FLASH.to_menu_item(),
-                items::SupportedCapsule::LSM303AGR.to_menu_item(),
-                items::SupportedCapsule::CONSOLE.to_menu_item(),
-                items::SupportedCapsule::TEMPERATURE.to_menu_item(),
-                items::SupportedCapsule::RNG.to_menu_item(),
-                items::SupportedCapsule::GPIO.to_menu_item(),
-                items::SupportedCapsule::LED.to_menu_item(),
-                items::SupportedCapsule::HMAC.to_menu_item(),
                 items::SupportedCapsule::AES.to_menu_item(),
-                items::SupportedCapsule::KV_DRIVER.to_menu_item(),
-                items::SupportedCapsule::PATTGEN.to_menu_item(),
-                items::SupportedCapsule::SYSTEM_RESET_CONTROLLER.to_menu_item(),
+                items::SupportedCapsule::ALARM.to_menu_item(),
                 items::SupportedCapsule::ALERT_HANDLER.to_menu_item(),
+                items::SupportedCapsule::CONSOLE.to_menu_item(),
+                items::SupportedCapsule::FLASH.to_menu_item(),
+                items::SupportedCapsule::GPIO.to_menu_item(),
+                items::SupportedCapsule::HMAC.to_menu_item(),
+                items::SupportedCapsule::I2C.to_menu_item(),
+                items::SupportedCapsule::INFO_FLASH.to_menu_item(),
+                items::SupportedCapsule::KV_DRIVER.to_menu_item(),
+                items::SupportedCapsule::LED.to_menu_item(),
+                items::SupportedCapsule::LLDB.to_menu_item(),
+                items::SupportedCapsule::PATTGEN.to_menu_item(),
+                items::SupportedCapsule::RNG.to_menu_item(),
+                items::SupportedCapsule::SPI.to_menu_item(),
+                items::SupportedCapsule::SYSTEM_RESET_CONTROLLER.to_menu_item(),
                 items::SupportedCapsule::USB.to_menu_item(),
             ],
             state::on_capsule_submit::<C>,

@@ -63,7 +63,7 @@ impl ToMenuItem for KernelResources {
 /// Each chip that implements the `blueprint` traits could be defined in the enum.
 #[derive(Clone, Copy)]
 pub(crate) enum SupportedChip {
-    MicroBit,
+    EarlgreyCw310,
 }
 
 impl ToMenuItem for SupportedChip {
@@ -71,7 +71,7 @@ impl ToMenuItem for SupportedChip {
     fn to_menu_item(self) -> (String, Self::Item) {
         (
             match self {
-                SupportedChip::MicroBit => crate::submenu!("microbit"),
+                SupportedChip::EarlgreyCw310 => crate::submenu!("Earlgrey CW310"),
             },
             self,
         )
