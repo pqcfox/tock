@@ -136,7 +136,6 @@ impl EarlGreyPinmuxConfig for BoardPinmuxLayout {
     ];
 }
 
-#[cfg(feature = "test_sysrst_ctrl")]
 /// prepare pinmux and gpio registers for testing of SysRstr_Ctrl
 pub fn prepare_wiring_sysrst_ctrl_tests() {
     use earlgrey::pinmux::{PadConfig, SelectInput, SelectOutput};

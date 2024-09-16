@@ -24,9 +24,9 @@ use capsules_core::driver;
 use capsules_core::reset_manager::ResetManager;
 use capsules_core::virtualizers::virtual_aes_ccm;
 use capsules_core::virtualizers::virtual_alarm::{MuxAlarm, VirtualMuxAlarm};
-use core::num::NonZeroU16;
 use capsules_extra::opentitan_alerthandler::AlertHandlerCapsule;
 use capsules_extra::opentitan_sysrst::SystemReset;
+use core::num::NonZeroU16;
 use earlgrey::alert_handler;
 use earlgrey::chip::EarlGreyDefaultPeripherals;
 use earlgrey::chip_config::EarlGreyConfig;
@@ -201,7 +201,12 @@ struct EarlGrey {
         VirtualMuxAlarm<'static, earlgrey::timer::RvTimer<'static, ChipConfig>>,
     >,
     hmac: &'static capsules_extra::hmac::HmacDriver<'static, lowrisc::hmac::Hmac<'static>, 32>,
-    info_flash: Option<&'static capsules_extra::info_flash::InfoFlash<'static, earlgrey::flash_ctrl::FlashCtrl<'static>>>,
+    info_flash: Option<
+        &'static capsules_extra::info_flash::InfoFlash<
+            'static,
+            earlgrey::flash_ctrl::FlashCtrl<'static>,
+        >,
+    >,
     lldb: &'static capsules_core::low_level_debug::LowLevelDebug<
         'static,
         capsules_core::virtualizers::virtual_uart::UartDevice<'static>,
@@ -576,7 +581,9 @@ unsafe fn setup() -> (
             4 => &peripherals.gpio_port[4],
             5 => &peripherals.gpio_port[5],
             6 => &peripherals.gpio_port[6],
-            7 => &peripherals.gpio_port[15]
+            7 => &peripherals.gpio_port[15],
+            8 => &peripherals.gpio_port[7],
+            9 => &peripherals.gpio_port[20],
         ),
     )
     .finalize(components::gpio_component_static!(
@@ -1083,6 +1090,9 @@ unsafe fn setup() -> (
             ),
         )
     );
+    peripherals.sysreset.set_client(Some(opentitan_sysrst));
+
+    peripherals.sysreset.enable_interrupts();
 
     let earlgrey = static_init!(
         EarlGrey,
@@ -1163,7 +1173,6 @@ unsafe fn setup() -> (
 
     (board_kernel, earlgrey, chip, peripherals)
 }
-
 
 #[cfg(feature = "test_sysrst_ctrl")]
 fn test_sysrst_ctrl(peripherals: &EarlGreyDefaultPeripherals<ChipConfig, BoardPinmuxLayout>) {
