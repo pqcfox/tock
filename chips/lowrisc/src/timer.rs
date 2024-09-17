@@ -12,7 +12,7 @@ use kernel::utilities::cells::OptionalCell;
 use kernel::utilities::registers::interfaces::{Readable, Writeable};
 use kernel::utilities::registers::{register_bitfields, register_structs, ReadWrite, WriteOnly};
 use kernel::utilities::StaticRef;
-use kernel::ErrorCode;
+use kernel::{debug, ErrorCode};
 use rv32i::machine_timer::MachineTimer;
 
 /// 10KHz `Frequency`
@@ -29,6 +29,12 @@ pub struct RvTimer<'a> {
     alarm_client: OptionalCell<&'a dyn time::AlarmClient>,
     overflow_client: OptionalCell<&'a dyn time::OverflowClient>,
     mtimer: MachineTimer<'a>,
+}
+
+pub enum SetClkResult {
+    SetPrecise,
+    SetImprecise,
+    Error,
 }
 
 impl<'a> RvTimer<'a> {
@@ -57,23 +63,59 @@ impl<'a> RvTimer<'a> {
         }
     }
 
-    pub fn setup(&self) {
-        let prescale: u16 = ((self.peripherial_clock_frequency / 10_000) - 1) as u16; // 10Khz
+    pub fn set_clock_frequency(&self, target_freq: u32) -> SetClkResult {
+        let (prescaler_target, mut op_return) = match (
+            self.peripherial_clock_frequency.checked_div(target_freq),
+            self.peripherial_clock_frequency.checked_rem(target_freq),
+        ) {
+            (Some(x), Some(0)) => (x - 1, SetClkResult::SetPrecise),
+            (Some(x), Some(y)) => (x - 1, SetClkResult::SetImprecise),
+            _ => (0, SetClkResult::Error),
+        };
+        if prescaler_target > 0xFFF {
+            op_return = SetClkResult::Error;
+        } else {
+            self.registers
+                .cfg0
+                .write(CFG0::PRESCALE.val(prescaler_target as u32) + CFG0::STEP.val(1u32));
+        }
 
-        let regs = self.registers;
-        // Set proper prescaler and the like
-        regs.cfg0
-            .write(CFG0::PRESCALE.val(prescale as u32) + CFG0::STEP.val(1u32));
-        regs.compare_upper0_0.set(0);
-        regs.timer_v_lower0.set(0xFFFF_0000);
-        regs.intr_enable0[0].write(INTR_ENABLE0::IE_0::CLEAR);
-        regs.ctrl[0].write(CTRL::ACTIVE_0::SET);
+        return op_return;
+    }
+
+    pub fn set_now_tick(&self, ticks: u64) {
+        self.registers.timer_v_lower0.set(ticks as u32);
+        self.registers.timer_v_upper0.set((ticks >> 16) as u32);
+    }
+
+    pub fn disable(&self) {
+        self.registers.ctrl[0].write(CTRL::ACTIVE_0::CLEAR);
+    }
+
+    pub fn enable(&self) {
+        self.registers.ctrl[0].write(CTRL::ACTIVE_0::SET);
+    }
+
+    pub fn isr_disable(&self) {
+        self.registers.intr_enable0[0].write(INTR_ENABLE0::IE_0::CLEAR);
+    }
+
+    pub fn isr_enable(&self) {
+        self.registers.intr_enable0[0].write(INTR_ENABLE0::IE_0::SET);
+    }
+
+    pub fn setup(&self) {
+        self.disable();
+        self.set_clock_frequency(10_000);
+        self.set_now_tick(0);
+        self.mtimer.disable_machine_timer();
+        self.isr_disable();
+        self.enable();
     }
 
     pub fn service_interrupt(&self) {
-        let regs = self.registers;
-        regs.intr_enable0[0].write(INTR_ENABLE0::IE_0::CLEAR);
-        regs.intr_state0[0].write(INTR_STATE0::IS_0::SET);
+        self.isr_disable();
+        self.registers.intr_state0[0].write(INTR_STATE0::IS_0::SET);
         self.alarm_client.map(|client| {
             client.alarm();
         });
@@ -147,13 +189,9 @@ impl<'a> time::Alarm<'a> for RvTimer<'a> {
 pub mod tests {
     use core::cell::Cell;
     use kernel::debug;
-    use kernel::hil::reset_managment::ResetManagment;
-    use kernel::hil::retention_ram::OwnerRetentionRam;
     use kernel::hil::time::Alarm;
     use kernel::hil::time::AlarmClient;
     use kernel::hil::time::ConvertTicks;
-    use kernel::hil::uart::TransmitSynch;
-
     pub struct Tests<'a, A: Alarm<'a>> {
         alarm: &'a A,
         cycles: Cell<u32>,
@@ -174,6 +212,8 @@ pub mod tests {
 
         pub fn cyclic_tests(&self) {
             debug!("Cyclic alarm!");
+            debug!("Now time is: {}", self.alarm.ticks_to_ms(self.alarm.now()));
+
             self.start_alarm(1000);
             self.cycles.set(self.cycles.get() + 1);
         }
