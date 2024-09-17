@@ -7,14 +7,27 @@ use crate::registers::rv_timer_regs::{
     RvTimerRegisters, CFG0, COMPARE_LOWER0_0, COMPARE_UPPER0_0, CTRL, INTR_ENABLE0, INTR_STATE0,
     TIMER_V_LOWER0, TIMER_V_UPPER0,
 };
+
 use kernel::hil::time::{self, Ticks64};
 use kernel::utilities::cells::OptionalCell;
 use kernel::utilities::registers::interfaces::{Readable, Writeable};
 use kernel::utilities::registers::{register_bitfields, register_structs, ReadWrite, WriteOnly};
 use kernel::utilities::StaticRef;
 use kernel::{debug, ErrorCode};
+
+#[cfg(feature = "test_rv_timer")]
+use kernel::{
+    hil::{
+        reset_managment::ResetManagment,
+        retention_ram::{CreatorRetentionRam, OwnerRetentionRam},
+        uart::TransmitSynch,
+    },
+    utilities::target_test::{self, TargetTests},
+};
 use rv32i::machine_timer::MachineTimer;
 
+#[cfg(feature = "test_rv_timer")]
+use core::fmt::Write;
 /// 10KHz `Frequency`
 #[derive(Debug)]
 pub struct Freq10KHz;
@@ -31,6 +44,7 @@ pub struct RvTimer<'a> {
     mtimer: MachineTimer<'a>,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum SetClkResult {
     SetPrecise,
     SetImprecise,
@@ -85,7 +99,7 @@ impl<'a> RvTimer<'a> {
 
     pub fn set_now_tick(&self, ticks: u64) {
         self.registers.timer_v_lower0.set(ticks as u32);
-        self.registers.timer_v_upper0.set((ticks >> 16) as u32);
+        self.registers.timer_v_upper0.set((ticks >> 32) as u32);
     }
 
     pub fn disable(&self) {
@@ -119,6 +133,120 @@ impl<'a> RvTimer<'a> {
         self.alarm_client.map(|client| {
             client.alarm();
         });
+    }
+
+    #[cfg(feature = "test_rv_timer")]
+    pub fn test(
+        &self,
+        reset_manager: &dyn ResetManagment<ResetInfo = [u32; 19]>,
+        uart: &dyn TransmitSynch,
+        creator_ram: &dyn CreatorRetentionRam<Data = u32, ID = usize>,
+        owner_ram: &dyn OwnerRetentionRam<Data = u32, ID = usize>,
+    ) -> bool {
+        let mut test_runner = target_test::TestRunner::new();
+        let binding = |foo: &str| uart.transmit_sync(foo.as_bytes());
+        test_runner.set_print_func(&binding);
+        test_runner
+            .write_str("Starting rv_timer self-test \r\n")
+            .unwrap();
+        let mut test_cycle: u32 = 0;
+        match creator_ram.read(1) {
+            Ok(1) => {
+                test_runner
+                    .write_str("Reset reason from API is PURES! Resetting run counter! \r\n")
+                    .unwrap();
+                owner_ram.write(1, 1).unwrap();
+                test_cycle = 0;
+            }
+            Ok(x) => {
+                test_runner
+                    .write_fmt(format_args!("Reset reason from API is {} \r\n", x))
+                    .unwrap();
+                test_cycle = owner_ram.read(1).unwrap();
+                owner_ram.write(1, test_cycle + 1).unwrap();
+            }
+            _ => test_runner
+                .write_str("Wrong init state, can't read reset reason yet!  \r\n")
+                .unwrap(),
+        }
+
+        match test_cycle {
+            0 => {
+                test_runner.assert_function("Test timer cfg values for 10_000 hz!", || {
+                    self.set_clock_frequency(10_000) == SetClkResult::SetPrecise
+                        && self.registers.cfg0.read(CFG0::PRESCALE) == 599
+                        && self.registers.cfg0.read(CFG0::STEP) == 1
+                });
+
+                test_runner.assert_function("Test timer cfg values for 10_001 hz (it gets rounded and notifies us we're imprecise freq)!", || {
+                    self.set_clock_frequency(10_001) == SetClkResult::SetImprecise
+                        && self.registers.cfg0.read(CFG0::PRESCALE) == 598
+                        && self.registers.cfg0.read(CFG0::STEP) == 1
+                });
+
+                test_runner.assert_function(
+                    "Test timer cfg values for natural clock frequency!",
+                    || {
+                        self.set_clock_frequency(self.peripherial_clock_frequency)
+                            == SetClkResult::SetPrecise
+                            && self.registers.cfg0.read(CFG0::PRESCALE) == 0
+                            && self.registers.cfg0.read(CFG0::STEP) == 1
+                    },
+                );
+
+                test_runner.assert_function(
+                    "Test timer cfg values for out-of-range clock frequency!",
+                    || {
+                        self.set_clock_frequency(1) == SetClkResult::Error
+                            && self.registers.cfg0.read(CFG0::PRESCALE) == 0
+                            && self.registers.cfg0.read(CFG0::STEP) == 1
+                    },
+                );
+
+                test_runner.assert_function(
+                    "Test timer cfg values for out-of-range clock frequency!",
+                    || {
+                        self.set_clock_frequency(self.peripherial_clock_frequency / 0xFFFF)
+                            == SetClkResult::Error
+                            && self.registers.cfg0.read(CFG0::PRESCALE) == 0
+                            && self.registers.cfg0.read(CFG0::STEP) == 1
+                    },
+                );
+
+                test_runner.assert_function("Test set_now_tick!", || {
+                    self.set_now_tick(0xFFFF_FFFF_AAAA_AAAA);
+                    self.registers.timer_v_lower0.get() == 0xAAAA_AAAA
+                        && self.registers.timer_v_upper0.get() == 0xFFFF_FFFF
+                });
+
+                test_runner.assert_function("Test enable!", || {
+                    self.enable();
+                    self.registers.ctrl[0].is_set(CTRL::ACTIVE_0) == true
+                });
+
+                test_runner.assert_function("Test disable!", || {
+                    self.disable();
+                    self.registers.ctrl[0].is_set(CTRL::ACTIVE_0) == false
+                });
+
+                test_runner.assert_function("Test isr_enable!", || {
+                    self.isr_enable();
+                    self.registers.intr_enable0[0].is_set(INTR_ENABLE0::IE_0) == true
+                });
+
+                test_runner.assert_function("Test isr_disable!", || {
+                    self.isr_disable();
+                    self.registers.intr_enable0[0].is_set(INTR_ENABLE0::IE_0) == false
+                });
+            }
+            _ => {}
+        }
+
+        test_runner
+            .write_str("Ending rv_timer pre-kernel self-test \r\n")
+            .unwrap();
+        self.setup();
+        test_runner.is_test_failed
     }
 }
 
@@ -212,9 +340,45 @@ pub mod tests {
 
         pub fn cyclic_tests(&self) {
             debug!("Cyclic alarm!");
-            debug!("Now time is: {}", self.alarm.ticks_to_ms(self.alarm.now()));
+            match self.cycles.get() {
+                0 => {
+                    self.start_alarm(1000);
+                    let ms_time = self.alarm.ticks_to_ms(self.alarm.now());
+                    assert!(ms_time == 1000);
+                    debug!(
+                        "Now time is: {} ms and next alarm will be in 1000ms",
+                        ms_time
+                    );
+                }
+                1 => {
+                    self.start_alarm(2000);
+                    let ms_time = self.alarm.ticks_to_ms(self.alarm.now());
+                    assert!(ms_time == 2000);
+                    debug!("Now time is: {} and next alarm will be in 2000ms", ms_time);
+                }
+                2 => {
+                    self.start_alarm(200);
+                    let ms_time = self.alarm.ticks_to_ms(self.alarm.now());
+                    assert!(ms_time == 4000);
+                    debug!("Now time is: {} and next alarm will be in 200ms", ms_time);
+                }
+                3 => {
+                    self.start_alarm(100);
+                    let ms_time = self.alarm.ticks_to_ms(self.alarm.now());
+                    assert!(ms_time == 4200);
+                    debug!("Now time is: {} and next alarm will be in 100ms", ms_time);
+                }
+                4 => {
+                    let ms_time = self.alarm.ticks_to_ms(self.alarm.now());
+                    assert!(ms_time == 4300);
+                    debug!(
+                        "Now time is: {} and no next alarm will be triggered",
+                        ms_time
+                    );
+                }
+                _ => panic!("We shoud have stopped alarms by now !"),
+            }
 
-            self.start_alarm(1000);
             self.cycles.set(self.cycles.get() + 1);
         }
     }

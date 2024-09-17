@@ -1129,6 +1129,12 @@ unsafe fn setup() -> (
 
     #[cfg(feature = "test_rv_timer")]
     {
+        peripherals.timer.test(
+            &peripherals.rst_mgmt,
+            &peripherals.uart0,
+            &peripherals.sram_ret,
+            &peripherals.sram_ret,
+        );
         test_rv_timer(peripherals, mux_alarm);
     }
 
