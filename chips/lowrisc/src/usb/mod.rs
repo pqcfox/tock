@@ -1,9 +1,9 @@
-// This license header is required for submitting to upstream Tock.
-// It is up to ZeroRISC to decide if this header should be here or not.
-//
 // Licensed under the Apache License, Version 2.0 or the MIT License.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // Copyright Tock Contributors 2022.
+//
+// This license header is required for submitting to upstream Tock.
+// It is up to ZeroRISC to decide if this header should be here or not.
 
 mod available_buffer_list;
 mod buffer;
@@ -23,5 +23,5 @@ mod usb_address;
 mod utils;
 
 pub use interrupt::UsbInterrupt;
-pub use usb::Usb;
 pub use packet_size::MAXIMUM_PACKET_SIZE;
+pub use usb::Usb;

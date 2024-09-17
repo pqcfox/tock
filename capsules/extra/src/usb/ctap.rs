@@ -259,11 +259,14 @@ impl<'a, U: hil::usb::UsbController<'a>> hil::usb::Client<'a> for CtapHid<'a, U>
 
         // Setup buffers for IN and OUT data transfer.
         self.controller()
-            .endpoint_set_out_buffer(ENDPOINT_NUM, &self.buffers[OUT_BUFFER].buf).unwrap();
+            .endpoint_set_out_buffer(ENDPOINT_NUM, &self.buffers[OUT_BUFFER].buf)
+            .unwrap();
         self.controller()
-            .endpoint_set_in_buffer(ENDPOINT_NUM, &self.buffers[IN_BUFFER].buf).unwrap();
+            .endpoint_set_in_buffer(ENDPOINT_NUM, &self.buffers[IN_BUFFER].buf)
+            .unwrap();
         self.controller()
-            .endpoint_in_out_enable(TransferType::Interrupt, ENDPOINT_NUM).unwrap();
+            .endpoint_in_out_enable(TransferType::Interrupt, ENDPOINT_NUM)
+            .unwrap();
     }
 
     fn attach(&'a self) {

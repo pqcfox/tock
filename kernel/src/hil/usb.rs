@@ -10,7 +10,7 @@ use crate::utilities::cells::VolatileCell;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Error {
     /// The provided endpoint is invalid
-    InvalidEndpoint
+    InvalidEndpoint,
 }
 
 /// USB controller interface
@@ -19,8 +19,16 @@ pub trait UsbController<'a> {
 
     // Should be called before `enable_as_device()`
     fn endpoint_set_ctrl_buffer(&self, buf: &'a [VolatileCell<u8>]);
-    fn endpoint_set_in_buffer(&self, endpoint: usize, buf: &'a [VolatileCell<u8>]) -> Result<(), Error>;
-    fn endpoint_set_out_buffer(&self, endpoint: usize, buf: &'a [VolatileCell<u8>]) -> Result<(), Error>;
+    fn endpoint_set_in_buffer(
+        &self,
+        endpoint: usize,
+        buf: &'a [VolatileCell<u8>],
+    ) -> Result<(), Error>;
+    fn endpoint_set_out_buffer(
+        &self,
+        endpoint: usize,
+        buf: &'a [VolatileCell<u8>],
+    ) -> Result<(), Error>;
 
     // Must be called before `attach()`
     fn enable_as_device(&self, speed: DeviceSpeed);
@@ -33,11 +41,20 @@ pub trait UsbController<'a> {
 
     fn enable_address(&self);
 
-    fn endpoint_in_enable(&self, transfer_type: TransferType, endpoint: usize) -> Result<(), Error>;
+    fn endpoint_in_enable(&self, transfer_type: TransferType, endpoint: usize)
+        -> Result<(), Error>;
 
-    fn endpoint_out_enable(&self, transfer_type: TransferType, endpoint: usize) -> Result<(), Error>;
+    fn endpoint_out_enable(
+        &self,
+        transfer_type: TransferType,
+        endpoint: usize,
+    ) -> Result<(), Error>;
 
-    fn endpoint_in_out_enable(&self, transfer_type: TransferType, endpoint: usize) -> Result<(), Error>;
+    fn endpoint_in_out_enable(
+        &self,
+        transfer_type: TransferType,
+        endpoint: usize,
+    ) -> Result<(), Error>;
 
     fn endpoint_resume_in(&self, endpoint: usize) -> Result<(), Error>;
 

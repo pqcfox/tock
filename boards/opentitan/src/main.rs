@@ -14,7 +14,7 @@
 #![test_runner(test_runner)]
 #![reexport_test_harness_main = "test_main"]
 
-use core::ptr::{addr_of, addr_of_mut};
+use core::ptr::{addr_of, addr_of_mut, from_ref};
 
 use crate::hil::symmetric_encryption::AES128_BLOCK_SIZE;
 use crate::otbn::OtbnComponent;
@@ -27,7 +27,6 @@ use capsules_core::virtualizers::virtual_alarm::{MuxAlarm, VirtualMuxAlarm};
 use capsules_extra::opentitan_alerthandler::AlertHandlerCapsule;
 use capsules_extra::opentitan_sysrst::SystemReset;
 use core::num::NonZeroU16;
-use earlgrey::alert_handler;
 use earlgrey::chip::EarlGreyDefaultPeripherals;
 use earlgrey::chip_config::EarlGreyConfig;
 use earlgrey::flash_ctrl;
@@ -53,7 +52,6 @@ use kernel::platform::{KernelResources, SyscallDriverLookup, TbfHeaderFilterDefa
 use kernel::scheduler::priority::PrioritySched;
 use kernel::utilities::registers::interfaces::ReadWriteable;
 use kernel::{create_capability, debug, static_init};
-use lowrisc::flash_ctrl::FlashMPConfig;
 use lowrisc::sysrst_ctrl::SysRstCtrl;
 use rv32i::csr;
 
@@ -291,7 +289,7 @@ impl SyscallDriverLookup for EarlGrey {
             capsules_extra::info_flash::DRIVER_NUMBER => match self.info_flash {
                 Some(info_flash) => f(Some(info_flash)),
                 None => f(None),
-            }
+            },
             capsules_extra::usb::usb_user2::DRIVER_NUM => f(Some(self.usb)),
             capsules_extra::pattgen::DRIVER_NUM => f(Some(self.pattgen)),
             capsules_extra::opentitan_alerthandler::DRIVER_NUM => {
@@ -377,8 +375,8 @@ fn get_flash_memory_protection_configuration() -> flash_ctrl::MemoryProtectionCo
         let page_index_range =
             earlgrey::flash_ctrl::tests::convert_flash_slice_to_page_position_range(unsafe {
                 core::slice::from_raw_parts(
-                    &_sapps as *const u8,
-                    &_eapps as *const u8 as usize - &_sapps as *const u8 as usize,
+                    from_ref(&_sapps),
+                    from_ref(&_eapps) as usize - from_ref(&_sapps) as usize,
                 )
             })
             .unwrap();
@@ -422,12 +420,10 @@ fn get_flash_memory_protection_configuration() -> flash_ctrl::MemoryProtectionCo
     } else {
         // SAFETY: &_stext represents a valid flash address in the host address space.
         let starting_address =
-            flash_ctrl::FlashAddress::new_from_host_address(unsafe { &_stext as *const u8 })
-                .unwrap();
+            flash_ctrl::FlashAddress::new_from_host_address(unsafe { from_ref(&_stext) }).unwrap();
         // SAFETY: &_etext represents a valid flash address in the host address space.
         let ending_address =
-            flash_ctrl::FlashAddress::new_from_host_address(unsafe { &_etext as *const u8 })
-                .unwrap();
+            flash_ctrl::FlashAddress::new_from_host_address(unsafe { from_ref(&_etext) }).unwrap();
 
         // Setup flash memory protection for the kernel
         // PANIC: the unwrap panics only if Flash(_stext) < FlashAddress(_etext), which occurs
@@ -740,9 +736,7 @@ unsafe fn setup() -> (
             lowrisc::usb::Usb,
             { lowrisc::usb::MAXIMUM_PACKET_SIZE.get() },
         >,
-        capsules_extra::usb::usb_user2::UsbClient::new(
-            &peripherals.usb
-        )
+        capsules_extra::usb::usb_user2::UsbClient::new(&peripherals.usb)
     );
 
     peripherals.usb.set_client(usb_client);
@@ -1206,8 +1200,8 @@ fn test_flash(
     let page_index_range =
         earlgrey::flash_ctrl::tests::convert_flash_slice_to_page_position_range(unsafe {
             core::slice::from_raw_parts(
-                &_sapps as *const u8,
-                &_eapps as *const u8 as usize - &_sapps as *const u8 as usize,
+                from_ref(&_sapps),
+                from_ref(&_eapps) as usize - from_ref(&_sapps) as usize,
             )
         })
         .unwrap();

@@ -1,9 +1,9 @@
-// This license header has to be included to be able to submit it to Tock
-// It is up to ZeroRISC to decide if it keeps this header or not
-//
 // Licensed under the Apache License, Version 2.0 or the MIT License.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // Copyright Tock Contributors 2022.
+//
+// This license header has to be included to be able to submit it to Tock
+// It is up to ZeroRISC to decide if it keeps this header or not
 
 use core::marker::PhantomData;
 
@@ -180,15 +180,15 @@ impl<const SIZE: usize, const BITS: usize, AlertType: TryFrom<u32>>
                 // flag `i` was not previously handled and now is raised
                 let id = AlertType::try_from(flag_index as u32);
                 // manually unwrap the Option< Id >, otherwise further constraints should have been added on the `AlertType` generic
-                match id {
-                    Err(_) => panic!("Invalid id = {:?} found", flag_index),
-                    Ok(id) => {
+                id.map_or_else(
+                    |_| panic!("Invalid id = {:?} found", flag_index),
+                    |id| {
                         // handle the flag
                         f(id);
                         self.set(flag_index);
                         at_least_one_new = true;
-                    }
-                }
+                    },
+                )
             }
         }
         at_least_one_new
@@ -679,7 +679,7 @@ impl AlertHandler {
     }
 
     /// function called when a local alert happened. Should return `AlertWasHandled::Yes` if the source of the alert was handled and the caller should clear the alert flag
-    pub fn handle_alert(&self, alert: LocalAlertId, _state: AlertState) -> bool {
+    pub fn handle_alert(&self, _alert: LocalAlertId, _state: AlertState) -> bool {
         #[cfg(feature = "test_alerthandler")]
         {
             //SAFETY: actually safe as the kernel is monothreaded

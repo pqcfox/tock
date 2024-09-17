@@ -4,7 +4,7 @@
 
 //! Helper macros and functions.
 
-use core::num::{NonZeroUsize, NonZeroU32};
+use core::num::{NonZeroU32, NonZeroUsize};
 
 /// Create an object with the given capability.
 ///
