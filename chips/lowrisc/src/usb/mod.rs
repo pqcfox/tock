@@ -12,6 +12,7 @@ mod chunk_index;
 mod chunk_index_iterator;
 mod endpoint;
 mod endpoint_index;
+mod endpoint_index_iterator;
 mod endpoint_state;
 mod interrupt;
 mod packet_received;
@@ -23,3 +24,4 @@ mod utils;
 
 pub use interrupt::UsbInterrupt;
 pub use usb::Usb;
+pub use packet_size::MAXIMUM_PACKET_SIZE;

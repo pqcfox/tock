@@ -21,6 +21,7 @@ pub enum SRCInputPin {
     FlashWP,
 }
 
+#[derive(Clone, Copy)]
 pub enum SRCOutputPin {
     BatDisable,
     EcReset,
@@ -179,7 +180,7 @@ pub struct SRCComboDetectorAction {
     pub bat_disable: bool,
 }
 
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Debug)]
 #[repr(usize)]
 pub enum SRCComboDetectorId {
     Zero = 0,
@@ -188,12 +189,25 @@ pub enum SRCComboDetectorId {
     Three = 3,
 }
 
+impl TryFrom<u32> for SRCComboDetectorId {
+    type Error = ();
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(Self::Zero),
+            1 => Ok(Self::One),
+            2 => Ok(Self::Two),
+            3 => Ok(Self::Three),
+            _ => Err(()),
+        }
+    }
+}
+
 /* WakeUp configuration */
 
 /// struct that hold the wakeup detection feature's configuration
-#[derive(Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub struct SRCWakeupConfig {
-    /// debounce timer value for detecting a high level (can be inverted due to input inversion functionality) on `ac_present` input signal in order to trigger a wakeup 
+    /// debounce timer value for detecting a high level (can be inverted due to input inversion functionality) on `ac_present` input signal in order to trigger a wakeup
     pub ac_present_debounce_timer_us: u16,
     /// debounce timer value for detecting a high to low transition (can be inverted due to input inversion functionality) on `pwrb` input signal in order to trigger a wakeup
     pub pwrb_debounce_timer_us: u16,
@@ -204,7 +218,7 @@ pub struct SRCWakeupConfig {
 }
 
 pub trait OpenTitanSysRstrClient {
-    /// handler called when the combo detector interrupt is triggered 
+    /// handler called when the combo detector interrupt is triggered
     /// # Parameters
     /// * 'input_pin_state`: state of the input pins
     /// * `combodetector_id`: which combo detector was triggered
@@ -236,13 +250,14 @@ pub trait OpenTitanSysRstr {
     /// * `detector_id`  which detector to configure
     /// * `configuration` how should the circuit behave (see `SRCComboDetectorConfig` documentation for meaning of each field )
     /// # Return
-    /// * `Ok`: when confiugration was succesful
-    /// * `Err`: when confiugration was not succesful (registers locked)
+    /// * `Ok`: when confiugration was successful
+    /// * `Err`: when confiugration was not successful (registers locked)
     fn configure_combo_detector(
         &self,
         detector_id: SRCComboDetectorId,
         configuration: &SRCComboDetectorConfig,
     ) -> Result<(), ()>;
+
     /// read configuration for combo detector circuit from registers
     /// # Parameters
     /// * `detector_id`: which detector to read
@@ -259,9 +274,10 @@ pub trait OpenTitanSysRstr {
     /// # Parameters
     /// * `configuration` how should the circuit behave (see `SRCAutoblockConfig` documentation for meaning of each field)
     /// # Return
-    /// * `Ok`: when confiugration was succesful
-    /// * `Err`: when confiugration was not succesful (registers locked)
+    /// * `Ok`: when confiugration was successful
+    /// * `Err`: when confiugration was not successful (registers locked)
     fn configure_autoblock(&self, configuration: &SRCAutoblockConfig) -> Result<(), ()>;
+
     /// read configuration for combo detector circuit from registers
     /// # Parameters
     /// * `detector_id`: which detector to read
@@ -274,9 +290,10 @@ pub trait OpenTitanSysRstr {
     /// # Parameters
     /// * `configuration` how should the circuit behave (see `SRCKeyInterruptConfig` documentation for meaning of each field)
     /// # Return
-    /// * `Ok`: when confiugration was succesful
-    /// * `Err`: when confiugration was not succesful (registers locked)
+    /// * `Ok`: when confiugration was successful
+    /// * `Err`: when confiugration was not successful (registers locked)
     fn configure_keyinterrupt(&self, configuration: &SRCKeyInterruptConfig) -> Result<(), ()>;
+
     /// read configuration for key interrupt circuit from registers
     /// # Parameters
     /// # Returns:
@@ -287,9 +304,10 @@ pub trait OpenTitanSysRstr {
     /// # Parameters
     /// * `configuration` how should the circuit behave (see `SRCPinInversionConfig` documentation for meaning of each field)
     /// # Return
-    /// * `Ok`: when confiugration was succesful
-    /// * `Err`: when confiugration was not succesful (registers locked)
+    /// * `Ok`: when confiugration was successful
+    /// * `Err`: when confiugration was not successful (registers locked)
     fn configure_pin_invertion(&self, configuration: &SRCPinInversionConfig) -> Result<(), ()>;
+
     /// read configuration for pin inversion circuit from registers
     /// # Parameters
     /// # Returns:
@@ -300,18 +318,20 @@ pub trait OpenTitanSysRstr {
     /// # Parameters
     /// * `configuration` how should the circuit behave (see `SRCAllowedPinConfig` documentation for meaning of each field)
     /// # Return
-    /// * `Ok`: when confiugration was succesful
-    /// * `Err`: when confiugration was not succesful (registers locked)
+    /// * `Ok`: when confiugration was successful
+    /// * `Err`: when confiugration was not successful (registers locked)
     fn configure_allowed_override_pin_states(
         &self,
         configuration: &SRCAllowedPinConfig,
     ) -> Result<(), ()>;
+
     /// read configuration for allowed override circuit from registers
     /// # Parameters
     /// # Returns:
     /// * `SRCAllowedPinConfig` how the circuit is configured to behave (see `SRCAllowedPinConfig` documentation )
     fn get_allowed_override_pin_state_confiugration(&self) -> SRCAllowedPinConfig;
-    /// override one of the output pins to a certain state or disable the overriding. This will work only if the pin was configured to be allowed to be overriden.  
+
+    /// override one of the output pins to a certain state or disable the overriding. This will work only if the pin was configured to be allowed to be overriden.
     /// # Parameters
     /// * `pin`: which output pin to override
     /// * `state: Some(logic_level)`: override pin to logic_level,
@@ -323,12 +343,26 @@ pub trait OpenTitanSysRstr {
     /// # Parameters
     /// * `configuration` how should the circuit behave (see `SRCWakeupConfig` documentation for meaning of each field)
     /// # Return
-    /// * `Ok`: when confiugration was succesful
-    /// * `Err`: when confiugration was not succesful (registers locked)
+    /// * `Ok`: when configuration was successful
+    /// * `Err`: when configuration was not successful (registers locked)
     fn configure_wakeup(&self, configuration: &SRCWakeupConfig);
+
     /// read configuration for allowed override circuit from registers
     /// # Parameters
     /// # Returns:
     /// * `SRCWakeupConfig` how the circuit is configured to behave (see `SRCWakeupConfig` documentation )
     fn get_wakeup_configuration(&self) -> SRCWakeupConfig;
+
+    /* DEBOUNCE TIMER (shared by Key Interrupt and Combo Detectors) */
+    /// configure debounce timer
+    /// # Returns
+    /// * `Ok`: when configuration was successful
+    /// * `Err`: when configuration was not sucessful (registers locked)
+    fn configure_debouncetimer(&self, duration_us: u16) -> Result<(), ()>;
+
+    /// read duration for deboncet timer from registers. Return result in microseconds.
+    fn get_debouncetimer_configuration(&self) -> u32;
+
+    /// lock HW register from reconfiguration
+    fn lock_configuration(&self);
 }

@@ -50,10 +50,6 @@ impl<'a> SysRstCtrl<'a> {
         !self.registers.regwen.is_set(REGWEN::WRITE_EN)
     }
 
-    pub fn lock_configuration(&self) {
-        self.registers.regwen.write(REGWEN::WRITE_EN.val(0));
-    }
-
     /* COMBO DETECTOR */
 
     pub fn is_combo_detector_interrupt_triggered(&self, detector_id: SRCComboDetectorId) -> bool {
@@ -95,7 +91,6 @@ impl<'a> SysRstCtrl<'a> {
     }
 
     /* KEY INTERRUPT */
-    #[track_caller]
     pub fn key_interrupt_status(&self) -> LocalRegisterCopy<u32, KeyInterruptState::Register> {
         let value = self.registers.key_intr_status.get();
         LocalRegisterCopy::<u32, KeyInterruptState::Register>::new(value)
@@ -104,20 +99,6 @@ impl<'a> SysRstCtrl<'a> {
     pub fn key_interrupt_clear(&self, a: Field<u32, KeyInterruptState::Register>) {
         let b = Field::<u32, KEY_INTR_STATUS::Register>::new(a.mask, a.shift);
         self.registers.key_intr_status.modify(b.val(1));
-    }
-
-    /// configure input debuounce timer that affercts Key Interrupt and Combo Detector
-    pub fn configure_debouncetimer(&self, duration_us: u16) {
-        self.registers
-            .key_intr_debounce_ctl
-            .write(KEY_INTR_DEBOUNCE_CTL::DEBOUNCE_TIMER.val(u16::div_ceil(duration_us, 5) as u32));
-    }
-
-    pub fn get_debouncetimer(&self) -> u32 {
-        self.registers
-            .key_intr_debounce_ctl
-            .read(KEY_INTR_DEBOUNCE_CTL::DEBOUNCE_TIMER)
-            * 5
     }
 
     /* WAKEUP */
@@ -693,6 +674,28 @@ impl<'a> OpenTitanSysRstr for SysRstCtrl<'a> {
             enabled,
         }
     }
+
+    /// configure input debuounce timer that affercts Key Interrupt and Combo Detector
+    fn configure_debouncetimer(&self, duration_us: u16) -> Result<(), ()> {
+        if self.is_configuration_locked() {
+            return Err(());
+        }
+        self.registers
+            .key_intr_debounce_ctl
+            .write(KEY_INTR_DEBOUNCE_CTL::DEBOUNCE_TIMER.val(u16::div_ceil(duration_us, 5) as u32));
+        Ok(())
+    }
+
+    fn get_debouncetimer_configuration(&self) -> u32 {
+        self.registers
+            .key_intr_debounce_ctl
+            .read(KEY_INTR_DEBOUNCE_CTL::DEBOUNCE_TIMER)
+            * 5
+    }
+
+    fn lock_configuration(&self) {
+        self.registers.regwen.write(REGWEN::WRITE_EN.val(0));
+    }
 }
 
 register_bitfields![u32,
@@ -722,6 +725,7 @@ pub mod tests {
             OpenTitanSysRstr, SRCAutoblockConfig, SRCComboDetectorConfig, SRCComboDetectorId,
             SRCKeyInterruptConfig, SRCPinInversionConfig,
         },
+        time::{Alarm, AlarmClient},
     };
 
     use super::{KeyInterruptState, SRCAllowedPinConfig, SysRstCtrl};
@@ -806,6 +810,11 @@ pub mod tests {
             key0_sense.read(),
             "Key0_force = 1 should not change when pwrb is changed"
         );
+
+        key0_force.clear();
+        pwrb_force.clear();
+
+        kernel::debug!("R test_wiring passed");
     }
 
     /// test ComboDetector functions by:
@@ -848,7 +857,9 @@ pub mod tests {
         sysrst_ctrl.enable_interrupts();
 
         // Combo Detector and Key Interrupt share the common debounce timer
-        sysrst_ctrl.confiugre_debouncetimer(5);
+        sysrst_ctrl
+            .configure_debouncetimer(5)
+            .expect("HW registers are locked");
 
         // confiugre the combo detector
         let configure_result =
@@ -889,7 +900,7 @@ pub mod tests {
         );
 
         // check that the readback debounce timer confiugration is the same as the initial (desired) confiugration
-        let readback_debouncetimer = sysrst_ctrl.get_debouncetimer();
+        let readback_debouncetimer = sysrst_ctrl.get_debouncetimer_configuration();
         assert_eq!(readback_debouncetimer, 5);
 
         // deconfigure the ComboDetector
@@ -938,7 +949,9 @@ pub mod tests {
             .expect("peripheral is locked");
 
         // Combo Detector and Key Interrupt share the common debounce timer
-        sysrst_ctrl.confiugre_debouncetimer(5);
+        sysrst_ctrl
+            .configure_debouncetimer(5)
+            .expect("HW registers are locked");
 
         clock_domain_sync();
 
@@ -1274,5 +1287,20 @@ pub mod tests {
         test_key0_invertion(sysrst_ctrl, key0_sense, key0_force, pwrb_force);
         test_pin_override(sysrst_ctrl, key0_sense, key0_force, pwrb_force);
         kernel::debug!("SystemReset_Ctrl tests DONE");
+    }
+
+    pub struct Tests<'a, A: Alarm<'a>> {
+        alarm: &'a A,
+        sysrst_ctrl: &'a SysRstCtrl<'a>,
+    }
+
+    impl<'a, A: Alarm<'a>> Tests<'a, A> {
+        pub fn new(sysrst_ctrl: &'a SysRstCtrl<'a>, alarm: &'a A) -> Self {
+            Self { alarm, sysrst_ctrl }
+        }
+    }
+
+    impl<'a, A: Alarm<'a>> AlarmClient for Tests<'a, A> {
+        fn alarm(&self) {}
     }
 }
