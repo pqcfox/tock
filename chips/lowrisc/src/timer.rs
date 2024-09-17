@@ -11,23 +11,23 @@ use crate::registers::rv_timer_regs::{
 use kernel::hil::time::{self, Ticks64};
 use kernel::utilities::cells::OptionalCell;
 use kernel::utilities::registers::interfaces::{Readable, Writeable};
-use kernel::utilities::registers::{register_bitfields, register_structs, ReadWrite, WriteOnly};
+use kernel::utilities::registers::ReadWrite;
 use kernel::utilities::StaticRef;
-use kernel::{debug, ErrorCode};
-
-#[cfg(feature = "test_rv_timer")]
-use kernel::{
-    hil::{
-        reset_managment::ResetManagment,
-        retention_ram::{CreatorRetentionRam, OwnerRetentionRam},
-        uart::TransmitSynch,
-    },
-    utilities::target_test::{self, TargetTests},
-};
+use kernel::ErrorCode;
 use rv32i::machine_timer::MachineTimer;
 
 #[cfg(feature = "test_rv_timer")]
-use core::fmt::Write;
+use {
+    core::fmt::Write,
+    kernel::{
+        hil::{
+            retention_ram::{CreatorRetentionRam, OwnerRetentionRam},
+            uart::TransmitSynch,
+        },
+        utilities::target_test,
+    },
+};
+
 /// 10KHz `Frequency`
 #[derive(Debug)]
 pub struct Freq10KHz;
@@ -83,7 +83,7 @@ impl<'a> RvTimer<'a> {
             self.peripherial_clock_frequency.checked_rem(target_freq),
         ) {
             (Some(x), Some(0)) => (x - 1, SetClkResult::SetPrecise),
-            (Some(x), Some(y)) => (x - 1, SetClkResult::SetImprecise),
+            (Some(x), Some(_)) => (x - 1, SetClkResult::SetImprecise),
             _ => (0, SetClkResult::Error),
         };
         if prescaler_target > 0xFFF {
@@ -138,7 +138,6 @@ impl<'a> RvTimer<'a> {
     #[cfg(feature = "test_rv_timer")]
     pub fn test(
         &self,
-        reset_manager: &dyn ResetManagment<ResetInfo = [u32; 19]>,
         uart: &dyn TransmitSynch,
         creator_ram: &dyn CreatorRetentionRam<Data = u32, ID = usize>,
         owner_ram: &dyn OwnerRetentionRam<Data = u32, ID = usize>,
@@ -339,7 +338,6 @@ pub mod tests {
         }
 
         pub fn cyclic_tests(&self) {
-            debug!("Cyclic alarm!");
             match self.cycles.get() {
                 0 => {
                     self.start_alarm(1000);

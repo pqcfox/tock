@@ -1130,12 +1130,11 @@ unsafe fn setup() -> (
     #[cfg(feature = "test_rv_timer")]
     {
         peripherals.timer.test(
-            &peripherals.rst_mgmt,
             &peripherals.uart0,
             &peripherals.sram_ret,
             &peripherals.sram_ret,
         );
-        test_rv_timer(peripherals, mux_alarm);
+        test_rv_timer(mux_alarm);
     }
 
     debug!("OpenTitan initialisation complete. Entering main loop");
@@ -1258,13 +1257,7 @@ unsafe fn test_aon_timer(
 }
 
 #[cfg(feature = "test_rv_timer")]
-unsafe fn test_rv_timer(
-    peripherals: &'static EarlGreyDefaultPeripherals<ChipConfig, BoardPinmuxLayout>,
-    mux_alarm: &'static MuxAlarm<'static, RvTimer>,
-) {
-    use kernel::hil::time::Alarm;
-    use kernel::hil::time::ConvertTicks;
-    use kernel::hil::time::Time;
+unsafe fn test_rv_timer(mux_alarm: &'static MuxAlarm<'static, RvTimer>) {
     use lowrisc::timer;
 
     debug!("Start rv_timer kernel runtime tests!");
@@ -1276,14 +1269,14 @@ unsafe fn test_rv_timer(
     );
     virtual_alarm_tests.setup();
 
-    let aon_timer_tests = static_init!(
+    let rv_timer_tests = static_init!(
         timer::tests::Tests<VirtualMuxAlarm<'static, RvTimer>>,
         timer::tests::Tests::new(virtual_alarm_tests)
     );
 
-    hil::time::Alarm::set_alarm_client(virtual_alarm_tests, aon_timer_tests);
+    hil::time::Alarm::set_alarm_client(virtual_alarm_tests, rv_timer_tests);
 
-    aon_timer_tests.start_alarm(1000);
+    rv_timer_tests.start_alarm(1000);
 }
 
 /// Main function.
