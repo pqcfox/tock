@@ -1268,10 +1268,6 @@ unsafe fn test_aon_timer(
     peripherals: &'static EarlGreyDefaultPeripherals<ChipConfig, BoardPinmuxLayout>,
     mux_alarm: &'static MuxAlarm<'static, RvTimer<ChipConfig>>,
 ) {
-    use kernel::hil::time::Alarm;
-    use kernel::hil::time::ConvertTicks;
-    use kernel::hil::time::Time;
-
     debug!("Start aon_timer kernel runtime tests!");
 
     // an Alarm is needed for some of the tests as alert handling works using interrupts
@@ -1283,13 +1279,7 @@ unsafe fn test_aon_timer(
 
     let aon_timer_tests = static_init!(
         aon_timer::tests::Tests<VirtualMuxAlarm<'static, RvTimer<ChipConfig>>>,
-        aon_timer::tests::Tests::new(
-            &peripherals.watchdog,
-            &peripherals.rst_mgmt,
-            &peripherals.uart0,
-            &peripherals.sram_ret,
-            virtual_alarm_tests,
-        )
+        aon_timer::tests::Tests::new(&peripherals.watchdog, virtual_alarm_tests,)
     );
 
     hil::time::Alarm::set_alarm_client(virtual_alarm_tests, aon_timer_tests);

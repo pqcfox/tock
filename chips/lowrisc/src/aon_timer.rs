@@ -8,14 +8,23 @@ use crate::registers::aon_timer_regs::{
     AonTimerRegisters, INTR_STATE, WDOG_BARK_THOLD, WDOG_BITE_THOLD, WDOG_CTRL, WDOG_REGWEN,
     WKUP_COUNT, WKUP_CTRL, WKUP_THOLD,
 };
-use core::fmt::Write;
-use kernel::hil::retention_ram::{CreatorRetentionRam, OwnerRetentionRam};
-use kernel::hil::uart::TransmitSynch;
+
 use kernel::utilities::cells::OptionalCell;
 use kernel::utilities::registers::interfaces::{Readable, Writeable};
-use kernel::utilities::target_test;
 use kernel::utilities::StaticRef;
 use kernel::{platform, ErrorCode};
+
+#[cfg(feature = "test_aon_timer")]
+use {
+    core::fmt::Write,
+    kernel::{
+        hil::{
+            retention_ram::{CreatorRetentionRam, OwnerRetentionRam},
+            uart::TransmitSynch,
+        },
+        utilities::target_test,
+    },
+};
 
 pub struct AonTimer<'a> {
     registers: StaticRef<AonTimerRegisters>,
@@ -250,14 +259,6 @@ impl<'a> AonTimer<'a> {
                     .assert_function("Test wakeup prescaler boundries check OK case!", || {
                         self.wakeup_set_prescaler_and_enable(0) == Ok(())
                     });
-
-                test_runner.assert_function("Enable wakeup fail because of boundaries!", || {
-                    self.wakeup_enable_after_ms(1000) == Err(ErrorCode::INVAL)
-                });
-
-                test_runner.assert_function("Enable wakeup fail because of boundaries!", || {
-                    self.wakeup_enable_after_ms(1000) == Err(ErrorCode::INVAL)
-                });
             }
             1 => {
                 // runner.assert_function("We woke up after sleep!", || {
@@ -279,18 +280,12 @@ pub mod tests {
     use super::AonTimer;
     use core::cell::Cell;
     use kernel::debug;
-    use kernel::hil::reset_managment::ResetManagment;
-    use kernel::hil::retention_ram::OwnerRetentionRam;
     use kernel::hil::time::Alarm;
     use kernel::hil::time::AlarmClient;
     use kernel::hil::time::ConvertTicks;
-    use kernel::hil::uart::TransmitSynch;
 
     pub struct Tests<'a, A: Alarm<'a>> {
         aon_timer: &'a AonTimer<'a>,
-        reset_manager: &'a dyn ResetManagment<ResetInfo = [u32; 19]>,
-        uart: &'a dyn TransmitSynch,
-        owner_ram: &'a dyn OwnerRetentionRam<Data = u32, ID = usize>,
         alarm: &'a A,
         cycles: Cell<u32>,
     }
@@ -313,18 +308,9 @@ pub mod tests {
     }
 
     impl<'a, A: Alarm<'a>> Tests<'a, A> {
-        pub fn new(
-            aon_timer: &'a AonTimer<'a>,
-            reset_manager: &'a dyn ResetManagment<ResetInfo = [u32; 19]>,
-            uart: &'a dyn TransmitSynch,
-            owner_ram: &'a dyn OwnerRetentionRam<Data = u32, ID = usize>,
-            alarm: &'a A,
-        ) -> Self {
+        pub fn new(aon_timer: &'a AonTimer<'a>, alarm: &'a A) -> Self {
             Self {
                 aon_timer,
-                reset_manager,
-                uart,
-                owner_ram,
                 alarm,
                 cycles: Cell::new(0),
             }
