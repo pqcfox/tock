@@ -5,14 +5,18 @@
 use crate::registers::sram_ctrl_regs;
 use crate::registers::sram_ctrl_regs::SramCtrlRegisters;
 use crate::registers::top_earlgrey::SRAM_CTRL_RET_AON_REGS_BASE_ADDR;
-use crate::rstmgr::RstMgr;
 use core::cell::Cell;
-use core::fmt::Write;
 use kernel::hil::retention_ram;
-use kernel::utilities::registers::interfaces::Readable;
-use kernel::utilities::{registers::interfaces::ReadWriteable, target_test, StaticRef};
+use kernel::utilities::{
+    registers::interfaces::{ReadWriteable, Readable},
+    StaticRef,
+};
 use kernel::ErrorCode;
-use lowrisc::uart::Uart;
+
+#[cfg(feature = "test_sram_ret")]
+use {
+    crate::rstmgr::RstMgr, core::fmt::Write, kernel::utilities::target_test, lowrisc::uart::Uart,
+};
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum DrvState {
