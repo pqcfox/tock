@@ -5,18 +5,17 @@
 //! AON/Watchdog Timer Driver
 
 use crate::registers::aon_timer_regs::{
-    AonTimerRegisters, ALERT_TEST, INTR_STATE, INTR_TEST, WDOG_BARK_THOLD, WDOG_BITE_THOLD,
-    WDOG_CTRL, WDOG_REGWEN, WKUP_COUNT, WKUP_CTRL, WKUP_THOLD,
+    AonTimerRegisters, INTR_STATE, WDOG_BARK_THOLD, WDOG_BITE_THOLD, WDOG_CTRL, WDOG_REGWEN,
+    WKUP_COUNT, WKUP_CTRL, WKUP_THOLD,
 };
 use core::fmt::Write;
-use kernel::hil::reset_managment::ResetManagment;
 use kernel::hil::retention_ram::{CreatorRetentionRam, OwnerRetentionRam};
-use kernel::hil::uart::{TransmitSynch, Uart};
+use kernel::hil::uart::TransmitSynch;
 use kernel::utilities::cells::OptionalCell;
 use kernel::utilities::registers::interfaces::{Readable, Writeable};
-use kernel::utilities::target_test::{self, TargetTests};
+use kernel::utilities::target_test;
 use kernel::utilities::StaticRef;
-use kernel::{debug, platform, ErrorCode};
+use kernel::{platform, ErrorCode};
 
 pub struct AonTimer<'a> {
     registers: StaticRef<AonTimerRegisters>,
@@ -92,13 +91,13 @@ impl<'a> AonTimer<'a> {
     }
 
     /// Reset watch dog timer count value.
-    fn reset_wdog(&self) {
+    pub fn reset_wdog(&self) {
         self.registers.wdog_count.set(0x00);
     }
 
     /// Start the watchdog counter with pause in sleep
     /// i.e wdog timer is paused when system is sleeping
-    fn wdog_start_count(&self, count_in_sleep: bool) {
+    pub fn wdog_start_count(&self, count_in_sleep: bool) {
         match count_in_sleep {
             true => self
                 .registers
@@ -124,7 +123,7 @@ impl<'a> AonTimer<'a> {
     }
 
     /// Program the desired thresholds in WKUP_THOLD, WDOG_BARK_THOLD and WDOG_BITE_THOLD
-    fn set_wdog_bark_thresh_ms(&self, ms: u32) {
+    pub fn set_wdog_bark_thresh_ms(&self, ms: u32) {
         // Watchdog period may need to be revised with kernel changes/updates
         // since the watchdog is `tickled()` at the start of every kernel loop
         // see: https://github.com/tock/tock/blob/eb3f7ce59434b7ac1b77ef1ab7dd2afad1a62ac5/kernel/src/kernel.rs#L448
@@ -141,22 +140,22 @@ impl<'a> AonTimer<'a> {
     }
 
     // Reset watch dog timer
-    fn wdog_pet(&self) {
+    pub fn wdog_pet(&self) {
         self.registers.wdog_count.set(0x00);
     }
 
     /// Temporarily disable the watchdog without resetting the counter register.
-    fn wdog_suspend(&self) {
+    pub fn wdog_suspend(&self) {
         self.registers.wdog_ctrl.write(WDOG_CTRL::ENABLE::CLEAR);
     }
 
     /// Resume the watchdog and continue from where the counter register left off.
-    fn wdog_resume(&self) {
+    pub fn wdog_resume(&self) {
         self.registers.wdog_ctrl.write(WDOG_CTRL::ENABLE::SET);
     }
 
     /// Locks further config to WDOG until next system reset
-    fn lock_wdog_conf(&self) {
+    pub fn lock_wdog_conf(&self) {
         self.registers.wdog_regwen.write(WDOG_REGWEN::REGWEN::SET)
     }
 
@@ -197,7 +196,6 @@ impl<'a> AonTimer<'a> {
     #[cfg(feature = "test_aon_timer")]
     pub fn test(
         &self,
-        reset_manager: &dyn ResetManagment<ResetInfo = [u32; 19]>,
         uart: &dyn TransmitSynch,
         creator_ram: &dyn CreatorRetentionRam<Data = u32, ID = usize>,
         owner_ram: &dyn OwnerRetentionRam<Data = u32, ID = usize>,
@@ -269,7 +267,9 @@ impl<'a> AonTimer<'a> {
             _ => {}
         }
 
-        test_runner.write_str("Ending aon_timer pre-kernel self-test \r\n");
+        test_runner
+            .write_str("Ending aon_timer pre-kernel self-test \r\n")
+            .unwrap();
         test_runner.is_test_failed
     }
 }
@@ -302,14 +302,14 @@ pub mod tests {
         unsafe {
             WAKEUP_CALLED = true;
         }
-        kernel::debug!("Wakeup callback!!!");
+        debug!("Wakeup callback!!!");
     }
 
     fn bark_callback() {
         unsafe {
             BARK_CALLED = true;
         }
-        kernel::debug!("Wdog bark!!!");
+        debug!("Wdog bark!!!");
     }
 
     impl<'a, A: Alarm<'a>> Tests<'a, A> {

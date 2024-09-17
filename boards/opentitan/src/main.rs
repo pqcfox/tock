@@ -292,7 +292,7 @@ impl SyscallDriverLookup for EarlGrey {
             capsules_extra::info_flash::DRIVER_NUMBER => match self.info_flash {
                 Some(info_flash) => f(Some(info_flash)),
                 None => f(None),
-            }
+            },
             capsules_extra::usb::usb_user2::DRIVER_NUM => f(Some(self.usb)),
             capsules_extra::pattgen::DRIVER_NUM => f(Some(self.pattgen)),
             capsules_extra::opentitan_alerthandler::DRIVER_NUM => {
@@ -741,9 +741,7 @@ unsafe fn setup() -> (
             lowrisc::usb::Usb,
             { lowrisc::usb::MAXIMUM_PACKET_SIZE.get() },
         >,
-        capsules_extra::usb::usb_user2::UsbClient::new(
-            &peripherals.usb
-        )
+        capsules_extra::usb::usb_user2::UsbClient::new(&peripherals.usb)
     );
 
     peripherals.usb.set_client(usb_client);
@@ -1174,7 +1172,6 @@ unsafe fn setup() -> (
     #[cfg(feature = "test_aon_timer")]
     {
         peripherals.watchdog.test(
-            &peripherals.rst_mgmt,
             &peripherals.uart0,
             &peripherals.sram_ret,
             &peripherals.sram_ret,
@@ -1268,7 +1265,6 @@ unsafe fn test_alerthandler(
 
 #[cfg(feature = "test_aon_timer")]
 unsafe fn test_aon_timer(
-    // aon_timer: &'static aon_timer::AonTimer,
     peripherals: &'static EarlGreyDefaultPeripherals<ChipConfig, BoardPinmuxLayout>,
     mux_alarm: &'static MuxAlarm<'static, RvTimer<ChipConfig>>,
 ) {
