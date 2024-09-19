@@ -21,12 +21,13 @@ use crate::otbn::OtbnComponent;
 use crate::pinmux_layout::BoardPinmuxLayout;
 use capsules_aes_gcm::aes_gcm;
 use capsules_core::driver;
-use capsules_core::reset_manager::ResetManager;
 use capsules_core::virtualizers::virtual_aes_ccm;
 use capsules_core::virtualizers::virtual_alarm::{MuxAlarm, VirtualMuxAlarm};
 use capsules_extra::opentitan_alerthandler::AlertHandlerCapsule;
 use capsules_extra::opentitan_sysrst::SystemReset;
+use capsules_extra::reset_manager::ResetManager;
 use core::num::NonZeroU16;
+use earlgrey::alert_handler;
 use earlgrey::chip::EarlGreyDefaultPeripherals;
 use earlgrey::chip_config::EarlGreyConfig;
 use earlgrey::flash_ctrl;
@@ -295,7 +296,7 @@ impl SyscallDriverLookup for EarlGrey {
             capsules_extra::opentitan_alerthandler::DRIVER_NUM => {
                 f(Some(self.opentitan_alerthandler))
             }
-            capsules_core::reset_manager::DRIVER_NUM => f(Some(self.reset_manager)),
+            capsules_extra::reset_manager::DRIVER_NUM => f(Some(self.reset_manager)),
             capsules_extra::opentitan_sysrst::DRIVER_NUM => f(Some(self.opentitan_sysrst)),
             _ => f(None),
         }
@@ -519,21 +520,12 @@ unsafe fn setup() -> (
     );
     peripherals.init();
 
-    // retrieve reset reason
-    // RSTMGR::reset_reason might get cleared by ROM code that runs before Tock and cached in RetentionRAM
-    // if reset_reason in HW peripheral is cleared, attempt to read it from RRAM
-    // TODO replace unsafe fn `get_rr_from_rram()` with RRAM function call when RRAM is ready
-    let reset_reason = peripherals
-        .rst_mgmt
-        .reset_reason()
-        .or(earlgrey::rstmgr::RstMgr::get_rr_from_rram());
-
     let reset_manager = kernel::static_init!(
-        capsules_core::reset_manager::ResetManager<'static, earlgrey::rstmgr::RstMgr>,
+        capsules_extra::reset_manager::ResetManager<'static, earlgrey::rstmgr::RstMgr>,
         ResetManager::new(
             &peripherals.rst_mgmt,
             board_kernel.create_grant(
-                capsules_core::reset_manager::DRIVER_NUM,
+                capsules_extra::reset_manager::DRIVER_NUM,
                 &memory_allocation_cap
             )
         )
@@ -1124,10 +1116,19 @@ unsafe fn setup() -> (
     lowrisc::pattgen::tests::run_all(pattgen_test);
     */
 
+    // when running with ROM, reset reason is cleared from HW and stored inside RetentionRAM
+    let reset_reason = earlgrey::rstmgr::RstMgr::get_rr_from_rram(&peripherals.sram_ret);
     earlgrey.reset_manager.startup();
     earlgrey.reset_manager.populate_reset_reason(reset_reason);
 
     /* TESTs */
+    #[cfg(feature = "test_resetmanager")]
+    capsules_extra::reset_manager::test::test_software_reset(
+        &peripherals.sram_ret,
+        earlgrey.reset_manager,
+        core::ptr::addr_of!(_sflash) as usize,
+        core::ptr::addr_of!(_eflash) as usize,
+    );
 
     #[cfg(feature = "test_alerthandler")]
     {
@@ -1150,7 +1151,7 @@ unsafe fn setup() -> (
             core::ptr::addr_of_mut!(_sappmem),
             core::ptr::addr_of!(_eappmem) as usize - core::ptr::addr_of!(_sappmem) as usize,
         ),
-        &mut *addr_of_mut!(PROCESSES),
+        &mut *core::ptr::addr_of_mut!(PROCESSES),
         &FAULT_RESPONSE,
         &process_mgmt_cap,
     )

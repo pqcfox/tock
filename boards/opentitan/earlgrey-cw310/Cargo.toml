@@ -28,6 +28,7 @@ default = ["fpga_cw310"]
 test_sram_ret = ["earlgrey/test_sram_ret"]
 test_sysrst_ctrl = ["lowrisc/test_sysrst_ctrl"]
 test_alerthandler = ["earlgrey/test_alerthandler", "lowrisc/test_alerthandler"]
+test_resetmanager = ["capsules-extra/test_resetmanager_opentitan"]
 
 # OpenTitan SoC design can be synthesized or compiled for different targets. A
 # target can be a specific FPGA board, an ASIC technology, or a simulation tool.

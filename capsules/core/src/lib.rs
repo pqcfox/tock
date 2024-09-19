@@ -23,7 +23,6 @@ pub mod i2c_master_slave_driver;
 pub mod led;
 pub mod low_level_debug;
 pub mod process_console;
-pub mod reset_manager;
 pub mod rng;
 pub mod spi_controller;
 pub mod spi_peripheral;

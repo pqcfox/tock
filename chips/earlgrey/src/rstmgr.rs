@@ -14,7 +14,10 @@ use crate::registers::{
     top_earlgrey::RSTMGR_AON_BASE_ADDR,
 };
 use kernel::{
-    hil::reset_managment::{ResetManagment, ResetReason},
+    hil::{
+        reset_managment::{ResetManagment, ResetReason},
+        retention_ram::CreatorRetentionRam,
+    },
     utilities::{
         registers::interfaces::{ReadWriteable, Readable, Writeable},
         StaticRef,
@@ -58,6 +61,7 @@ pub enum RstMgrReason {
     ///rv_dm: non-debug-module reset request
     Debug = 0b1000_0000,
 
+    /// multiple bits are set, probably register was not cleared between resets
     MultipleReasons(u8),
 }
 
@@ -311,10 +315,12 @@ impl RstMgr {
         (register_content ^ error_mask) == 0
     }
 
-    //TODO remove
-    pub fn get_rr_from_rram() -> Option<ResetReason> {
-        let a: u32 = unsafe { core::ptr::read(0x40600004 as *const u32) };
-        match TryInto::<RstMgrReason>::try_into(a) {
+    /// read Reset Reason from RetentionRAM (stored there by ROM_EXT)
+    pub fn get_rr_from_rram(
+        creator_ram: &impl CreatorRetentionRam<Data = u32, ID = usize>,
+    ) -> Option<ResetReason> {
+        let raw_value = creator_ram.read(4).ok()?;
+        match TryInto::<RstMgrReason>::try_into(raw_value) {
             Ok(reason) => reason.into(),
             Err(()) => None,
         }
@@ -329,7 +335,6 @@ impl ResetManagment for RstMgr {
     }
 
     fn reset_reason(&self) -> Option<kernel::hil::reset_managment::ResetReason> {
-        // trigger reset reason reading (if cache was not populated)
         self.read_reset_reason().into()
     }
 
