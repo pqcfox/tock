@@ -106,6 +106,7 @@ These capsules provide a `Driver` interface for common MCU peripherals.
 - **[DAC](src/dac.rs)**: Digital to analog conversion.
 - **[CAN](src/can.rs)**: CAN communication.
 - **[InfoFlash](src/info_flash.rs)**: OpenTitan Flash Information Pages
+- **[ResetManager](src/reset_manager.rs)**: OpenTitan Reset Manager
 - **[AlertHandler](src/opentitan_alerthandler.rs)**: OpenTitan Alert Handler
 - **[SysRst](src/opentitan_sysrst.rs)**: OpenTitan System Reset Controller
 - **[Pattgen](src/pattgen.rs)**: Pattern Generator

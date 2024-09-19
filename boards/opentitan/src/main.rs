@@ -14,8 +14,6 @@
 #![test_runner(test_runner)]
 #![reexport_test_harness_main = "test_main"]
 
-use core::ptr::{addr_of, addr_of_mut, from_ref};
-
 use crate::hil::symmetric_encryption::AES128_BLOCK_SIZE;
 use crate::otbn::OtbnComponent;
 use crate::pinmux_layout::BoardPinmuxLayout;
@@ -27,7 +25,7 @@ use capsules_extra::opentitan_alerthandler::AlertHandlerCapsule;
 use capsules_extra::opentitan_sysrst::SystemReset;
 use capsules_extra::reset_manager::ResetManager;
 use core::num::NonZeroU16;
-use earlgrey::alert_handler;
+use core::ptr::{addr_of, from_ref};
 use earlgrey::chip::EarlGreyDefaultPeripherals;
 use earlgrey::chip_config::EarlGreyConfig;
 use earlgrey::flash_ctrl;
@@ -44,7 +42,6 @@ use kernel::hil::hasher::Hasher;
 use kernel::hil::i2c::I2CMaster;
 use kernel::hil::led::LedHigh;
 use kernel::hil::pattgen::PattGen;
-use kernel::hil::reset_managment::ResetManagment;
 use kernel::hil::rng::Rng;
 use kernel::hil::symmetric_encryption::AES128;
 use kernel::hil::usb::UsbController;

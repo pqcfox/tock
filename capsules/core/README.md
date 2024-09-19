@@ -29,7 +29,6 @@ These capsules provide a `Driver` interface for common MCU peripherals.
   access.
 - **[I2C_MASTER_SLAVE Driver](src/i2c_master_slave_driver.rs)**: I2C master and
   slave userspace access.
-- **[ResetManager](src/reset_manager.rs)**: OpenTitan Reset Manager
 - **[RNG](src/rng.rs)**: Random number generation.
 - **[SPI Controller](src/spi_controller.rs)**: SPI controller device (SPI
   master)
