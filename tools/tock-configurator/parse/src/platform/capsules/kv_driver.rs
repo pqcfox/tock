@@ -81,6 +81,11 @@ impl<F: flash::Flash> Component for KvDriver<F> {
             );
             kernel::deferred_call::DeferredCallClient::register(sip_hash);
 
+            #[cfg(test)]
+            {
+                SIPHASH = Some(sip_hash);
+            }
+
             // TicKV
             let tickv = components::tickv::TicKVComponent::new(
                 sip_hash,
@@ -98,6 +103,11 @@ impl<F: flash::Flash> Component for KvDriver<F> {
             ));
             kernel::hil::flash::HasClient::set_client(&peripherals.flash_ctrl, mux_flash);
             kernel::hil::hasher::Hasher::set_client(sip_hash, tickv);
+
+            #[cfg(test)]
+            {
+                TICKV = Some(tickv);
+            }
 
             let kv_store = components::kv::TicKVKVStoreComponent::new(tickv).finalize(
                 components::tickv_kv_store_component_static!(

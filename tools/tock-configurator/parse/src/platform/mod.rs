@@ -63,11 +63,14 @@ impl<C: Chip + 'static> crate::Component for Platform<C> {
             .collect::<Vec<_>>();
 
         Ok(quote! {
-            #ty {
-                #(#capsules,)*
-                #scheduler,
-                #systick_id,
-            }
+            kernel::static_init!(
+                #ty,
+                #ty {
+                    #(#capsules,)*
+                    #scheduler,
+                    #systick_id,
+                }
+            )
         })
     }
 }

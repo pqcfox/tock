@@ -79,6 +79,7 @@ impl parse::Component for Chip {
     fn after_init(&self) -> Option<parse::proc_macro2::TokenStream> {
         let ident: parse::proc_macro2::TokenStream = self.ident().unwrap().parse().unwrap();
         Some(quote::quote! {
+            CHIP = Some(#ident);
             use kernel::utilities::registers::interfaces::ReadWriteable;
             #ident.enable_plic_interrupts();
             // enable interrupts globally

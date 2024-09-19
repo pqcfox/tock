@@ -91,6 +91,15 @@ impl<A: aes::Aes> Component for AesCapsule<A> {
             ));
         ))
     }
+
+    fn after_init(&self) -> Option<proc_macro2::TokenStream> {
+        Some(quote::quote!(
+            #[cfg(test)]
+            {
+                AES = Some(gcm_client);
+            }
+        ))
+    }
 }
 
 impl<A: aes::Aes> Capsule for AesCapsule<A> {

@@ -137,6 +137,14 @@ impl<T: Timer> crate::Component for MuxAlarm<T> {
         .finalize(components::alarm_mux_component_static!(#timer_type))})
     }
 
+    fn before_init(&self) -> Option<proc_macro2::TokenStream> {
+        let timer_ident: proc_macro2::TokenStream =
+            self.peripheral.ident().unwrap().parse().unwrap();
+        Some(quote! {
+            let __timer = &#timer_ident;
+        })
+    }
+
     fn init_expr(&self) -> Result<proc_macro2::TokenStream, crate::Error> {
         let timer_type = self.peripheral.ty()?;
 
@@ -146,11 +154,14 @@ impl<T: Timer> crate::Component for MuxAlarm<T> {
             ))))
     }
 
-    fn before_init(&self) -> Option<proc_macro2::TokenStream> {
-        let timer_ident: proc_macro2::TokenStream =
-            self.peripheral.ident().unwrap().parse().unwrap();
-        Some(quote! {
-            let __timer = &#timer_ident;
-        })
+    fn after_init(&self) -> Option<proc_macro2::TokenStream> {
+        let ident: proc_macro2::TokenStream = self.ident().unwrap().parse().unwrap();
+
+        Some(quote!(
+            #[cfg(test)]
+            {
+                ALARM = Some(#ident);
+            }
+        ))
     }
 }

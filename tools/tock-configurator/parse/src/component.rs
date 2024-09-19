@@ -134,7 +134,6 @@ pub trait Component: Ident + AsComponent + AsAny {
 // Used for finding types in a list of `Component` trait objects.
 impl dyn Component {
     pub fn is<T: 'static>(&self) -> bool {
-        println!("{:?} {:?}", TypeId::of::<T>(), self.type_id());
         TypeId::of::<T>() == self.type_id()
     }
 

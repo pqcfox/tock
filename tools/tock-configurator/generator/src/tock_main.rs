@@ -67,13 +67,19 @@ impl<C: Chip + 'static> TockMain<C> {
     fn imports(&self) -> proc_macro2::TokenStream {
         quote! {
             #![no_std]
+            #![feature(custom_test_frameworks)]
+            #![test_runner(test_runner)]
+            #![reexport_test_harness_main = "test_main"]
             #![cfg_attr(not(doc), no_main)]
 
             use kernel::component::Component;
             use kernel::platform::{KernelResources, SyscallDriverLookup};
 
             pub mod io;
-            // use kernel::utilities::registers::interfaces::ReadWriteable as _;
+            mod otbn;
+            pub mod pinmux_layout;
+            #[cfg(test)]
+            mod tests;
         }
     }
 
@@ -81,17 +87,133 @@ impl<C: Chip + 'static> TockMain<C> {
     /// function.
     fn main(&self) -> proc_macro2::TokenStream {
         let process_count = Literal::usize_unsuffixed(self.context.process_count);
+        
         quote! {
+            #[cfg(feature = "test_sysrst_ctrl")]
+            fn test_sysrst_ctrl(peripherals: &earlgrey::chip::EarlGreyDefaultPeripherals<ChipConfig, crate::pinmux_layout::BoardPinmuxLayout>) {
+                crate::pinmux_layout::prepare_wiring_sysrst_ctrl_tests();
+                lowrisc::sysrst_ctrl::tests::test_all(
+                    &peripherals.sysreset,
+                    &peripherals.gpio_port[7],
+                    &peripherals.gpio_port[2],
+                    &peripherals.gpio_port[20],
+                );
+            }
+
+            fn test_flash(
+                flash_ctrl: &'static earlgrey::flash_ctrl::FlashCtrl,
+                uart: &'static earlgrey::uart::Uart<'static>,
+            ) {
+                let flash_page = unsafe {
+                    kernel::static_init!(
+                        <earlgrey::flash_ctrl::FlashCtrl as kernel::hil::flash::Flash>::Page,
+                        <earlgrey::flash_ctrl::FlashCtrl as kernel::hil::flash::Flash>::Page::default()
+                    )
+                };
+
+                let placeholder_flash_page = unsafe {
+                    kernel::static_init!(
+                        <earlgrey::flash_ctrl::FlashCtrl as kernel::hil::flash::Flash>::Page,
+                        <earlgrey::flash_ctrl::FlashCtrl as kernel::hil::flash::Flash>::Page::default()
+                    )
+                };
+
+                let page_index_range =
+                    earlgrey::flash_ctrl::tests::convert_flash_slice_to_page_position_range(unsafe {
+                        core::slice::from_raw_parts(
+                            core::ptr::from_ref::<u8>(&_sapps),
+                            core::ptr::from_ref::<u8>(&_eapps) as usize
+                                - core::ptr::from_ref::<u8>(&_sapps) as usize,
+                        )
+                    })
+                    .unwrap();
+
+                let test_client = unsafe {
+                    kernel::static_init!(
+                        earlgrey::flash_ctrl::tests::TestClient,
+                        earlgrey::flash_ctrl::tests::TestClient::new(
+                            flash_ctrl,
+                            flash_page,
+                            placeholder_flash_page,
+                            page_index_range
+                        ),
+                    )
+                };
+
+                earlgrey::flash_ctrl::tests::run_all(flash_ctrl, test_client, uart);
+            }
+
+            #[cfg(feature = "test_alerthandler")]
+            unsafe fn test_alerthandler(
+                peripherals: &'static earlgrey::chip::EarlGreyDefaultPeripherals<ChipConfig, crate::pinmux_layout::BoardPinmuxLayout>,
+                mux_alarm: &'static capsules_core::virtualizers::virtual_alarm::MuxAlarm<'static, earlgrey::timer::RvTimer<ChipConfig>>,
+            ) {
+                // an Alarm is needed for some of the tests as alert handling works using interrupts
+                let virtual_alarm_tests = kernel::static_init!(
+                    capsules_core::virtualizers::virtual_alarm::VirtualMuxAlarm<'static, earlgrey::timer::RvTimer<ChipConfig>>,
+                    capsules_core::virtualizers::virtual_alarm::VirtualMuxAlarm::new(mux_alarm)
+                );
+                virtual_alarm_tests.setup();
+
+                let alert_handler_tests = kernel::static_init!(
+                    earlgrey::alert_handler::tests::Tests<capsules_core::virtualizers::virtual_alarm::VirtualMuxAlarm<'static, earlgrey::timer::RvTimer<ChipConfig>>>,
+                    earlgrey::alert_handler::tests::Tests::new(
+                        &peripherals.alert_handler,
+                        virtual_alarm_tests,
+                        &peripherals.uart0
+                    )
+                );
+
+                kernel::hil::time::Alarm::set_alarm_client(virtual_alarm_tests, alert_handler_tests);
+
+                alert_handler_tests.run_tests();
+            }
+
             #[no_mangle]
             pub unsafe fn main() {
-                let __main_loop_capability = kernel::create_capability!(kernel::capabilities::MainLoopCapability);
-                let (board_kernel, platform, chip) = setup();
-                board_kernel.kernel_loop(
-                    &platform,
-                    chip,
-                    None::<&kernel::ipc::IPC<#process_count>>,
-                    &__main_loop_capability,
-                );
+                #[cfg(test)]
+                {
+                    test_main();
+                }
+
+                #[cfg(not(test))]
+                {
+                    let __main_loop_capability = kernel::create_capability!(kernel::capabilities::MainLoopCapability);
+                    let (board_kernel, platform, chip, peripherals) = setup();
+                    if FLASH_TESTS_ENABLED {
+                        test_flash(&peripherals.flash_ctrl, &peripherals.uart0);
+                    }
+                    kernel::debug!("OpenTitan initialisation complete. Entering main loop");
+                    board_kernel.kernel_loop(
+                        platform,
+                        chip,
+                        None::<&kernel::ipc::IPC<#process_count>>,
+                        &__main_loop_capability,
+                    );
+                }
+            }
+
+            #[cfg(test)]
+            use kernel::platform::watchdog::WatchDog;
+
+            #[cfg(test)]
+            fn test_runner(tests: &[&dyn Fn()]) {
+                unsafe {
+                    let (board_kernel, earlgrey, _chip, peripherals) = setup();
+
+                    BOARD = Some(board_kernel);
+                    PLATFORM = Some(earlgrey);
+                    PERIPHERALS = Some(peripherals);
+                    MAIN_CAP = Some(&kernel::create_capability!(kernel::capabilities::MainLoopCapability));
+
+                    PLATFORM.map(|platform| platform.watchdog().setup());
+
+                    for test in tests {
+                        test();
+                    }
+                }
+
+                crate::tests::semihost_command_exit_success()
             }
         }
     }
@@ -105,6 +227,35 @@ impl<C: Chip + 'static> TockMain<C> {
         );
 
         Ok(quote! {
+            /// The `earlgrey` chip crate supports multiple targets with slightly different
+            /// configurations, which are encoded through implementations of the
+            /// `earlgrey::chip_config::EarlGreyConfig` trait. This type provides different
+            /// implementations of the `EarlGreyConfig` trait, depending on Cargo's
+            /// conditional compilation feature flags. If no feature is selected,
+            /// compilation will error.
+            pub enum ChipConfig {}
+
+            #[cfg(feature = "fpga_cw310")]
+            impl earlgrey::chip_config::EarlGreyConfig for ChipConfig {
+                const NAME: &'static str = "fpga_cw310";
+                const CPU_FREQ: u32 = 24_000_000;
+                const PERIPHERAL_FREQ: u32 = 6_000_000;
+                const AON_TIMER_FREQ: u32 = 250_000;
+                const UART_BAUDRATE: u32 = 115200;
+            }
+
+            #[cfg(feature = "sim_verilator")]
+            impl EarlGreyConfig for ChipConfig {
+                const NAME: &'static str = "sim_verilator";
+
+                // Clock frequencies as of https://github.com/lowRISC/opentitan/pull/19368
+                const CPU_FREQ: u32 = 500_000;
+                const PERIPHERAL_FREQ: u32 = 125_000;
+                const AON_TIMER_FREQ: u32 = 125_000;
+                const UART_BAUDRATE: u32 = 7200;
+            }
+
+            pub const EPMP_HANDOVER_CONFIG_CHECK: bool = false;
             pub const NUM_PROCS: usize = #process_count;
             const FAULT_RESPONSE: capsules_system::process_policies::PanicFaultPolicy = capsules_system::process_policies::PanicFaultPolicy {};
             static mut PROCESSES: [Option<&'static dyn kernel::process::Process>; NUM_PROCS] = [None; NUM_PROCS];
@@ -112,6 +263,56 @@ impl<C: Chip + 'static> TockMain<C> {
                 &'static capsules_system::process_printer::ProcessPrinterText,
             > = None;
             static mut CHIP: Option<&#chip_type> = None;
+
+            // Test access to the peripherals
+            #[cfg(test)]
+            static mut PERIPHERALS: Option<&'static earlgrey::chip::EarlGreyDefaultPeripherals<ChipConfig, crate::pinmux_layout::BoardPinmuxLayout>> =
+                None;
+            // Test access to board
+            #[cfg(test)]
+            static mut BOARD: Option<&'static kernel::Kernel> = None;
+            // Test access to platform
+            #[cfg(test)]
+            static mut PLATFORM: Option<&'static EarlGrey> = None;
+            // Test access to main loop capability
+            #[cfg(test)]
+            static mut MAIN_CAP: Option<&dyn kernel::capabilities::MainLoopCapability> = None;
+            // Test access to alarm
+            #[cfg(test)]
+            static mut ALARM: Option<
+                &'static capsules_core::virtualizers::virtual_alarm::MuxAlarm<'static, earlgrey::timer::RvTimer<'static, ChipConfig>>,
+            > = None;
+            // Test access to TicKV
+            #[cfg(test)]
+            static mut TICKV: Option<
+                &capsules_extra::tickv::TicKVSystem<
+                    'static,
+                    capsules_core::virtualizers::virtual_flash::FlashUser<
+                        'static,
+                        earlgrey::flash_ctrl::FlashCtrl<'static>,
+                    >,
+                    capsules_extra::sip_hash::SipHasher24<'static>,
+                    2048,
+                >,
+            > = None;
+            // Test access to AES
+            #[cfg(test)]
+            static mut AES: Option<
+                &capsules_aes_gcm::aes_gcm::Aes128Gcm<
+                    'static,
+                    capsules_core::virtualizers::virtual_aes_ccm::VirtualAES128CCM<'static, earlgrey::aes::Aes<'static>>,
+                >,
+            > = None;
+            // Test access to SipHash
+            #[cfg(test)]
+            static mut SIPHASH: Option<&capsules_extra::sip_hash::SipHasher24<'static>> = None;
+            // Test access to RSA
+            #[cfg(test)]
+            static mut RSA_HARDWARE: Option<&lowrisc::rsa::OtbnRsa<'static>> = None;
+
+            // Test access to a software SHA256
+            #[cfg(test)]
+            static mut SHA256SOFT: Option<&capsules_extra::sha256::Sha256Software<'static>> = None;
 
             #[no_mangle]
             #[link_section = ".stack_buffer"]
@@ -129,6 +330,10 @@ impl<C: Chip + 'static> TockMain<C> {
         let chip_ty = self.context.chip.ty()?;
         let chip_ident = format_ident!("{}", self.context.chip.ident()?);
 
+        let peripherals = self.context.chip.peripherals();
+        let peripherals_ty = peripherals.ty()?;
+        let peripherals_ident = format_ident!("{}", peripherals.ident()?);
+
         // Stack for the traversed nodes.
         // Contains the "roots" of the graph, i.e. the platform, the chip.
         let mut stack: Vec<Rc<dyn Component>> =
@@ -141,20 +346,76 @@ impl<C: Chip + 'static> TockMain<C> {
         Ok(quote! {
             unsafe fn setup() -> (
                 &'static kernel::Kernel,
-                #platform_ty,
-                &'static #chip_ty
+                &'static #platform_ty,
+                &'static #chip_ty,
+                &'static #peripherals_ty,
             ) {
                 let memory_allocation_cap = kernel::create_capability!(kernel::capabilities::MemoryAllocationCapability);
                 let board_kernel = kernel::static_init!(kernel::Kernel, kernel::Kernel::new(&*core::ptr::addr_of!(PROCESSES)));
                 #(#initializations)*
 
-            let __process_management_capability =
-                kernel::create_capability!(kernel::capabilities::ProcessManagementCapability);
-                extern "C" {
-                    static _sapps: u8;
-                    static _eapps: u8;
-                    static mut _sappmem: u8;
-                    static _eappmem: u8;
+                #[cfg(test)]
+                {
+                    use capsules_extra::sha256::Sha256Software;
+                    let sha_soft = kernel::static_init!(Sha256Software<'static>, Sha256Software::new());
+                    kernel::deferred_call::DeferredCallClient::register(sha_soft);
+
+                    SHA256SOFT = Some(sha_soft);
+
+                    let mux_otbn = crate::otbn::AccelMuxComponent::new(&peripherals.otbn)
+                        .finalize(otbn_mux_component_static!());
+
+                    let otbn = crate::otbn::OtbnComponent::new(mux_otbn).finalize(crate::otbn_component_static!());
+
+                    let otbn_rsa_internal_buf = kernel::static_init!([u8; 512], [0; 512]);
+
+                    // Use the OTBN to create an RSA engine
+                    if let Ok((rsa_imem_start, rsa_imem_length, rsa_dmem_start, rsa_dmem_length)) =
+                        crate::otbn::find_app(
+                            "otbn-rsa",
+                            core::slice::from_raw_parts(
+                                core::ptr::addr_of!(_sapps),
+                                core::ptr::addr_of!(_eapps) as usize - core::ptr::addr_of!(_sapps) as usize,
+                            ),
+                        )
+                    {
+                        let rsa_hardware = kernel::static_init!(
+                            lowrisc::rsa::OtbnRsa<'static>,
+                            lowrisc::rsa::OtbnRsa::new(
+                                otbn,
+                                lowrisc::rsa::AppAddresses {
+                                    imem_start: rsa_imem_start,
+                                    imem_size: rsa_imem_length,
+                                    dmem_start: rsa_dmem_start,
+                                    dmem_size: rsa_dmem_length
+                                },
+                                otbn_rsa_internal_buf,
+                            )
+                        );
+                        peripherals.otbn.set_client(rsa_hardware);
+                        RSA_HARDWARE = Some(rsa_hardware);
+                    } else {
+                        kernel::debug!("Unable to find otbn-rsa, disabling RSA support");
+                    }
+                }
+
+                let __process_management_capability =
+                    kernel::create_capability!(kernel::capabilities::ProcessManagementCapability);
+                    extern "C" {
+                        static _sapps: u8;
+                        static _eapps: u8;
+                        static mut _sappmem: u8;
+                        static _eappmem: u8;
+                    }
+
+                #[cfg(feature = "test_alerthandler")]
+                {
+                    test_alerthandler(peripherals, mux_alarm);
+                }
+
+                #[cfg(feature = "test_sysrst_ctrl")]
+                {
+                    test_sysrst_ctrl(peripherals);
                 }
 
                 kernel::process::load_processes(
@@ -177,7 +438,7 @@ impl<C: Chip + 'static> TockMain<C> {
                     kernel::debug!("{:?}", err);
                 });
 
-                (board_kernel, #platform_ident, #chip_ident)
+                (board_kernel, #platform_ident, #chip_ident, #peripherals_ident)
             }
         })
     }
