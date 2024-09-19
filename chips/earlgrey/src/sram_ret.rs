@@ -8,7 +8,7 @@ use crate::registers::top_earlgrey::SRAM_CTRL_RET_AON_REGS_BASE_ADDR;
 use core::cell::Cell;
 use kernel::hil::retention_ram;
 use kernel::utilities::{
-    registers::interfaces::{ReadWriteable, Readable},
+    registers::interfaces::{Debuggable, ReadWriteable, Readable},
     StaticRef,
 };
 use kernel::ErrorCode;
@@ -275,12 +275,13 @@ impl SramCtrl {
     }
 
     /// Test function. It runs on target self-test, returns if the test suite failed or passed.
+    #[cfg(feature = "test_sram_ret")]
     pub fn test(&self) -> bool {
         let mut test_runner = target_test::TestRunner::new();
-        debug!("Starting sram_ret self-test");
+        kernel::debug!("Starting sram_ret self-test");
         match self.get_creator_rram_data(1) {
-            Ok(x) => debug!("Reset reason from API is {}", x),
-            _ => debug!("Wrong init state, can't read reset reason yet! "),
+            Ok(x) => kernel::debug!("Reset reason from API is {}", x),
+            _ => kernel::debug!("Wrong init state, can't read reset reason yet! "),
         }
 
         let mut test_cycle: u32;
@@ -292,10 +293,10 @@ impl SramCtrl {
                 {
                     let _ = self.set_owner_rram_data(5, 0);
                     test_cycle = 0;
-                    debug!("Force reset test cycles");
+                    kernel::debug!("Force reset test cycles");
                 } else {
                     test_cycle = self.get_owner_rram_data(5).unwrap();
-                    debug!("Reset Count is {}", test_cycle);
+                    kernel::debug!("Reset Count is {}", test_cycle);
 
                     let _ = self.set_owner_rram_data(5, test_cycle + 1);
                 }
@@ -303,7 +304,7 @@ impl SramCtrl {
             }
             _ => {
                 test_cycle = 0;
-                debug!("Driver is not initialized, we're probably coming in from test ROM. Force the init on our own, with backup and restore of data. ");
+                kernel::debug!("Driver is not initialized, we're probably coming in from test ROM. Force the init on our own, with backup and restore of data. ");
                 let _ = self.forced_safe_init();
                 boot_from_rom_ext = false;
             }
@@ -411,7 +412,7 @@ impl SramCtrl {
             _ => {}
         }
 
-        debug!("Ending sram_ret self-test");
+        kernel::debug!("Ending sram_ret self-test");
         test_runner.is_test_failed
     }
 }
