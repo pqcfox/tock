@@ -47,7 +47,6 @@ pub const SRAM_RET_BASE: StaticRef<SramCtrlRegisters> =
 
 pub struct SramCreator {
     something: u32,
-    something_else: u32,
 }
 pub struct SramAccess {
     creator: StaticRef<SramCreator>,
@@ -252,7 +251,7 @@ impl SramCtrl {
     }
 
     pub fn foo(&self) {
-        let a = self.enter(|data| data.creator.something);
+        let _ = self.enter(|data| data.creator.something);
     }
 
     pub fn enter<F, R>(&self, f: F) -> Option<R>
