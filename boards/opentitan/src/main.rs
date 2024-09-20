@@ -22,6 +22,7 @@ use capsules_core::driver;
 use capsules_core::virtualizers::virtual_aes_ccm;
 use capsules_core::virtualizers::virtual_alarm::{MuxAlarm, VirtualMuxAlarm};
 use capsules_extra::opentitan_alerthandler::AlertHandlerCapsule;
+use earlgrey::alert_handler;
 use capsules_extra::opentitan_sysrst::SystemReset;
 use capsules_extra::reset_manager::ResetManager;
 use core::num::NonZeroU16;
@@ -1127,11 +1128,6 @@ unsafe fn setup() -> (
         core::ptr::addr_of!(_eflash) as usize,
     );
 
-    #[cfg(feature = "test_alerthandler")]
-    {
-        test_alerthandler(peripherals, mux_alarm);
-    }
-
     #[cfg(feature = "test_sysrst_ctrl")]
     {
         test_sysrst_ctrl(peripherals);
@@ -1156,6 +1152,11 @@ unsafe fn setup() -> (
         debug!("Error loading processes!");
         debug!("{:?}", err);
     });
+
+    #[cfg(feature = "test_alerthandler")]
+    {
+        test_alerthandler(peripherals, mux_alarm);
+    }
 
     #[cfg(feature = "test_sram_ret")]
     peripherals
