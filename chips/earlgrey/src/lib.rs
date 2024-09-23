@@ -18,6 +18,7 @@ mod interrupts;
 
 pub mod aes;
 pub mod alert_handler;
+pub mod attestation;
 pub mod chip;
 pub mod clkmgr;
 pub mod csrng;

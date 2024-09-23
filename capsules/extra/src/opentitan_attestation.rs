@@ -22,80 +22,93 @@
 //!
 //! ### Command number 1
 //!
-//! Instructs the flash controller to read a boot certificate from the
-//! flash info partition. The *entire page* is written to read-write
-//! Allow 1, which must have size equal to a flash page. The caller is
-//! responsible for determining the certificate length (e.g. by
-//! running an x509 parser).
+//! Read an attestation certificate from the hardware. A data chunk
+//! equal to the size of an *entire flash page* is written to
+//! read-write Allow 1, which must have size equal to a flash
+//! page. The caller is responsible for determining the certificate
+//! length (e.g. by running an x509 parser).
 //!
 //! Arguments:
-//! 1. Which certificate to read
-//!   + 0: Creator identity (UDS)
-//!   + 1: Owner intermediate (CDI_0)
-//!   + 2: Owner identity (CDI_1)
-//! 2. Ignored
+//! 1. The certificate type to read
+//!   + 0: Boot certificate
+//!   + 1: Application certificate
+//! 2. The certificate to read
+//!   + If `argument_1 == 0`:
+//!     + 0: Creator identity (UDS)
+//!     + 1: Owner intermediate (CDI_0)
+//!     + 2: Owner identity (CDI_1)
+//!   + If `argument_1 == 1`: Process ID of the process whose certificate to read
 //!
 //! Return value:
 //! + CommandReturn::failure(ErrorCode::INVAL): if the certificate type is invalid
 //! + CommandReturn::failure(ErrorCode::BUSY): if the flash controller reported a busy status.
 //! + CommandReturn::failure(ErrorCode::FAIL): if the flash read operation failed for any other reason.
-//! + CommandReturn::success(): the operation has been initiated.
+//! + CommandReturn::success(0): the operation completed with a synchronous read.
+//! + CommandReturn::success(1): the operation is performing an asynchronous read.
 //!
 //! Subscribe interface
 //! -------------------
 //!
 //! ### Subscribe 0
 //!
-//! Register a callback indicating a boot certificate read from the
-//! flash info partition is available.
+//! Register a callback indicating a certificate (read via command #1)
+//! is available.
 //!
 //! Callback arguments:
 //!
 //! 1. Operation result:
 //!     + ErrorCode::FAIL: Operation failed.
 //!     + OK: Operation completed successfully.
-//! 2. error code (relevant only if `Operation result` is ErrorCode::FAIL): an error
-//! describing the failure
-//!     + 1: Flash controller error
-//!     + 2: Flash memory protection error
-//! 3. Always 0
+//! 2. The driver that reported an error:
+//!     + 0: No error (always 0 if argument 1 == OK)
+//!     + 1: Flash controller
+//! 3. Error code (always 0 if argument 1 == OK)
+//!     + If argument 2 == 1:
+//!         + 1: Flash controller error
+//!         + 2: Flash memory protection error
 //!
 
-use earlgrey::flash_ctrl::{Bank, FlashCtrl, RawFlashCtrlPage};
 use kernel::grant::{AllowRoCount, AllowRwCount, Grant, UpcallCount};
-use kernel::hil::flash::{
-    Error as FlashError, InfoClient as InfoClientTrait,
-    InfoFlash as InfoFlashTrait,
+use kernel::hil::flash::Error as FlashError;
+use kernel::hil::opentitan_attestation::{
+    Certificate, CertificateReadError, CertificateReader, CertificateReaderClient,
 };
 use kernel::processbuffer::WriteableProcessBuffer;
 use kernel::syscall::{CommandReturn, SyscallDriver};
-use kernel::utilities::cells::{OptionalCell, TakeCell};
 use kernel::{ErrorCode, ProcessId};
 
+/// Driver number
 pub const DRIVER_NUM: usize = capsules_core::driver::NUM::OpenTitanAttestation as usize;
 
+/// Boot certificate type identifier
+const CERT_TYPE_BOOT: usize = 1;
+
+/// Application certificate type identifier
+const CERT_TYPE_APP: usize = 2;
+
 /// OpenTitan Attestation
-pub struct Attestation<'a> {
-    info_flash: &'a FlashCtrl<'a>,
-    flash_buf: TakeCell<'static, RawFlashCtrlPage>,
-    grant: Grant<(), UpcallCount<{ upcall::COUNT }>, AllowRoCount<{ RO_ALLOW_COUNT }>, AllowRwCount<{ RW_ALLOW_COUNT }>>,
-    owning_process: OptionalCell<ProcessId>,
+pub struct Attestation<'a, CertReader> {
+    cert_reader: &'a CertReader,
+    grant: Grant<
+        (),
+        UpcallCount<{ upcall::COUNT }>,
+        AllowRoCount<{ RO_ALLOW_COUNT }>,
+        AllowRwCount<{ RW_ALLOW_COUNT }>,
+    >,
 }
 
-impl<'a> Attestation<'a>
-{
+impl<'a, CertReader> Attestation<'a, CertReader> {
     /// Creates a new Attestation capsule
     pub fn new(
-        info_flash: &'a FlashCtrl<'a>,
-        flash_buf: &'static mut RawFlashCtrlPage,
-        grant: Grant<(), UpcallCount<{ upcall::COUNT }>, AllowRoCount<{ RO_ALLOW_COUNT }>, AllowRwCount<{ RW_ALLOW_COUNT }>>,
+        cert_reader: &'a CertReader,
+        grant: Grant<
+            (),
+            UpcallCount<{ upcall::COUNT }>,
+            AllowRoCount<{ RO_ALLOW_COUNT }>,
+            AllowRwCount<{ RW_ALLOW_COUNT }>,
+        >,
     ) -> Self {
-        Self {
-            info_flash,
-            flash_buf: TakeCell::new(flash_buf),
-            grant,
-            owning_process: OptionalCell::empty(),
-        }
+        Self { cert_reader, grant }
     }
 
     /// Invoked when a certificate has been read from the flash info
@@ -103,23 +116,22 @@ impl<'a> Attestation<'a>
     fn schedule_cert_available_upcall(
         &self,
         process_id: ProcessId,
-        read_buffer: &'static mut RawFlashCtrlPage,
-        status: Result<(), FlashError>,
+        result: Result<&[u8], CertificateReadError>,
     ) {
         // Grant errors are ignored, since there is no reasonable way
         // to handle them.
         let _ = self.grant.enter(process_id, |_, kernel_data| {
             // Scheduling errors are ignored, since there is no
             // reasonable way to handle them.
-            let args = match status {
-                Ok(()) => {
+            let args = match result {
+                Ok(read_buffer) => {
                     // Store the certificate in the allow buffer
                     let mut err = Ok(());
                     let _ = kernel_data
-                        .get_readwrite_processbuffer(RwAllowId::BootCertificate.to_usize())
+                        .get_readwrite_processbuffer(RwAllowId::Certificate.to_usize())
                         .and_then(|allowed_buffer| {
                             allowed_buffer.mut_enter(|data| {
-                                if let Err(e) = data.copy_from_slice_or_err(read_buffer.as_mut()) {
+                                if let Err(e) = data.copy_from_slice_or_err(read_buffer) {
                                     err = Err(e);
                                 }
                             })
@@ -130,104 +142,60 @@ impl<'a> Attestation<'a>
                         // explicitly
                         Err(e) => (e as usize, 0, 0),
                     };
-                    // Return the flash read buffer so we can perform more flash
-                    // operations
-                    self.flash_buf.put(Some(read_buffer));
                     rtn
                 }
                 // CAST: `ErrorCode` defines the value conversion
                 // explicitly
-                Err(FlashError::FlashError) => (ErrorCode::FAIL as usize, 1, 0),
-                Err(FlashError::FlashMemoryProtectionError) => (ErrorCode::FAIL as usize, 2, 0),
+                Err(CertificateReadError::Flash(FlashError::FlashError)) => {
+                    (ErrorCode::FAIL as usize, 1, 1)
+                }
+                Err(CertificateReadError::Flash(FlashError::FlashMemoryProtectionError)) => {
+                    (ErrorCode::FAIL as usize, 1, 2)
+                }
             };
-            let _ =
-                kernel_data.schedule_upcall(upcall::UpcallId::BootCertAvailable.to_usize(), args);
+            let _ = kernel_data.schedule_upcall(upcall::UpcallId::CertAvailable.to_usize(), args);
         });
     }
+}
 
-    // Flash helper
-    fn read_flash_info_page(
+impl<'a, CertReader: CertificateReader<'a>> Attestation<'a, CertReader> {
+    /// Read the requested certificate from hardware. Which HWIP block
+    /// is invoked to perform the read is top-specific, and possibly
+    /// specific to whether this is a UDS, CDI_0/1, or application
+    /// certificate.
+    pub fn read_certificate(
         &self,
-        partition_type: usize,
-        bank: usize,
-        page: usize,
-    ) -> CommandReturn {
-        let partition_type = match partition_type.try_into() {
-            Err(()) => return CommandReturn::failure(ErrorCode::FAIL),
-            Ok(info_partition_type) => info_partition_type,
-        };
-        let bank: Bank = match bank.try_into() {
-            Err(()) => return CommandReturn::failure(ErrorCode::INVAL),
-            Ok(bank) => bank,
-        };
-        let buffer = match self.flash_buf.take() {
-            None => return CommandReturn::failure(ErrorCode::BUSY),
-            Some(buffer) => buffer,
-        };
-        let result = self
-            .info_flash
-            .read_info_page(partition_type, bank, page, buffer);
-        match result {
-            Err((err, buf)) => {
-                self.flash_buf.put(Some(buf));
-                CommandReturn::failure(err)
-            }
-            Ok(()) => CommandReturn::success(),
-        }
-    }
-}
-
-impl<'a> Attestation<'a>
-{
-    // Command handlers
-
-    /// Instructs the flash controller to read a boot certificate from
-    /// the flash info partition.
-    pub fn info_flash_read_boot_cert(
-        &self,
-        _calling_process: ProcessId,
-        cert_type: BootCert,
-    ) -> CommandReturn {
-        // TODO: the location of the entropy data in flash is
-        // top-specific (the values here are for earlgrey). This
-        // should be refactored so that the top-specific portion of
-        // the flash control driver includes an API to get these
-        // values, so this capsule can be top-independent.
-        const RAW_PARTITION_TYPE: usize = 0;
-        const RAW_BANK: usize = 1;
-        let raw_page = match cert_type {
-            BootCert::CreatorIdentity => 7,
-            BootCert::OwnerIntermediate => 8,
-            BootCert::OwnerIdentity => 9,
-        };
-        self.read_flash_info_page(
-            RAW_PARTITION_TYPE,
-            RAW_BANK,
-            raw_page,
-        )
-    }
-}
-
-/// A boot certificate type
-#[repr(usize)]
-pub enum BootCert {
-    /// The creator identity certificate (UDS)
-    CreatorIdentity = 0,
-    /// The owner intermediate certificate (CDI_0)
-    OwnerIntermediate = 1,
-    /// The owner identity certificate (CDI_1)
-    OwnerIdentity = 2,
-}
-
-impl TryFrom<usize> for BootCert {
-    type Error = ErrorCode;
-    fn try_from(n: usize) -> Result<BootCert, ErrorCode> {
-        match n {
-            0 => Ok(BootCert::CreatorIdentity),
-            1 => Ok(BootCert::OwnerIntermediate),
-            2 => Ok(BootCert::OwnerIdentity),
-            _ => Err(ErrorCode::INVAL),
-        }
+        calling_process: ProcessId,
+        cert_type: Certificate,
+    ) -> Result<(), ErrorCode> {
+        self.cert_reader
+            .read_certificate(calling_process, cert_type)
+            .map(|opt| {
+                // Check if the read was synchronous (Some(..)) or asyncrhonous (None).
+                if let Some(read_buffer) = opt {
+                    // We got a synchronous certificate read. Store the result
+                    // in the grant space.
+                    let mut err = Ok(());
+                    // Grant errors are ignored, since there is no reasonable way
+                    // to handle them.
+                    let _ = self.grant.enter(calling_process, |_, kernel_data| {
+                        // Scheduling errors are ignored, since there is no
+                        // reasonable way to handle them.
+                        // Store the certificate in the allow buffer
+                        let _ = kernel_data
+                            .get_readwrite_processbuffer(RwAllowId::Certificate.to_usize())
+                            .and_then(|allowed_buffer| {
+                                allowed_buffer.mut_enter(|data| {
+                                    if let Err(e) = data.copy_from_slice_or_err(read_buffer) {
+                                        err = Err(e);
+                                    }
+                                })
+                            });
+                    });
+                    err?
+                }
+                Ok(())
+            })?
     }
 }
 
@@ -240,7 +208,7 @@ const RW_ALLOW_COUNT: u8 = 1;
 #[repr(usize)]
 enum RwAllowId {
     /// A boot stage certificate read from the flash info partition
-    BootCertificate = 0,
+    Certificate = 0,
 }
 
 impl RwAllowId {
@@ -258,7 +226,7 @@ mod upcall {
     /// definition at the top of this file.
     #[repr(usize)]
     pub enum UpcallId {
-        BootCertAvailable = 0,
+        CertAvailable = 0,
     }
 
     impl UpcallId {
@@ -274,7 +242,7 @@ mod upcall {
 /// top of this file.
 enum Command {
     DriverExistence,
-    InfoFlashReadBootCert,
+    ReadCertificate,
 }
 
 impl TryFrom<usize> for Command {
@@ -283,35 +251,36 @@ impl TryFrom<usize> for Command {
     fn try_from(value: usize) -> Result<Self, Self::Error> {
         match value {
             0 => Ok(Command::DriverExistence),
-            1 => Ok(Command::InfoFlashReadBootCert),
+            1 => Ok(Command::ReadCertificate),
             _ => Err(()),
         }
     }
 }
 
-impl<
-        'a,
-    > SyscallDriver for Attestation<'a>
-{
+impl<'a, CertReader: CertificateReader<'a>> SyscallDriver for Attestation<'a, CertReader> {
     fn command(
         &self,
         command_num: usize,
         data1: usize,
-        _data2: usize,
+        data2: usize,
         calling_process: ProcessId,
     ) -> CommandReturn {
-        let cmd = Command::try_from(command_num);        
-        match cmd {
-            Ok(Command::DriverExistence) => CommandReturn::success(),
-            Ok(Command::InfoFlashReadBootCert) => {
-                let cert = match data1.try_into() {
-                    Ok(cert) => cert,
-                    Err(e) => return CommandReturn::failure(e),
+        let cmd = Command::try_from(command_num);
+        CommandReturn::from(match cmd {
+            Ok(Command::DriverExistence) => Ok(()),
+            Ok(Command::ReadCertificate) => {
+                let cert = match data1 {
+                    CERT_TYPE_BOOT => Certificate::Boot(match data2.try_into() {
+                        Ok(c) => c,
+                        Err(e) => return CommandReturn::failure(e),
+                    }),
+                    CERT_TYPE_APP => Certificate::Application(data2),
+                    _ => return CommandReturn::failure(ErrorCode::INVAL),
                 };
-                self.info_flash_read_boot_cert(calling_process, cert)
+                self.read_certificate(calling_process, cert)
             }
-            Err(()) => CommandReturn::failure(ErrorCode::NOSUPPORT),
-        }
+            Err(()) => Err(ErrorCode::NOSUPPORT),
+        })
     }
 
     fn allocate_grant(&self, processid: ProcessId) -> Result<(), kernel::process::Error> {
@@ -319,29 +288,15 @@ impl<
     }
 }
 
-// Event handling
-
-impl<'a> InfoClientTrait<FlashCtrl<'a>> for Attestation<'a>
-{
-    fn info_read_complete(
+impl<'a, CertReader> CertificateReaderClient for Attestation<'a, CertReader> {
+    /// Indicates a certificate is available. On success, the
+    /// certificate is guaranteed to at least contain the entire
+    /// certificate, but may contain additional bytes afterwards.
+    fn certificate_available(
         &self,
-        read_buffer: &'static mut RawFlashCtrlPage,
-        status: Result<(), FlashError>,
+        owning_process: ProcessId,
+        result: Result<&[u8], CertificateReadError>,
     ) {
-        self.owning_process.map(|owner_id| {
-            self.schedule_cert_available_upcall(owner_id, read_buffer, status)
-        });
-    }
-
-    fn info_write_complete(
-        &self,
-        _write_buffer: &'static mut RawFlashCtrlPage,
-        _result: Result<(), FlashError>,
-    ) {
-        // Should never happen
-    }
-
-    fn info_erase_complete(&self, _result: Result<(), FlashError>) {
-        // Should never happen
+        self.schedule_cert_available_upcall(owning_process, result)
     }
 }

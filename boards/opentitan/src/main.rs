@@ -18,11 +18,11 @@ use crate::hil::symmetric_encryption::AES128_BLOCK_SIZE;
 use crate::otbn::OtbnComponent;
 use crate::pinmux_layout::BoardPinmuxLayout;
 use capsules_aes_gcm::aes_gcm;
-#[cfg(not(feature = "qemu"))]
 use capsules_core::driver;
 use capsules_core::virtualizers::virtual_aes_ccm;
 use capsules_core::virtualizers::virtual_alarm::{MuxAlarm, VirtualMuxAlarm};
 use capsules_extra::opentitan_alerthandler::AlertHandlerCapsule;
+use capsules_extra::opentitan_attestation::Attestation;
 #[cfg(not(feature = "qemu"))]
 use capsules_extra::opentitan_sysrst::SystemReset;
 use capsules_extra::reset_manager::ResetManager;
@@ -30,6 +30,7 @@ use core::num::NonZeroU16;
 use core::ptr::{addr_of, from_ref};
 #[cfg(feature = "test_alerthandler")]
 use earlgrey::alert_handler;
+use earlgrey::attestation::Attestation as EarlgreyAttestation;
 use earlgrey::chip::EarlGreyDefaultPeripherals;
 use earlgrey::chip_config::EarlGreyConfig;
 use earlgrey::flash_ctrl;
@@ -45,6 +46,7 @@ use kernel::hil::flash::HasInfoClient;
 use kernel::hil::hasher::Hasher;
 use kernel::hil::i2c::I2CMaster;
 use kernel::hil::led::LedHigh;
+use kernel::hil::opentitan_attestation::CertificateReader;
 use kernel::hil::pattgen::PattGen;
 use kernel::hil::rng::Rng;
 use kernel::hil::symmetric_encryption::AES128;
@@ -295,6 +297,8 @@ struct EarlGrey {
     opentitan_alerthandler: &'static AlertHandlerCapsule,
     reset_manager: &'static ResetManager<'static, earlgrey::rstmgr::RstMgr>,
     ipc: kernel::ipc::IPC<{ NUM_PROCS as u8 }>,
+    #[allow(dead_code)]
+    attestation: Option<&'static Attestation<'static, EarlgreyAttestation<'static>>>,
 }
 
 /// Mapping of integer syscalls to objects that implement syscalls.
@@ -1127,6 +1131,36 @@ unsafe fn setup() -> (
         kernel::ipc::DRIVER_NUM,
         &memory_allocation_cap,
     );
+    let attestation = if let Some(_info_flash) = info_flash
+    {
+        //let raw_flash_ctrl_page = static_init!(
+        //    earlgrey::flash_ctrl::RawFlashCtrlPage,
+        //    earlgrey::flash_ctrl::RawFlashCtrlPage::default(),
+        //);
+        let earlgrey_attestation: &'static EarlgreyAttestation<'static> = static_init!(
+            EarlgreyAttestation<'static>,
+            EarlgreyAttestation::new(&peripherals.flash_ctrl),
+        );
+        //peripherals
+        //    .flash_ctrl
+        //    .set_secondary_info_client(earlgrey_attestation);
+        
+        let attestation: &'static Attestation<'static, EarlgreyAttestation<'static>> = static_init!(
+            Attestation<'static, EarlgreyAttestation<'static>>,
+            Attestation::new(
+                earlgrey_attestation,
+                board_kernel.create_grant(
+                    driver::NUM::OpenTitanAttestation as usize,
+                    &memory_allocation_cap
+                ),
+            )
+        );
+        earlgrey_attestation.set_client(attestation);
+
+        Some(attestation)
+    } else {
+        None
+    };
 
     let earlgrey = static_init!(
         EarlGrey,
@@ -1154,6 +1188,7 @@ unsafe fn setup() -> (
             reset_manager,
             opentitan_alerthandler: alert_handler_capsule,
             ipc,
+            attestation,
         }
     );
 
