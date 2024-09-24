@@ -242,12 +242,12 @@ struct EarlGrey {
             >,
         >,
     >,
-    */
     usb: &'static capsules_extra::usb::usb_user2::UsbSyscallDriver<
         'static,
         lowrisc::usb::Usb<'static>,
         { lowrisc::usb::MAXIMUM_PACKET_SIZE.get() },
     >,
+    */
     opentitan_sysrst: &'static SystemReset<'static, SysRstCtrl<'static>>,
     syscall_filter: &'static TbfHeaderFilterDefaultAllow,
     scheduler: &'static PrioritySched,
@@ -281,7 +281,7 @@ impl SyscallDriverLookup for EarlGrey {
                 Some(info_flash) => f(Some(info_flash)),
                 None => f(None),
             },
-            capsules_extra::usb::usb_user2::DRIVER_NUM => f(Some(self.usb)),
+            // capsules_extra::usb::usb_user2::DRIVER_NUM => f(Some(self.usb)),
             capsules_extra::pattgen::DRIVER_NUM => f(Some(self.pattgen)),
             capsules_extra::opentitan_alerthandler::DRIVER_NUM => {
                 f(Some(self.opentitan_alerthandler))
@@ -1076,7 +1076,7 @@ unsafe fn setup() -> (
             i2c_master,
             spi_controller,
             aes,
-            usb,
+            // usb,
             // kv_driver,
             pattgen,
             syscall_filter,

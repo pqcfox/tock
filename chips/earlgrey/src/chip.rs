@@ -108,6 +108,8 @@ impl<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig>
     pub fn init(&'static self) {
         kernel::deferred_call::DeferredCallClient::register(&self.aes);
         kernel::deferred_call::DeferredCallClient::register(&self.uart0);
+        // OTP is locked by ePMP during SiVal.
+        /*
         // Recommended value by documentation
         const INTEGRITY_CHECK_PERIOD: u32 = 0x3_FFFF;
         // Recommended value by documentation
@@ -115,8 +117,6 @@ impl<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig>
         // Recommended value by documentation is at least 100_000.
         const CHECK_TIMEOUT: NonZeroU32 = create_non_zero_u32(100_000);
 
-        // OTP is locked by ePMP during SiVal.
-        /*
         self.otp
             .init(
                 INTEGRITY_CHECK_PERIOD,
