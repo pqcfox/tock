@@ -9,7 +9,7 @@ use super::utils;
 use core::num::NonZeroUsize;
 
 /// The maximum size of a packet
-const MAXIMUM_PACKET_SIZE: NonZeroUsize = utils::create_non_zero_usize(64);
+pub const MAXIMUM_PACKET_SIZE: NonZeroUsize = utils::create_non_zero_usize(64);
 
 /// Size of a packet
 #[derive(Clone, Copy, Debug)]

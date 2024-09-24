@@ -1,9 +1,9 @@
-// This license header has to be included to be able to submit it to Tock
-// It is up to ZeroRISC to decide if it keeps this header or not
-//
 // Licensed under the Apache License, Version 2.0 or the MIT License.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // Copyright Tock Contributors 2022.
+//
+// This license header has to be included to be able to submit it to Tock
+// It is up to ZeroRISC to decide if it keeps this header or not
 
 use core::marker::PhantomData;
 
@@ -180,15 +180,16 @@ impl<const SIZE: usize, const BITS: usize, AlertType: TryFrom<u32>>
                 // flag `i` was not previously handled and now is raised
                 let id = AlertType::try_from(flag_index as u32);
                 // manually unwrap the Option< Id >, otherwise further constraints should have been added on the `AlertType` generic
-                match id {
-                    Err(_) => panic!("Invalid id = {:?} found", flag_index),
-                    Ok(id) => {
+
+                id.map_or_else(
+                    |_| panic!("Invalid id = {:?} found", flag_index),
+                    |id| {
                         // handle the flag
                         f(id);
                         self.set(flag_index);
                         at_least_one_new = true;
-                    }
-                }
+                    },
+                )
             }
         }
         at_least_one_new
@@ -732,7 +733,9 @@ impl AlertHandler {
 
 #[cfg(feature = "test_alerthandler")]
 pub mod tests {
-    use crate::alert_handler::{
+    use core::cell::Cell;
+
+  use crate::alert_handler::{
         AlertClass, AlertFlags, LocalAlertFlags, ALERTFLAGS_NUMBER_OF_ALERTS,
         ALERTFLAGS_NUMBER_OF_LOCAL_ALERTS,
     };
@@ -749,10 +752,16 @@ pub mod tests {
 
     pub static mut TEST_ALERTHANDLER: OptionalCell<LocalAlertId> = OptionalCell::empty();
 
+    #[derive(Copy)]
+    pub enum TestStage {
+        TRIGGERS,
+        CHECKS,
+    }
     pub struct Tests<'a, A: Alarm<'a>> {
         alert_handler: &'a AlertHandler,
         alarm: &'a A,
         uart: &'a Uart<'a>,
+        stage: Cell<TestStage>,
     }
 
     impl<'a, A: Alarm<'a>> Tests<'a, A> {
@@ -761,6 +770,7 @@ pub mod tests {
                 alert_handler,
                 alarm,
                 uart,
+                stage: Cell::new(TestStage::TRIGGERS),
             }
         }
 
@@ -1070,28 +1080,40 @@ pub mod tests {
         }
 
         pub fn run_tests(&self) {
-            // unit test for AlertFlags and LocalAlertFlags
-            Self::test_alertflags_base_mark_is_set();
-            Self::test_alertflags_for_each_new();
-            Self::test_alertflags_no_new_flags();
-            Self::test_localalertflags_base_mark_is_set();
-            Self::test_localalertflags_no_new_flags();
-            kernel::debug!("TEST AlertHandler AlertFlags PASS");
-
-            // test alert handling by generating alerts and observing the generated interrupts
-            self.test_alerthandler_uartfatalfault();
-            self.test_alerthandler_fail_shadow_reg();
-
-            // prepare an alarm that in 100ms will check if the faults are handled or not
+            // run first stage tests in 100ms, more than enough time to start userspace application that might want to listen for generated test alerts
             self.alarm
-                .set_alarm(self.alarm.now(), self.alarm.ticks_from_ms(10));
+                .set_alarm(self.alarm.now(), self.alarm.ticks_from_ms(100));
         }
     }
 
     impl<'a, A: Alarm<'a>> AlarmClient for Tests<'a, A> {
         fn alarm(&self) {
-            self.check_alerthandler_fail_shadow_reg();
-            self.check_alerthandler_uartfatalfault();
+            match self.stage.get() {
+                // first stage tests
+                TestStage::TRIGGERS => {
+                    // unit test for AlertFlags and LocalAlertFlags
+                    Self::test_alertflags_base_mark_is_set();
+                    Self::test_alertflags_for_each_new();
+                    Self::test_alertflags_no_new_flags();
+                    Self::test_localalertflags_base_mark_is_set();
+                    Self::test_localalertflags_no_new_flags();
+                    kernel::debug!("TEST AlertHandler AlertFlags PASS");
+
+                    // test alert handling by generating alerts and observing the generated interrupts
+                    self.test_alerthandler_fail_shadow_reg();
+                    self.test_alerthandler_uartfatalfault();
+
+                    // prepare an alarm that in 10ms will check if the faults are handled or not
+                    self.alarm
+                        .set_alarm(self.alarm.now(), self.alarm.ticks_from_ms(10));
+                    self.stage.set(TestStage::CHECKS);
+                }
+                // second stage tests that check if stage 0 triggers have been handled
+                TestStage::CHECKS => {
+                    self.check_alerthandler_fail_shadow_reg();
+                    self.check_alerthandler_uartfatalfault();
+                }
+            }
         }
     }
 }

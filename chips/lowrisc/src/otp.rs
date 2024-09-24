@@ -1,9 +1,9 @@
-// This license header is required for submitting to upstream Tock.
-// It is up to ZeroRISC to decide if this header should be here or not.
-//
 // Licensed under the Apache License, Version 2.0 or the MIT License.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // Copyright Tock Contributors 2022.
+//
+// This license header is required for submitting to upstream Tock.
+// It is up to ZeroRISC to decide if this header should be here or not.
 
 use kernel::utilities::helpers::create_non_zero_usize;
 
@@ -18,7 +18,7 @@ use kernel::utilities::registers::interfaces::{ReadWriteable, Readable, Writeabl
 use kernel::utilities::StaticRef;
 use kernel::ErrorCode;
 
-use core::num::{NonZeroUsize, NonZeroU32};
+use core::num::{NonZeroU32, NonZeroUsize};
 
 /// Number of possible errors
 const NUMBER_ERRORS: NonZeroUsize = create_non_zero_usize(14);
@@ -330,7 +330,7 @@ impl Otp {
             self.set_consistency_check_period(consistency_check_period);
             self.lock_check_registers();
         }
-        
+
         self.set_check_timeout(timeout);
 
         Ok(())

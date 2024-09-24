@@ -5,7 +5,7 @@
 //! Endpoint states.
 
 /// Control endpoint waiting for a receive packet
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum ReceiveCtrlEndpointState {
     /// The control endpoint waits for a SETUP packet
     Setup,
@@ -16,7 +16,7 @@ pub(super) enum ReceiveCtrlEndpointState {
 }
 
 /// Control endpoint waiting for a packet to be transmitted
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum TransmitCtrlEndpointState {
     /// The control endpoint waits for an IN packet to be transmitted in data stage
     Data,
@@ -25,7 +25,7 @@ pub(super) enum TransmitCtrlEndpointState {
 }
 
 /// Endpoint configured as a control endpoint
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum CtrlEndpointState {
     /// The endpoint waits to receive a packet
     Receive(ReceiveCtrlEndpointState),
@@ -34,14 +34,14 @@ pub(super) enum CtrlEndpointState {
 }
 
 /// Endpoint state
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum EndpointState {
     /// The endpoint is configured as a control endpoint
     Ctrl(CtrlEndpointState),
-    /// The endpoint is configured as a bulk endpoint
+    /// The endpoint is configured as a bulk endpoint.
     Bulk,
-    /// The endpoint is configured as an interrupt endpoint
+    /// The endpoint is configured as an interrupt endpoint.
     Interrupt,
-    /// The endpoint is configured as an isochronous endpoint
+    /// The endpoint is configured as an isochronous endpoint.
     Isochronous,
 }

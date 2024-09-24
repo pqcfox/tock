@@ -35,7 +35,7 @@ mod rw_allow {
     pub const COUNT: u8 = 1;
 }
 
-pub const DRIVER_NUM: usize = crate::driver::NUM::ResetManager as usize;
+pub const DRIVER_NUM: usize = capsules_core::driver::NUM::ResetManager as usize;
 /// Manages MCU level resets (reset reason, trigger reset)
 pub struct ResetManager<'a, M: ResetManagment> {
     hw: &'a M,
@@ -191,5 +191,151 @@ fn serialize_reset_reason(reason: ResetReason) -> (u16, u16) {
         ResetReason::PeripheralFault(extra) => (8, extra),
         ResetReason::PeripheralRequest(extra) => (9, extra),
         ResetReason::Unknown(extra) => (10, extra),
+    }
+}
+
+// This test code works only on OpenTitan as it needs a `RetentionRAM`.
+// This test can't be done in `chips/earlgrey/src/rstmgr.rs` because that driver doesn't know the actual ResetReason, as it is obtained by this capsule from RetentionRAM, not from RstMgr registers.
+#[cfg(feature = "test_resetmanager_opentitan")]
+pub mod test {
+    use core::panic::Location;
+
+    use kernel::hil::{
+        reset_managment::{ResetManagment, ResetReason},
+        retention_ram::OwnerRetentionRam,
+    };
+
+    /// test state saved in Retention RAM between resets
+    #[repr(u32)]
+    #[derive(Clone, Copy, Debug)]
+    enum TestState {
+        Started = 0xAA998877,
+        SoftwareResetCheck = 0xAA665544,
+        Finished = 0xAA332211,
+    }
+
+    impl TryFrom<u32> for TestState {
+        type Error = u32;
+        fn try_from(value: u32) -> Result<Self, Self::Error> {
+            match value {
+                0xAA998877 => Ok(Self::Started),
+                0xAA665544 => Ok(Self::SoftwareResetCheck),
+                0xAA332211 => Ok(Self::Finished),
+                _ => Err(value),
+            }
+        }
+    }
+
+    // alias for access to Owner section of RetentionRam
+    type TestStateInterface = dyn OwnerRetentionRam<Data = u32, ID = usize>;
+
+    // this function will panic if it can't read RetentionRAM or the RetentionRAM data is invalid
+    #[track_caller]
+    fn get_state(retention: &TestStateInterface) -> TestState {
+        let value = TestState::try_from(
+            retention
+                .read(59)
+                .expect("Retention RAM failed, could not get state"),
+        );
+        match value {
+            Ok(state) => state,
+            Err(raw_value) => {
+                panic!(
+                    "Invalid value {:x} found in Retention RAM when called from {:?}",
+                    raw_value,
+                    Location::caller()
+                )
+            }
+        }
+    }
+
+    // this function will panic if it can't write to RetentionRAM
+    fn save_state(retention: &TestStateInterface, test_state: TestState) {
+        retention
+            .write(59, test_state as u32)
+            .expect("Retention RAM failed, could not save state")
+    }
+
+    /// try to reset the processor and check that the reset info dump contains a valid program counter
+    /// RetentionRam is used for storing the state of the test as code execution is stopped and restarted after the reset
+    /// ```ignore
+    ///  # State machine
+    ///
+    /// | test state         |   next test state   | expected reset reaason |  actions    | checks        |
+    /// ---------------------------------------------------------------------------------------------------
+    /// | Started            | SoftwareResetCheck  |    PowerOnReset        | reset mcu   |               |
+    /// | SoftwareResetCheck | Finished            |    SoftwareRequested   | test passed | cpu dump info |
+    /// | Finished           | Finished            |          ------        | nothing     |               |
+    ///
+    /// ```
+    pub fn test_software_reset<T: ResetManagment>(
+        retention: &TestStateInterface,
+        reset_manager: &T,
+        rom_start: usize,
+        rom_end: usize,
+    ) {
+        //if this is a fresh start, save (in RRAM) that the test started
+        //if this function fails (returns None) than the test is compromised
+        let reset_reason = reset_manager
+            .reset_reason()
+            .expect("could not retrieve reset reason");
+
+        // retrieve the test state
+        let mut test_state = if reset_reason == ResetReason::PowerOnReset {
+            // if it's a fresh start, write `Started` into RetentionRAM
+            save_state(retention, TestState::Started);
+            TestState::Started
+        } else {
+            // if it's not a fresh start it means that the state is in RetentionRAM, read it
+            get_state(retention)
+        };
+
+        match test_state {
+            // 1: it's a fresh start, trigger a reset and in the next cycle check that the correct reset reason was detected
+            TestState::Started => {
+                assert_eq!(
+                    reset_reason,
+                    ResetReason::PowerOnReset,
+                    "this state is valid only if this is a fresh start"
+                );
+                // store next state
+                test_state = TestState::SoftwareResetCheck;
+                save_state(retention, test_state);
+
+                reset_manager.trigger_system_reset();
+            }
+
+            //2: Step 1 triggered a software reset, check that it was detected
+            TestState::SoftwareResetCheck => {
+                assert_eq!(
+                    reset_reason,
+                    ResetReason::SoftwareRequest,
+                    "should have arrived in this state only if a software reset was triggered"
+                );
+
+                // check that the reset info dump contains the address of the instruction that generated the system reset (check that in it somewhere in ROM)
+                let binding = reset_manager.get_reset_info_dump().unwrap();
+                let reset_info_dump = binding.as_ref();
+
+                // reset info contains 2 sections:
+                // * cpu_info [1word for 'length' + multiple words of cpu reset info]
+                // * alert_info [1 word for 'length + multiple words of alert info]
+
+                // cpu_info will contain in the third word the address of the program counter that generated a reset
+                let cpu_info_length = reset_info_dump[0];
+                assert!(cpu_info_length > 3, "not enough cpu crash info");
+                let reset_genereating_address = reset_info_dump[2] as usize;
+                assert!(
+                    (rom_start..rom_end).contains(&reset_genereating_address),
+                    "the instruction that genereated the reset did not come from FLASH/ROM",
+                );
+
+                test_state = TestState::Finished;
+                save_state(retention, test_state);
+
+                kernel::debug!("TEST ResetManager test_software_reset PASS");
+            }
+            TestState::Finished => {}
+        }
     }
 }

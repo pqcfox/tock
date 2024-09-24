@@ -14,20 +14,19 @@
 #![test_runner(test_runner)]
 #![reexport_test_harness_main = "test_main"]
 
-use core::ptr::{addr_of, addr_of_mut};
-
 use crate::hil::symmetric_encryption::AES128_BLOCK_SIZE;
 use crate::otbn::OtbnComponent;
 use crate::pinmux_layout::BoardPinmuxLayout;
 use capsules_aes_gcm::aes_gcm;
 use capsules_core::driver;
-use capsules_core::reset_manager::ResetManager;
 use capsules_core::virtualizers::virtual_aes_ccm;
 use capsules_core::virtualizers::virtual_alarm::{MuxAlarm, VirtualMuxAlarm};
 use capsules_extra::opentitan_alerthandler::AlertHandlerCapsule;
-use capsules_extra::opentitan_sysrst::SystemReset;
-use core::num::NonZeroU16;
 use earlgrey::alert_handler;
+use capsules_extra::opentitan_sysrst::SystemReset;
+use capsules_extra::reset_manager::ResetManager;
+use core::num::NonZeroU16;
+use core::ptr::{addr_of, from_ref};
 use earlgrey::chip::EarlGreyDefaultPeripherals;
 use earlgrey::chip_config::EarlGreyConfig;
 use earlgrey::flash_ctrl;
@@ -45,16 +44,14 @@ use kernel::hil::hasher::Hasher;
 use kernel::hil::i2c::I2CMaster;
 use kernel::hil::led::LedHigh;
 use kernel::hil::pattgen::PattGen;
-use kernel::hil::reset_managment::ResetManagment;
 use kernel::hil::rng::Rng;
 use kernel::hil::symmetric_encryption::AES128;
-use kernel::hil::usb::Client;
+use kernel::hil::usb::UsbController;
 use kernel::platform::scheduler_timer::VirtualSchedulerTimer;
 use kernel::platform::{KernelResources, SyscallDriverLookup, TbfHeaderFilterDefaultAllow};
 use kernel::scheduler::priority::PrioritySched;
 use kernel::utilities::registers::interfaces::ReadWriteable;
 use kernel::{create_capability, debug, static_init};
-use lowrisc::flash_ctrl::FlashMPConfig;
 use lowrisc::sysrst_ctrl::SysRstCtrl;
 use rv32i::csr;
 
@@ -253,6 +250,11 @@ struct EarlGrey {
             >,
         >,
     >,
+    usb: &'static capsules_extra::usb::usb_user2::UsbSyscallDriver<
+        'static,
+        lowrisc::usb::Usb<'static>,
+        { lowrisc::usb::MAXIMUM_PACKET_SIZE.get() },
+    >,
     opentitan_sysrst: &'static SystemReset<'static, SysRstCtrl<'static>>,
     syscall_filter: &'static TbfHeaderFilterDefaultAllow,
     scheduler: &'static PrioritySched,
@@ -284,12 +286,12 @@ impl SyscallDriverLookup for EarlGrey {
                 Some(info_flash) => f(Some(info_flash)),
                 None => f(None),
             },
-            //capsules_extra::kv_driver::DRIVER_NUM => f(Some(self.kv_driver)),
+            capsules_extra::usb::usb_user2::DRIVER_NUM => f(Some(self.usb)),
             capsules_extra::pattgen::DRIVER_NUM => f(Some(self.pattgen)),
             capsules_extra::opentitan_alerthandler::DRIVER_NUM => {
                 f(Some(self.opentitan_alerthandler))
             }
-            capsules_core::reset_manager::DRIVER_NUM => f(Some(self.reset_manager)),
+            capsules_extra::reset_manager::DRIVER_NUM => f(Some(self.reset_manager)),
             capsules_extra::opentitan_sysrst::DRIVER_NUM => f(Some(self.opentitan_sysrst)),
             _ => f(None),
         }
@@ -368,8 +370,8 @@ fn get_flash_memory_protection_configuration() -> flash_ctrl::MemoryProtectionCo
         let page_index_range =
             earlgrey::flash_ctrl::tests::convert_flash_slice_to_page_position_range(unsafe {
                 core::slice::from_raw_parts(
-                    &_sapps as *const u8,
-                    &_eapps as *const u8 as usize - &_sapps as *const u8 as usize,
+                    from_ref(&_sapps),
+                    from_ref(&_eapps) as usize - from_ref(&_sapps) as usize,
                 )
             })
             .unwrap();
@@ -413,12 +415,10 @@ fn get_flash_memory_protection_configuration() -> flash_ctrl::MemoryProtectionCo
     } else {
         // SAFETY: &_stext represents a valid flash address in the host address space.
         let starting_address =
-            flash_ctrl::FlashAddress::new_from_host_address(unsafe { &_stext as *const u8 })
-                .unwrap();
+            flash_ctrl::FlashAddress::new_from_host_address(unsafe { from_ref(&_stext) }).unwrap();
         // SAFETY: &_etext represents a valid flash address in the host address space.
         let ending_address =
-            flash_ctrl::FlashAddress::new_from_host_address(unsafe { &_etext as *const u8 })
-                .unwrap();
+            flash_ctrl::FlashAddress::new_from_host_address(unsafe { from_ref(&_etext) }).unwrap();
 
         // Setup flash memory protection for the kernel
         // PANIC: the unwrap panics only if Flash(_stext) < FlashAddress(_etext), which occurs
@@ -514,21 +514,12 @@ unsafe fn setup() -> (
     );
     peripherals.init();
 
-    // retrieve reset reason
-    // RSTMGR::reset_reason might get cleared by ROM code that runs before Tock and cached in RetentionRAM
-    // if reset_reason in HW peripheral is cleared, attempt to read it from RRAM
-    // TODO replace unsafe fn `get_rr_from_rram()` with RRAM function call when RRAM is ready
-    let reset_reason = peripherals
-        .rst_mgmt
-        .reset_reason()
-        .or(earlgrey::rstmgr::RstMgr::get_rr_from_rram());
-
     let reset_manager = kernel::static_init!(
-        capsules_core::reset_manager::ResetManager<'static, earlgrey::rstmgr::RstMgr>,
+        capsules_extra::reset_manager::ResetManager<'static, earlgrey::rstmgr::RstMgr>,
         ResetManager::new(
             &peripherals.rst_mgmt,
             board_kernel.create_grant(
-                capsules_core::reset_manager::DRIVER_NUM,
+                capsules_extra::reset_manager::DRIVER_NUM,
                 &memory_allocation_cap
             )
         )
@@ -572,7 +563,9 @@ unsafe fn setup() -> (
             4 => &peripherals.gpio_port[4],
             5 => &peripherals.gpio_port[5],
             6 => &peripherals.gpio_port[6],
-            7 => &peripherals.gpio_port[15]
+            7 => &peripherals.gpio_port[15],
+            8 => &peripherals.gpio_port[7],
+            9 => &peripherals.gpio_port[20],
         ),
     )
     .finalize(components::gpio_component_static!(
@@ -703,6 +696,10 @@ unsafe fn setup() -> (
     // )
     // .finalize(components::usb_component_static!(earlgrey::usbdev::Usb));
 
+    // Uncomment if you want to test the USB client at the kernel level. Don't forget to uncomment
+    // the other USB client a few lines below.
+    /*
+    use kernel::hil::usb::Client;
     let usb_client = static_init!(
         capsules_extra::usb::usbc_client::Client<lowrisc::usb::Usb>,
         capsules_extra::usb::usbc_client::Client::new(&peripherals.usb, 64),
@@ -712,6 +709,34 @@ unsafe fn setup() -> (
     peripherals.usb.set_client(usb_client);
     usb_client.enable();
     usb_client.attach();
+    */
+
+    let usb_client = static_init!(
+        capsules_extra::usb::usb_user2::UsbClient<
+            'static,
+            lowrisc::usb::Usb,
+            { lowrisc::usb::MAXIMUM_PACKET_SIZE.get() },
+        >,
+        capsules_extra::usb::usb_user2::UsbClient::new(&peripherals.usb)
+    );
+
+    peripherals.usb.set_client(usb_client);
+
+    let usb = static_init!(
+        capsules_extra::usb::usb_user2::UsbSyscallDriver<
+            'static,
+            lowrisc::usb::Usb,
+            { lowrisc::usb::MAXIMUM_PACKET_SIZE.get() },
+        >,
+        capsules_extra::usb::usb_user2::UsbSyscallDriver::new(
+            usb_client,
+            board_kernel.create_grant(
+                capsules_extra::usb::usb_user2::DRIVER_NUM,
+                &memory_allocation_cap
+            )
+        ),
+    );
+    usb.init();
 
     // Kernel storage region, allocated with the storage_volume!
     // macro in common/utils.rs
@@ -1040,6 +1065,9 @@ unsafe fn setup() -> (
             ),
         )
     );
+    peripherals.sysreset.set_client(Some(opentitan_sysrst));
+
+    peripherals.sysreset.enable_interrupts();
 
     let earlgrey = static_init!(
         EarlGrey,
@@ -1055,6 +1083,7 @@ unsafe fn setup() -> (
             i2c_master,
             spi_controller,
             aes,
+            usb,
             kv_driver,
             pattgen,
             syscall_filter,
@@ -1076,15 +1105,19 @@ unsafe fn setup() -> (
     lowrisc::pattgen::tests::run_all(pattgen_test);
     */
 
+    // when running with ROM, reset reason is cleared from HW and stored inside RetentionRAM
+    let reset_reason = earlgrey::rstmgr::RstMgr::get_rr_from_rram(&peripherals.sram_ret);
     earlgrey.reset_manager.startup();
     earlgrey.reset_manager.populate_reset_reason(reset_reason);
 
     /* TESTs */
-
-    #[cfg(feature = "test_alerthandler")]
-    {
-        test_alerthandler(peripherals, mux_alarm);
-    }
+    #[cfg(feature = "test_resetmanager")]
+    capsules_extra::reset_manager::test::test_software_reset(
+        &peripherals.sram_ret,
+        earlgrey.reset_manager,
+        core::ptr::addr_of!(_sflash) as usize,
+        core::ptr::addr_of!(_eflash) as usize,
+    );
 
     #[cfg(feature = "test_sysrst_ctrl")]
     {
@@ -1102,7 +1135,7 @@ unsafe fn setup() -> (
             core::ptr::addr_of_mut!(_sappmem),
             core::ptr::addr_of!(_eappmem) as usize - core::ptr::addr_of!(_sappmem) as usize,
         ),
-        &mut *addr_of_mut!(PROCESSES),
+        &mut *core::ptr::addr_of_mut!(PROCESSES),
         &FAULT_RESPONSE,
         &process_mgmt_cap,
     )
@@ -1110,6 +1143,11 @@ unsafe fn setup() -> (
         debug!("Error loading processes!");
         debug!("{:?}", err);
     });
+
+    #[cfg(feature = "test_alerthandler")]
+    {
+        test_alerthandler(peripherals, mux_alarm);
+    }
 
     #[cfg(feature = "test_sram_ret")]
     peripherals
@@ -1119,7 +1157,6 @@ unsafe fn setup() -> (
     #[cfg(feature = "test_aon_timer")]
     {
         peripherals.watchdog.test(
-            &peripherals.rst_mgmt,
             &peripherals.uart0,
             &peripherals.sram_ret,
             &peripherals.sram_ret,
@@ -1174,8 +1211,8 @@ fn test_flash(
     let page_index_range =
         earlgrey::flash_ctrl::tests::convert_flash_slice_to_page_position_range(unsafe {
             core::slice::from_raw_parts(
-                &_sapps as *const u8,
-                &_eapps as *const u8 as usize - &_sapps as *const u8 as usize,
+                from_ref(&_sapps),
+                from_ref(&_eapps) as usize - from_ref(&_sapps) as usize,
             )
         })
         .unwrap();
@@ -1223,14 +1260,9 @@ unsafe fn test_alerthandler(
 
 #[cfg(feature = "test_aon_timer")]
 unsafe fn test_aon_timer(
-    // aon_timer: &'static aon_timer::AonTimer,
     peripherals: &'static EarlGreyDefaultPeripherals<ChipConfig, BoardPinmuxLayout>,
     mux_alarm: &'static MuxAlarm<'static, RvTimer>,
 ) {
-    use kernel::hil::time::Alarm;
-    use kernel::hil::time::ConvertTicks;
-    use kernel::hil::time::Time;
-
     debug!("Start aon_timer kernel runtime tests!");
 
     // an Alarm is needed for some of the tests as alert handling works using interrupts
@@ -1242,13 +1274,7 @@ unsafe fn test_aon_timer(
 
     let aon_timer_tests = static_init!(
         aon_timer::tests::Tests<VirtualMuxAlarm<'static, RvTimer>>,
-        aon_timer::tests::Tests::new(
-            &peripherals.watchdog,
-            &peripherals.rst_mgmt,
-            &peripherals.uart0,
-            &peripherals.sram_ret,
-            virtual_alarm_tests,
-        )
+        aon_timer::tests::Tests::new(&peripherals.watchdog, virtual_alarm_tests,)
     );
 
     hil::time::Alarm::set_alarm_client(virtual_alarm_tests, aon_timer_tests);

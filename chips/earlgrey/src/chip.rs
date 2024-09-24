@@ -5,17 +5,15 @@
 //! High-level setup and interrupt mapping for the chip.
 use core::fmt::{Display, Write};
 use core::marker::PhantomData;
-use core::num::NonZeroU32;
 use core::ptr::addr_of;
 use kernel::platform::chip::{Chip, InterruptService};
-use kernel::utilities::helpers::create_non_zero_u32;
 use kernel::utilities::registers::interfaces::{ReadWriteable, Readable, Writeable};
 use lowrisc::timer::RvTimer;
 use rv32i::csr::{mcause, mie::mie, mtvec::mtvec, CSR};
 use rv32i::pmp::{PMPUserMPU, TORUserPMP};
 use rv32i::syscall::SysCall;
 
-use crate::alert_handler::{AlertBitfield, AlertClass, LocalAlertFlags, LocalAlertId};
+use crate::alert_handler::{AlertClass, LocalAlertFlags};
 use crate::alert_handler::{AlertFlags, AlertHandler};
 use crate::chip_config::EarlGreyConfig;
 use crate::interrupts;
@@ -112,12 +110,15 @@ impl<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig>
     pub fn init(&'static self) {
         kernel::deferred_call::DeferredCallClient::register(&self.aes);
         kernel::deferred_call::DeferredCallClient::register(&self.uart0);
+        /*
         // Recommended value by documentation
         const INTEGRITY_CHECK_PERIOD: u32 = 0x3_FFFF;
         // Recommended value by documentation
         const CONSISTENCY_CHECK_PERIOD: u32 = 0x3_FFFF;
         // Recommended value by documentation is at least 100_000.
         const CHECK_TIMEOUT: NonZeroU32 = create_non_zero_u32(100_000);
+
+        // OTP is locked by ePMP during SiVal.
         self.otp
             .init(
                 INTEGRITY_CHECK_PERIOD,
@@ -125,6 +126,7 @@ impl<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig>
                 Some(CHECK_TIMEOUT),
             )
             .expect("Failed to initialize OTP");
+        */
     }
 
     #[inline]

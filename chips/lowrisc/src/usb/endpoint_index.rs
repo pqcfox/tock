@@ -1,13 +1,15 @@
-// This license header is required for submitting to upstream Tock.
-// It is up to ZeroRISC to decide if this header should be here or not.
-//
 // Licensed under the Apache License, Version 2.0 or the MIT License.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // Copyright Tock Contributors 2022.
+//
+// This license header is required for submitting to upstream Tock.
+// It is up to ZeroRISC to decide if this header should be here or not.
 
 //! Endpoint index
 
-use crate::registers::usbdev_regs::{EP_IN_ENABLE, EP_OUT_ENABLE, IN_ISO, OUT_ISO, RXENABLE_OUT, RXENABLE_SETUP};
+use crate::registers::usbdev_regs::{
+    EP_IN_ENABLE, EP_OUT_ENABLE, IN_ISO, OUT_ISO, RXENABLE_OUT, RXENABLE_SETUP,
+};
 
 use kernel::utilities::registers::FieldValue;
 
@@ -142,6 +144,30 @@ impl EndpointIndex {
         }
     }
 
+    /// Converts the endpoint index to `rxenable_out` bitfield set to 0.
+    ///
+    /// # Return value
+    ///
+    /// The corresponding `rxenable_out` bitfield set to 0.
+    pub(super) const fn to_clear_rxenable_out_field_value(
+        self,
+    ) -> FieldValue<u32, RXENABLE_OUT::Register> {
+        match self {
+            EndpointIndex::Endpoint0 => RXENABLE_OUT::OUT_0::CLEAR,
+            EndpointIndex::Endpoint1 => RXENABLE_OUT::OUT_1::CLEAR,
+            EndpointIndex::Endpoint2 => RXENABLE_OUT::OUT_2::CLEAR,
+            EndpointIndex::Endpoint3 => RXENABLE_OUT::OUT_3::CLEAR,
+            EndpointIndex::Endpoint4 => RXENABLE_OUT::OUT_4::CLEAR,
+            EndpointIndex::Endpoint5 => RXENABLE_OUT::OUT_5::CLEAR,
+            EndpointIndex::Endpoint6 => RXENABLE_OUT::OUT_6::CLEAR,
+            EndpointIndex::Endpoint7 => RXENABLE_OUT::OUT_7::CLEAR,
+            EndpointIndex::Endpoint8 => RXENABLE_OUT::OUT_8::CLEAR,
+            EndpointIndex::Endpoint9 => RXENABLE_OUT::OUT_9::CLEAR,
+            EndpointIndex::Endpoint10 => RXENABLE_OUT::OUT_10::CLEAR,
+            EndpointIndex::Endpoint11 => RXENABLE_OUT::OUT_11::CLEAR,
+        }
+    }
+
     /// Converts the endpoint index to `rxenable_setup` bitfield set to 1.
     ///
     /// # Return value
@@ -166,9 +192,7 @@ impl EndpointIndex {
         }
     }
 
-    pub(super) const fn to_set_in_iso_field_value(
-        self,
-    ) -> FieldValue<u32, IN_ISO::Register> {
+    pub(super) const fn to_set_in_iso_field_value(self) -> FieldValue<u32, IN_ISO::Register> {
         match self {
             EndpointIndex::Endpoint0 => IN_ISO::ISO_0::SET,
             EndpointIndex::Endpoint1 => IN_ISO::ISO_1::SET,
@@ -185,9 +209,7 @@ impl EndpointIndex {
         }
     }
 
-    pub(super) const fn to_set_out_iso_field_value(
-        self,
-    ) -> FieldValue<u32, OUT_ISO::Register> {
+    pub(super) const fn to_set_out_iso_field_value(self) -> FieldValue<u32, OUT_ISO::Register> {
         match self {
             EndpointIndex::Endpoint0 => OUT_ISO::ISO_0::SET,
             EndpointIndex::Endpoint1 => OUT_ISO::ISO_1::SET,

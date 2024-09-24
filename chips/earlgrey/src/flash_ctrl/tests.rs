@@ -1,9 +1,9 @@
-// This license header is required for submitting to upstream Tock.
-// It is up to ZeroRISC to decide if this header should be here or not.
-//
 // Licensed under the Apache License, Version 2.0 or the MIT License.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // Copyright Tock Contributors 2022.
+//
+// This license header is required for submitting to upstream Tock.
+// It is up to ZeroRISC to decide if this header should be here or not.
 
 use super::flash_address::{FlashAddress, InvalidHostAddressError};
 use super::flash_ctrl::{BusyStatus, FlashCtrl, FLASH_HOST_STARTING_ADDRESS_OFFSET};
@@ -157,8 +157,7 @@ fn check_page_content(page_content: &[u8; EARLGREY_PAGE_SIZE.get()], message: &s
     // split_at() can panic only for large messages, which is not the case for these test cases
     let (page_content_message_slice, page_content_fill_slice) =
         page_content.split_at(message_length);
-    assert_eq!(
-        true,
+    assert!(
         page_content_message_slice == message.as_bytes(),
         "Expected message {:?}, found {:?}",
         message.as_bytes(),

@@ -187,7 +187,7 @@ impl<'a, U: hil::usb::UsbController<'a>> hil::usb_hid::UsbHid<'a, [u8; 64]> for 
         let len = send.len();
 
         self.send_buffer.replace(send);
-        self.controller().endpoint_resume_in(ENDPOINT_NUM);
+        self.controller().endpoint_resume_in(ENDPOINT_NUM).unwrap();
 
         Ok(len)
     }
@@ -220,9 +220,11 @@ impl<'a, U: hil::usb::UsbController<'a>> hil::usb::Client<'a> for KeyboardHid<'a
 
         // Setup buffers for IN data transfer.
         self.controller()
-            .endpoint_set_in_buffer(ENDPOINT_NUM, &self.buffers[IN_BUFFER].buf);
+            .endpoint_set_in_buffer(ENDPOINT_NUM, &self.buffers[IN_BUFFER].buf)
+            .unwrap();
         self.controller()
-            .endpoint_in_out_enable(TransferType::Interrupt, ENDPOINT_NUM);
+            .endpoint_in_out_enable(TransferType::Interrupt, ENDPOINT_NUM)
+            .unwrap();
     }
 
     fn attach(&'a self) {
@@ -230,6 +232,16 @@ impl<'a, U: hil::usb::UsbController<'a>> hil::usb::Client<'a> for KeyboardHid<'a
     }
 
     fn bus_reset(&'a self) {}
+
+    fn link_suspended(&'a self) {}
+
+    fn link_resume(&'a self) {}
+
+    fn disconnected(&'a self) {}
+
+    fn host_lost(&'a self) {}
+
+    fn bus_powered(&'a self) {}
 
     /// Handle a Control Setup transaction.
     fn ctrl_setup(&'a self, endpoint: usize) -> hil::usb::CtrlSetupResult {
@@ -313,10 +325,11 @@ impl<'a, U: hil::usb::UsbController<'a>> hil::usb::Client<'a> for KeyboardHid<'a
         }
     }
 
-    fn packet_transmitted(&'a self, endpoint: usize) {
+    fn packet_transmitted(&'a self, endpoint: usize, result: Result<(), ()>) {
         self.send_buffer.take().map(|buf| {
             self.client.map(move |client| {
-                client.packet_transmitted(Ok(()), buf, endpoint);
+                let result = result.map_err(|()| ErrorCode::FAIL);
+                client.packet_transmitted(result, buf, endpoint);
             });
         });
     }

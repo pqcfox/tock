@@ -1,9 +1,9 @@
-// This license header is required for submitting to upstream Tock.
-// It is up to ZeroRISC to decide if this header should be here or not.
-//
 // Licensed under the Apache License, Version 2.0 or the MIT License.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // Copyright Tock Contributors 2022.
+//
+// This license header is required for submitting to upstream Tock.
+// It is up to ZeroRISC to decide if this header should be here or not.
 
 //! This capsule provides userspace access to info partitions present on some boards such as
 //! OpenTitan.
@@ -24,7 +24,7 @@
 //! Read an info page.
 //!
 //! Arguments:
-//! 
+//!
 //! 1. A value with two fields:
 //!     + bits 0..15: the type of info page to be read
 //!     + bits 16..31: the bank to read from a page
@@ -134,14 +134,14 @@
 //!     access to the desired page.
 //! 3. Always 0
 
-use kernel::{ErrorCode, ProcessId};
 use kernel::grant::{AllowRoCount, AllowRwCount, Grant, UpcallCount};
-use kernel::hil::flash::InfoFlash as InfoFlashTrait;
-use kernel::hil::flash::InfoClient as InfoClientTrait;
 use kernel::hil::flash::Error;
+use kernel::hil::flash::InfoClient as InfoClientTrait;
+use kernel::hil::flash::InfoFlash as InfoFlashTrait;
 use kernel::processbuffer::{ReadableProcessBuffer, WriteableProcessBuffer};
 use kernel::syscall::{CommandReturn, SyscallDriver};
 use kernel::utilities::cells::{OptionalCell, TakeCell};
+use kernel::{ErrorCode, ProcessId};
 
 /// Driver number
 pub const DRIVER_NUMBER: usize = capsules_core::driver::NUM::InfoFlash as usize;
@@ -210,7 +210,7 @@ impl TryFrom<usize> for Command {
             1 => Ok(Command::ReadPage),
             2 => Ok(Command::WritePage),
             3 => Ok(Command::ErasePage),
-            _ => Err(())
+            _ => Err(()),
         }
     }
 }
@@ -307,7 +307,7 @@ impl<'a, Flash: InfoFlashTrait> InfoFlash<'a, Flash> {
     /// The passed raw bank.
     fn convert_command_argument_to_raw_bank(argument1: usize) -> usize {
         // The info partition type is represented by the last 16 bits of the argument
-        (argument1 >> 16) as usize
+        argument1 >> 16
     }
 }
 
@@ -319,7 +319,7 @@ impl<Flash: InfoFlashTrait> InfoFlash<'static, Flash> {
     /// + `raw_info_partition_type`: an integral value representing the type of the info partition
     /// to be read
     /// + `raw_bank`: an integral value representing the bank to read from
-    /// + `raw_page_number`: the index of the page to be read relative to the bank 
+    /// + `raw_page_number`: the index of the page to be read relative to the bank
     /// + `process_id`: the ID of the process that's trying to read a page
     ///
     /// # Return value
@@ -342,15 +342,18 @@ impl<Flash: InfoFlashTrait> InfoFlash<'static, Flash> {
 
         let bank: Flash::BankType = match raw_bank.try_into() {
             Err(()) => return CommandReturn::failure(ErrorCode::INVAL),
-            Ok(bank) => bank
+            Ok(bank) => bank,
         };
 
         let buffer = match self.take_buffer() {
             None => return CommandReturn::failure(ErrorCode::BUSY),
-            Some(buffer) => buffer
+            Some(buffer) => buffer,
         };
 
-        match self.flash.read_info_page(info_partition_type, bank, raw_page_number, buffer) {
+        match self
+            .flash
+            .read_info_page(info_partition_type, bank, raw_page_number, buffer)
+        {
             Err((error_code, buffer)) => {
                 self.set_buffer(buffer);
                 CommandReturn::failure(error_code)
@@ -358,7 +361,7 @@ impl<Flash: InfoFlashTrait> InfoFlash<'static, Flash> {
             Ok(()) => {
                 self.current_process.set(process_id);
                 CommandReturn::success()
-            },
+            }
         }
     }
 
@@ -394,33 +397,39 @@ impl<Flash: InfoFlashTrait> InfoFlash<'static, Flash> {
 
         let bank: Flash::BankType = match raw_bank.try_into() {
             Err(()) => return CommandReturn::failure(ErrorCode::INVAL),
-            Ok(bank) => bank
+            Ok(bank) => bank,
         };
 
         let buffer = match self.take_buffer() {
             None => return CommandReturn::failure(ErrorCode::BUSY),
-            Some(buffer) => buffer
+            Some(buffer) => buffer,
         };
 
-        let copy_result = self.grant.enter(process_id, |_, kernel_data| {
-            kernel_data
-                .get_readonly_processbuffer(RoAllowId::Write.to_usize())
-                .and_then(|allowed_buffer| {
-                    allowed_buffer.enter(|data| {
-                        let write_slice = buffer.as_mut();
+        let copy_result = self
+            .grant
+            .enter(process_id, |_, kernel_data| {
+                kernel_data
+                    .get_readonly_processbuffer(RoAllowId::Write.to_usize())
+                    .and_then(|allowed_buffer| {
+                        allowed_buffer.enter(|data| {
+                            let write_slice = buffer.as_mut();
 
-                        data.copy_to_slice_or_err(write_slice)
+                            data.copy_to_slice_or_err(write_slice)
+                        })
                     })
-                })
-        }).ok();
+            })
+            .ok();
 
         if let Some(status) = copy_result {
             if status.is_err() {
                 return CommandReturn::failure(ErrorCode::SIZE);
             }
         }
-        
-        match self.flash.write_info_page(info_partition_type, bank, raw_page_number, buffer) {
+
+        match self
+            .flash
+            .write_info_page(info_partition_type, bank, raw_page_number, buffer)
+        {
             Err((error_code, buffer)) => {
                 self.set_buffer(buffer);
                 CommandReturn::failure(error_code)
@@ -428,7 +437,7 @@ impl<Flash: InfoFlashTrait> InfoFlash<'static, Flash> {
             Ok(()) => {
                 self.current_process.set(process_id);
                 CommandReturn::success()
-            },
+            }
         }
     }
 
@@ -462,12 +471,15 @@ impl<Flash: InfoFlashTrait> InfoFlash<'static, Flash> {
 
         let bank: Flash::BankType = match raw_bank.try_into() {
             Err(()) => return CommandReturn::failure(ErrorCode::INVAL),
-            Ok(bank) => bank
+            Ok(bank) => bank,
         };
 
         self.current_process.set(process_id);
 
-        match self.flash.erase_info_page(info_partition_type, bank, raw_page_number) {
+        match self
+            .flash
+            .erase_info_page(info_partition_type, bank, raw_page_number)
+        {
             Err(error_code) => CommandReturn::failure(error_code),
             Ok(()) => CommandReturn::success(),
         }
@@ -486,7 +498,7 @@ impl<'a, Flash: InfoFlashTrait> InfoClientTrait<Flash> for InfoFlash<'a, Flash> 
                             kernel::errorcode::into_statuscode(Err(ErrorCode::FAIL)),
                             error as usize,
                             0,
-                        )
+                        ),
                     );
 
                     return;
@@ -502,13 +514,14 @@ impl<'a, Flash: InfoFlashTrait> InfoClientTrait<Flash> for InfoFlash<'a, Flash> 
                             if data.len() != read_slice.len() {
                                 return Err(());
                             }
-                            
+
                             // Copy the read data to the allowed buffer
                             data.copy_from_slice(read_slice);
 
                             Ok(())
                         })
-                    }).ok();
+                    })
+                    .ok();
 
                 if let Some(result) = copy_result {
                     let status_code = match result {
@@ -519,11 +532,7 @@ impl<'a, Flash: InfoFlashTrait> InfoClientTrait<Flash> for InfoFlash<'a, Flash> 
                     let _ = kernel_data.schedule_upcall(
                         // Ignore the schedule result. There is not much that can be done about that.
                         UpcallId::ReadDone.to_usize(),
-                        (
-                            status_code,
-                            0,
-                            0,
-                        ),
+                        (status_code, 0, 0),
                     );
                 }
             })
@@ -532,7 +541,11 @@ impl<'a, Flash: InfoFlashTrait> InfoClientTrait<Flash> for InfoFlash<'a, Flash> 
         self.set_buffer(read_buffer);
     }
 
-    fn info_write_complete(&self, write_buffer: &'static mut Flash::Page, result: Result<(), Error>) {
+    fn info_write_complete(
+        &self,
+        write_buffer: &'static mut Flash::Page,
+        result: Result<(), Error>,
+    ) {
         self.current_process.take().map(|process_id| {
             self.grant.enter(process_id, |_, kernel_data| {
                 if let Err(error) = result {
@@ -543,17 +556,13 @@ impl<'a, Flash: InfoFlashTrait> InfoClientTrait<Flash> for InfoFlash<'a, Flash> 
                             kernel::errorcode::into_statuscode(Err(ErrorCode::FAIL)),
                             error as usize,
                             0,
-                        )
+                        ),
                     );
                 } else {
                     // Ignore the schedule result. There is not much that can be done about that.
                     let _ = kernel_data.schedule_upcall(
                         UpcallId::WriteDone.to_usize(),
-                        (
-                            kernel::errorcode::into_statuscode(Ok(())),
-                            0,
-                            0,
-                        ),
+                        (kernel::errorcode::into_statuscode(Ok(())), 0, 0),
                     );
                 }
             })
@@ -575,19 +584,15 @@ impl<'a, Flash: InfoFlashTrait> InfoClientTrait<Flash> for InfoFlash<'a, Flash> 
                                 kernel::errorcode::into_statuscode(Err(ErrorCode::FAIL)),
                                 error as usize,
                                 0,
-                            )
+                            ),
                         );
                     }
                     Ok(()) => {
                         // Ignore the schedule result. There is not much that can be done about
                         // that.
-                        let _ =  kernel_data.schedule_upcall(
+                        let _ = kernel_data.schedule_upcall(
                             UpcallId::EraseDone.to_usize(),
-                            (
-                                kernel::errorcode::into_statuscode(Ok(())),
-                                0,
-                                0,
-                            )
+                            (kernel::errorcode::into_statuscode(Ok(())), 0, 0),
                         );
                     }
                 }
@@ -613,22 +618,40 @@ impl<Flash: InfoFlashTrait> SyscallDriver for InfoFlash<'static, Flash> {
         match command {
             Command::DriverExistence => CommandReturn::success(),
             Command::ReadPage => {
-                let raw_info_partition_type = Self::convert_command_argument_to_raw_info_partition_type(argument1);
+                let raw_info_partition_type =
+                    Self::convert_command_argument_to_raw_info_partition_type(argument1);
                 let raw_bank = Self::convert_command_argument_to_raw_bank(argument1);
                 let raw_page_number = argument2;
-                self.raw_read_info_page(raw_info_partition_type, raw_bank, raw_page_number, processid)
+                self.raw_read_info_page(
+                    raw_info_partition_type,
+                    raw_bank,
+                    raw_page_number,
+                    processid,
+                )
             }
             Command::WritePage => {
-                let raw_info_partition_type = Self::convert_command_argument_to_raw_info_partition_type(argument1);
+                let raw_info_partition_type =
+                    Self::convert_command_argument_to_raw_info_partition_type(argument1);
                 let raw_bank = Self::convert_command_argument_to_raw_bank(argument1);
                 let raw_page_number = argument2;
-                self.raw_write_info_page(raw_info_partition_type, raw_bank, raw_page_number, processid)
+                self.raw_write_info_page(
+                    raw_info_partition_type,
+                    raw_bank,
+                    raw_page_number,
+                    processid,
+                )
             }
             Command::ErasePage => {
-                let raw_info_partition_type = Self::convert_command_argument_to_raw_info_partition_type(argument1);
+                let raw_info_partition_type =
+                    Self::convert_command_argument_to_raw_info_partition_type(argument1);
                 let raw_bank = Self::convert_command_argument_to_raw_bank(argument1);
                 let raw_page_number = argument2;
-                self.raw_erase_info_page(raw_info_partition_type, raw_bank, raw_page_number, processid)
+                self.raw_erase_info_page(
+                    raw_info_partition_type,
+                    raw_bank,
+                    raw_page_number,
+                    processid,
+                )
             }
         }
     }
