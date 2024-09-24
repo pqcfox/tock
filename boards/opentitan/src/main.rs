@@ -219,7 +219,6 @@ struct EarlGrey {
         >,
     >,
     pattgen: &'static capsules_extra::pattgen::PattGen<'static, lowrisc::pattgen::PattGen<'static>>,
-    /*
     kv_driver: &'static capsules_extra::kv_driver::KVStoreDriver<
         'static,
         capsules_extra::virtual_kv::VirtualKVPermissions<
@@ -247,7 +246,6 @@ struct EarlGrey {
         lowrisc::usb::Usb<'static>,
         { lowrisc::usb::MAXIMUM_PACKET_SIZE.get() },
     >,
-    */
     opentitan_sysrst: &'static SystemReset<'static, SysRstCtrl<'static>>,
     syscall_filter: &'static TbfHeaderFilterDefaultAllow,
     scheduler: &'static PrioritySched,
@@ -276,12 +274,12 @@ impl SyscallDriverLookup for EarlGrey {
             capsules_core::spi_controller::DRIVER_NUM => f(Some(self.spi_controller)),
             capsules_core::rng::DRIVER_NUM => f(Some(self.rng)),
             capsules_extra::symmetric_encryption::aes::DRIVER_NUM => f(Some(self.aes)),
-            // capsules_extra::kv_driver::DRIVER_NUM => f(Some(self.kv_driver)),
+            capsules_extra::kv_driver::DRIVER_NUM => f(Some(self.kv_driver)),
             capsules_extra::info_flash::DRIVER_NUMBER => match self.info_flash {
                 Some(info_flash) => f(Some(info_flash)),
                 None => f(None),
             },
-            // capsules_extra::usb::usb_user2::DRIVER_NUM => f(Some(self.usb)),
+            capsules_extra::usb::usb_user2::DRIVER_NUM => f(Some(self.usb)),
             capsules_extra::pattgen::DRIVER_NUM => f(Some(self.pattgen)),
             capsules_extra::opentitan_alerthandler::DRIVER_NUM => {
                 f(Some(self.opentitan_alerthandler))
@@ -701,7 +699,6 @@ unsafe fn setup() -> (
     usb_client.attach();
     */
 
-    /*
     let usb_client = static_init!(
         capsules_extra::usb::usb_user2::UsbClient<
             'static,
@@ -728,7 +725,6 @@ unsafe fn setup() -> (
         ),
     );
     usb.init();
-    */
 
     // Kernel storage region, allocated with the storage_volume!
     // macro in common/utils.rs
@@ -806,7 +802,6 @@ unsafe fn setup() -> (
     hil::flash::HasClient::set_client(&peripherals.flash_ctrl, mux_flash);
     sip_hash.set_client(tickv);
     TICKV = Some(tickv);
-    /*
     let kv_store = components::kv::TicKVKVStoreComponent::new(tickv).finalize(
         components::tickv_kv_store_component_static!(
             capsules_extra::tickv::TicKVSystem<
@@ -890,7 +885,6 @@ unsafe fn setup() -> (
             >,
         >
     ));
-    */
 
     let info_flash = if !FLASH_TESTS_ENABLED {
         use capsules_extra::info_flash::InfoFlash;
@@ -1076,8 +1070,8 @@ unsafe fn setup() -> (
             i2c_master,
             spi_controller,
             aes,
-            // usb,
-            // kv_driver,
+            usb,
+            kv_driver,
             pattgen,
             syscall_filter,
             scheduler,
