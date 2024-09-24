@@ -94,3 +94,9 @@ impl<'a> TestRunner<'a> {
         }
     }
 }
+
+pub trait TargetTests {
+    fn test(&self) -> bool {
+        true
+    }
+}
