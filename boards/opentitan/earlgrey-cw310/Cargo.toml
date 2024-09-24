@@ -43,7 +43,9 @@ test_resetmanager = ["capsules-extra/test_resetmanager_opentitan"]
 #    - sim_verilator:
 #      OpenTitan SoC design simulated in Verilator.
 fpga = []
+sival = []
 sim_verilator = []
+
 # This is used to indicate that we should include tests that only pass on
 # hardware.
 hardware_tests = []

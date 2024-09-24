@@ -30,7 +30,6 @@ use core::ptr::{addr_of, addr_of_mut, from_ref};
 use earlgrey::alert_handler;
 use earlgrey::chip::EarlGreyDefaultPeripherals;
 use earlgrey::chip_config::EarlGreyConfig;
-use earlgrey::epmp::EPMPDebugConfig;
 use earlgrey::flash_ctrl;
 use earlgrey::pinmux_config::EarlGreyPinmuxConfig;
 use earlgrey::timer::RvTimer;
@@ -74,7 +73,10 @@ pub const EPMP_HANDOVER_CONFIG_CHECK: bool = false;
 // Either
 // - `earlgrey::epmp::EPMPDebugEnable`, or
 // - `earlgrey::epmp::EPMPDebugDisable`.
-//pub type EPMPDebugConfig = earlgrey::epmp::EPMPDebugDisable;
+#[cfg(feature = "sival")]
+pub type EPMPDebugConfig = earlgrey::epmp::EPMPDebugDisable;
+#[cfg(not(feature = "sival"))]
+pub type EPMPDebugConfig = earlgrey::epmp::EPMPDebugEnable;
 
 const NUM_PROCS: usize = 4;
 
@@ -163,11 +165,11 @@ impl EarlGreyConfig for ChipConfig {
 
 type EarlGreyChip = earlgrey::chip::EarlGrey<
     'static,
-    { earlgrey::epmp::EPMPDebugDisable::TOR_USER_REGIONS },
+    { <EPMPDebugConfig as earlgrey::epmp::EPMPDebugConfig>::TOR_USER_REGIONS },
     EarlGreyDefaultPeripherals<'static, ChipConfig, BoardPinmuxLayout>,
     ChipConfig,
     BoardPinmuxLayout,
-    earlgrey::epmp::EarlGreyEPMP<false, earlgrey::epmp::EPMPDebugDisable>,
+    earlgrey::epmp::EarlGreyEPMP<{ EPMP_HANDOVER_CONFIG_CHECK }, EPMPDebugConfig>,
 >;
 
 /// A structure representing this platform that holds references to all
@@ -448,40 +450,51 @@ unsafe fn setup() -> (
     // Set up memory protection immediately after setting the trap handler, to
     // ensure that much of the board initialization routine runs with ePMP
     // protection.
-    let earlgrey_epmp = earlgrey::epmp::EarlGreyEPMP::new(
-        earlgrey::epmp::FlashRegion(
+    let flash_region = earlgrey::epmp::FlashRegion(
+        rv32i::pmp::NAPOTRegionSpec::new(
+            core::ptr::addr_of!(_sflash),
+            core::ptr::addr_of!(_eflash) as usize - core::ptr::addr_of!(_sflash) as usize,
+        )
+        .unwrap(),
+    );
+    let ram_region = earlgrey::epmp::RAMRegion(
+        rv32i::pmp::NAPOTRegionSpec::new(
+            core::ptr::addr_of!(_ssram),
+            core::ptr::addr_of!(_esram) as usize - core::ptr::addr_of!(_ssram) as usize,
+        )
+        .unwrap(),
+    );
+    let mmio_region = earlgrey::epmp::MMIORegion(
+        rv32i::pmp::NAPOTRegionSpec::new(
+            0x40000000 as *const u8, // start
+            0x10000000,              // size
+        )
+        .unwrap(),
+    );
+    let kernel_text_region = earlgrey::epmp::KernelTextRegion(
+        rv32i::pmp::TORRegionSpec::new(
+            core::ptr::addr_of!(_stext),
+            core::ptr::addr_of!(_etext),
+        )
+        .unwrap(),
+    );
+
+    #[cfg(feature = "sival")]
+    let earlgrey_epmp = earlgrey::epmp::EarlGreyEPMP::new(flash_region, ram_region, mmio_region, kernel_text_region).unwrap();
+    #[cfg(not(feature = "sival"))]
+    let earlgrey_epmp = {
+        let debug_region = earlgrey::epmp::RVDMRegion(
             rv32i::pmp::NAPOTRegionSpec::new(
-                core::ptr::addr_of!(_sflash),
-                core::ptr::addr_of!(_eflash) as usize - core::ptr::addr_of!(_sflash) as usize,
+                0x00010000 as *const u8, // start
+                0x0001000,               // end
             )
-            .unwrap(),
-        ),
-        earlgrey::epmp::RAMRegion(
-            rv32i::pmp::NAPOTRegionSpec::new(
-                core::ptr::addr_of!(_ssram),
-                core::ptr::addr_of!(_esram) as usize - core::ptr::addr_of!(_ssram) as usize,
-            )
-            .unwrap(),
-        ),
-        earlgrey::epmp::MMIORegion(
-            rv32i::pmp::NAPOTRegionSpec::new(
-                0x40000000 as *const u8, // start
-                0x10000000,              // size
-            )
-            .unwrap(),
-        ),
-        earlgrey::epmp::KernelTextRegion(
-            rv32i::pmp::TORRegionSpec::new(
-                core::ptr::addr_of!(_stext),
-                core::ptr::addr_of!(_etext),
-            )
-            .unwrap(),
-        ),
-    )
-    .unwrap();
+            .unwrap(),  
+        );
+        earlgrey::epmp::EarlGreyEPMP::new_debug(flash_region, ram_region, mmio_region, kernel_text_region, debug_region).unwrap()
+    };
 
     // Configure board layout in pinmux
-    BoardPinmuxLayout::setup();
+   BoardPinmuxLayout::setup();
 
     // initialize capabilities
     let process_mgmt_cap = create_capability!(capabilities::ProcessManagementCapability);
