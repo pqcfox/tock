@@ -44,7 +44,7 @@ test_resetmanager = ["capsules-extra/test_resetmanager_opentitan"]
 #      OpenTitan SoC design simulated in Verilator.
 fpga = []
 silicon = ["sival"]
-sival = []
+sival = ["earlgrey/sival"]
 sim_verilator = []
 
 # This is used to indicate that we should include tests that only pass on

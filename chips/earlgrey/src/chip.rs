@@ -5,8 +5,10 @@
 //! High-level setup and interrupt mapping for the chip.
 use core::fmt::{Display, Write};
 use core::marker::PhantomData;
+use core::num::NonZeroU32;
 use core::ptr::addr_of;
 use kernel::platform::chip::{Chip, InterruptService};
+use kernel::utilities::helpers::create_non_zero_u32;
 use kernel::utilities::registers::interfaces::{ReadWriteable, Readable, Writeable};
 use rv32i::csr::{mcause, mie::mie, mtvec::mtvec, CSR};
 use rv32i::pmp::{PMPUserMPU, TORUserPMP};
@@ -109,22 +111,22 @@ impl<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig>
         kernel::deferred_call::DeferredCallClient::register(&self.aes);
         kernel::deferred_call::DeferredCallClient::register(&self.uart0);
         // OTP is locked by ePMP during SiVal.
-        /*
-        // Recommended value by documentation
-        const INTEGRITY_CHECK_PERIOD: u32 = 0x3_FFFF;
-        // Recommended value by documentation
-        const CONSISTENCY_CHECK_PERIOD: u32 = 0x3_FFFF;
-        // Recommended value by documentation is at least 100_000.
-        const CHECK_TIMEOUT: NonZeroU32 = create_non_zero_u32(100_000);
+       if cfg!(not(feature = "sival")) {
+            // Recommended value by documentation
+            const INTEGRITY_CHECK_PERIOD: u32 = 0x3_FFFF;
+            // Recommended value by documentation
+            const CONSISTENCY_CHECK_PERIOD: u32 = 0x3_FFFF;
+            // Recommended value by documentation is at least 100_000.
+            const CHECK_TIMEOUT: NonZeroU32 = create_non_zero_u32(100_000);
 
-        self.otp
-            .init(
-                INTEGRITY_CHECK_PERIOD,
-                CONSISTENCY_CHECK_PERIOD,
-                Some(CHECK_TIMEOUT),
-            )
-            .expect("Failed to initialize OTP");
-        */
+            self.otp
+                .init(
+                    INTEGRITY_CHECK_PERIOD,
+                    CONSISTENCY_CHECK_PERIOD,
+                    Some(CHECK_TIMEOUT),
+                )
+                .expect("Failed to initialize OTP");
+        }
     }
 
     #[inline]
