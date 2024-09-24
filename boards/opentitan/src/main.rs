@@ -22,16 +22,15 @@ use capsules_core::driver;
 use capsules_core::virtualizers::virtual_aes_ccm;
 use capsules_core::virtualizers::virtual_alarm::{MuxAlarm, VirtualMuxAlarm};
 use capsules_extra::opentitan_alerthandler::AlertHandlerCapsule;
-use earlgrey::alert_handler;
 use capsules_extra::opentitan_sysrst::SystemReset;
 use capsules_extra::reset_manager::ResetManager;
 use core::num::NonZeroU16;
 use core::ptr::{addr_of, from_ref};
+use earlgrey::alert_handler;
 use earlgrey::chip::EarlGreyDefaultPeripherals;
 use earlgrey::chip_config::EarlGreyConfig;
 use earlgrey::flash_ctrl;
 use earlgrey::pinmux_config::EarlGreyPinmuxConfig;
-use lowrisc::aon_timer;
 use lowrisc::timer::RvTimer;
 
 use kernel::capabilities;
@@ -1263,6 +1262,8 @@ unsafe fn test_aon_timer(
     peripherals: &'static EarlGreyDefaultPeripherals<ChipConfig, BoardPinmuxLayout>,
     mux_alarm: &'static MuxAlarm<'static, RvTimer>,
 ) {
+    use lowrisc::aon_timer;
+
     debug!("Start aon_timer kernel runtime tests!");
 
     // an Alarm is needed for some of the tests as alert handling works using interrupts
