@@ -43,6 +43,7 @@ test_resetmanager = ["capsules-extra/test_resetmanager_opentitan"]
 #    - sim_verilator:
 #      OpenTitan SoC design simulated in Verilator.
 fpga = []
+silicon = ["sival"]
 sival = []
 sim_verilator = []
 
