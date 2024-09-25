@@ -22,7 +22,6 @@ use capsules_core::driver;
 use capsules_core::virtualizers::virtual_aes_ccm;
 use capsules_core::virtualizers::virtual_alarm::{MuxAlarm, VirtualMuxAlarm};
 use capsules_extra::opentitan_alerthandler::AlertHandlerCapsule;
-use earlgrey::alert_handler;
 use capsules_extra::opentitan_sysrst::SystemReset;
 use capsules_extra::reset_manager::ResetManager;
 use core::num::NonZeroU16;
@@ -32,7 +31,6 @@ use earlgrey::chip_config::EarlGreyConfig;
 use earlgrey::flash_ctrl;
 use earlgrey::pinmux_config::EarlGreyPinmuxConfig;
 use earlgrey::timer::RvTimer;
-use lowrisc::aon_timer;
 
 use kernel::capabilities;
 use kernel::component::Component;
