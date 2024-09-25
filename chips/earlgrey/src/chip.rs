@@ -5,14 +5,15 @@
 //! High-level setup and interrupt mapping for the chip.
 use core::fmt::{Display, Write};
 use core::marker::PhantomData;
-use core::num::NonZeroU32;
 use core::ptr::addr_of;
 use kernel::platform::chip::{Chip, InterruptService};
-use kernel::utilities::helpers::create_non_zero_u32;
 use kernel::utilities::registers::interfaces::{ReadWriteable, Readable, Writeable};
 use rv32i::csr::{mcause, mie::mie, mtvec::mtvec, CSR};
 use rv32i::pmp::{PMPUserMPU, TORUserPMP};
 use rv32i::syscall::SysCall;
+
+#[cfg(not(feature = "sival"))]
+use {core::num::NonZeroU32, kernel::utilities::helpers::create_non_zero_u32};
 
 use crate::alert_handler::{AlertClass, LocalAlertFlags};
 use crate::alert_handler::{AlertFlags, AlertHandler};
