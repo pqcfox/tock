@@ -7,6 +7,7 @@ name = "earlgrey"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
+license = "Apache-2.0 OR MIT"
 
 [dependencies]
 lowrisc = { path = "../lowrisc" }
