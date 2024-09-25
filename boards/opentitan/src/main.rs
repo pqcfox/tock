@@ -61,6 +61,45 @@ pub mod pinmux_layout;
 #[cfg(test)]
 mod tests;
 
+/// The `earlgrey` chip crate supports multiple targets with slightly different
+/// configurations, which are encoded through implementations of the
+/// `earlgrey::chip_config::EarlGreyConfig` trait. This type provides different
+/// implementations of the `EarlGreyConfig` trait, depending on Cargo's
+/// conditional compilation feature flags. If no feature is selected,
+/// compilation will error.
+enum ChipConfig {}
+
+#[cfg(feature = "fpga")]
+impl EarlGreyConfig for ChipConfig {
+    const NAME: &'static str = "fpga";
+
+    // Clock frequencies as of https://github.com/lowRISC/opentitan/pull/19479
+    const CPU_FREQ: u32 = 24_000_000;
+    const PERIPHERAL_FREQ: u32 = 6_000_000;
+    const AON_TIMER_FREQ: u32 = 250_000;
+    const UART_BAUDRATE: u32 = 115200;
+}
+
+#[cfg(feature = "silicon")]
+impl EarlGreyConfig for ChipConfig {
+    const NAME: &'static str = "silicon";
+    const CPU_FREQ: u32 = 100_000_000;
+    const PERIPHERAL_FREQ: u32 = 24_000_000;
+    const AON_TIMER_FREQ: u32 = 200_000;
+    const UART_BAUDRATE: u32 = 115200;
+}
+
+#[cfg(feature = "sim_verilator")]
+impl EarlGreyConfig for ChipConfig {
+    const NAME: &'static str = "sim_verilator";
+
+    // Clock frequencies as of https://github.com/lowRISC/opentitan/pull/19368
+    const CPU_FREQ: u32 = 500_000;
+    const PERIPHERAL_FREQ: u32 = 125_000;
+    const AON_TIMER_FREQ: u32 = 125_000;
+    const UART_BAUDRATE: u32 = 7200;
+}
+
 // Whether to check for a proper ePMP handover configuration prior to ePMP
 // initialization:
 pub const EPMP_HANDOVER_CONFIG_CHECK: bool = false;
@@ -77,6 +116,17 @@ pub const EPMP_HANDOVER_CONFIG_CHECK: bool = false;
 pub type EPMPDebugConfig = earlgrey::epmp::EPMPDebugDisable;
 #[cfg(not(feature = "sival"))]
 pub type EPMPDebugConfig = earlgrey::epmp::EPMPDebugEnable;
+
+// EarlGrey Chip type signature, including generic PMP argument and peripherals
+// type:
+type EarlGreyChip = earlgrey::chip::EarlGrey<
+    'static,
+    { <EPMPDebugConfig as earlgrey::epmp::EPMPDebugConfig>::TOR_USER_REGIONS },
+    EarlGreyDefaultPeripherals<'static, ChipConfig, BoardPinmuxLayout>,
+    ChipConfig,
+    BoardPinmuxLayout,
+    earlgrey::epmp::EarlGreyEPMP<{ EPMP_HANDOVER_CONFIG_CHECK }, EPMPDebugConfig>,
+>;
 
 const NUM_PROCS: usize = 4;
 
@@ -142,46 +192,6 @@ const FAULT_RESPONSE: capsules_system::process_policies::PanicFaultPolicy =
 #[no_mangle]
 #[link_section = ".stack_buffer"]
 pub static mut STACK_MEMORY: [u8; 0x1400] = [0; 0x1400];
-
-enum ChipConfig {}
-
-#[cfg(feature = "fpga")]
-impl EarlGreyConfig for ChipConfig {
-    const NAME: &'static str = "fpga";
-    const CPU_FREQ: u32 = 24_000_000;
-    const PERIPHERAL_FREQ: u32 = 6_000_000;
-    const AON_TIMER_FREQ: u32 = 250_000;
-    const UART_BAUDRATE: u32 = 115200;
-}
-
-#[cfg(feature = "silicon")]
-impl EarlGreyConfig for ChipConfig {
-    const NAME: &'static str = "silicon";
-    const CPU_FREQ: u32 = 100_000_000;
-    const PERIPHERAL_FREQ: u32 = 24_000_000;
-    const AON_TIMER_FREQ: u32 = 200_000;
-    const UART_BAUDRATE: u32 = 115200;
-}
-
-#[cfg(feature = "sim_verilator")]
-impl EarlGreyConfig for ChipConfig {
-    const NAME: &'static str = "sim_verilator";
-
-    // Clock frequencies as of https://github.com/lowRISC/opentitan/pull/19368
-    const CPU_FREQ: u32 = 500_000;
-    const PERIPHERAL_FREQ: u32 = 125_000;
-    const AON_TIMER_FREQ: u32 = 125_000;
-    const UART_BAUDRATE: u32 = 7200;
-}
-
-type EarlGreyChip = earlgrey::chip::EarlGrey<
-    'static,
-    { <EPMPDebugConfig as earlgrey::epmp::EPMPDebugConfig>::TOR_USER_REGIONS },
-    EarlGreyDefaultPeripherals<'static, ChipConfig, BoardPinmuxLayout>,
-    ChipConfig,
-    BoardPinmuxLayout,
-    earlgrey::epmp::EarlGreyEPMP<{ EPMP_HANDOVER_CONFIG_CHECK }, EPMPDebugConfig>,
->;
 
 /// A structure representing this platform that holds references to all
 /// capsules for this platform. We've included an alarm and console.
@@ -505,7 +515,7 @@ unsafe fn setup() -> (
     };
 
     // Configure board layout in pinmux
-   BoardPinmuxLayout::setup();
+    BoardPinmuxLayout::setup();
 
     // initialize capabilities
     let process_mgmt_cap = create_capability!(capabilities::ProcessManagementCapability);
