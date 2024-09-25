@@ -497,9 +497,9 @@ unsafe fn setup() -> (
         let debug_region = earlgrey::epmp::RVDMRegion(
             rv32i::pmp::NAPOTRegionSpec::new(
                 0x00010000 as *const u8, // start
-                0x0001000,               // end
+                0x00001000,              // size
             )
-            .unwrap(),  
+            .unwrap(),
         );
         earlgrey::epmp::EarlGreyEPMP::new_debug(flash_region, ram_region, mmio_region, kernel_text_region, debug_region).unwrap()
     };
