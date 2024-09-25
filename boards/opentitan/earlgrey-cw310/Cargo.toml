@@ -8,6 +8,7 @@ version.workspace = true
 authors.workspace = true
 build = "../../build.rs"
 edition.workspace = true
+license = "Apache-2.0 OR MIT"
 
 [dependencies]
 components = { path = "../../components" }
