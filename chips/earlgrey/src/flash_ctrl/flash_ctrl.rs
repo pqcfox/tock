@@ -199,8 +199,7 @@ impl FlashCtrl<'_> {
     ///
     /// + `memory_protection_configuration`: the flash memory protection configuration to be used
     fn init(&self, memory_protection_configuration: MemoryProtectionConfiguration) {
-        #[cfg(feature = "sival")]
-        {
+        if cfg!(feature = "sival") {
             // When using ROM_EXT, the operation done bit is set when Tock boots. Clear it.
             self.clear_operation_done_interrupt();
             // Operation done status is also set. Clear it.

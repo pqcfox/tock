@@ -24,9 +24,9 @@ use capsules_core::virtualizers::virtual_alarm::{MuxAlarm, VirtualMuxAlarm};
 use capsules_extra::opentitan_alerthandler::AlertHandlerCapsule;
 use capsules_extra::opentitan_sysrst::SystemReset;
 use capsules_extra::reset_manager::ResetManager;
-use core::borrow::Borrow;
 use core::num::NonZeroU16;
-use core::ptr::{addr_of, addr_of_mut, from_ref};
+use core::ptr::{addr_of, from_ref};
+#[cfg(feature = "test_alerthandler")]
 use earlgrey::alert_handler;
 use earlgrey::chip::EarlGreyDefaultPeripherals;
 use earlgrey::chip_config::EarlGreyConfig;
@@ -493,15 +493,18 @@ unsafe fn setup() -> (
         .unwrap(),
     );
     let kernel_text_region = earlgrey::epmp::KernelTextRegion(
-        rv32i::pmp::TORRegionSpec::new(
-            core::ptr::addr_of!(_stext),
-            core::ptr::addr_of!(_etext),
-        )
-        .unwrap(),
+        rv32i::pmp::TORRegionSpec::new(core::ptr::addr_of!(_stext), core::ptr::addr_of!(_etext))
+            .unwrap(),
     );
 
     #[cfg(feature = "sival")]
-    let earlgrey_epmp = earlgrey::epmp::EarlGreyEPMP::new(flash_region, ram_region, mmio_region, kernel_text_region).unwrap();
+    let earlgrey_epmp = earlgrey::epmp::EarlGreyEPMP::new(
+        flash_region,
+        ram_region,
+        mmio_region,
+        kernel_text_region,
+    )
+    .unwrap();
     #[cfg(not(feature = "sival"))]
     let earlgrey_epmp = {
         let debug_region = earlgrey::epmp::RVDMRegion(
@@ -511,7 +514,14 @@ unsafe fn setup() -> (
             )
             .unwrap(),
         );
-        earlgrey::epmp::EarlGreyEPMP::new_debug(flash_region, ram_region, mmio_region, kernel_text_region, debug_region).unwrap()
+        earlgrey::epmp::EarlGreyEPMP::new_debug(
+            flash_region,
+            ram_region,
+            mmio_region,
+            kernel_text_region,
+            debug_region,
+        )
+        .unwrap()
     };
 
     // Configure board layout in pinmux
