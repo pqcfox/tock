@@ -37,15 +37,21 @@ test_resetmanager = ["capsules-extra/test_resetmanager_opentitan"]
 #
 # OpenTitan CPU and possibly other components must be configured appropriately
 # for a specific target:
-#    - fpga_cw310:
+#    - fpga:
 #      OpenTitan SoC design running on CW310 FPGA.
+#
+#    - silicon:
+#      OpenTitan SoC design running on PRODA silicon.
 #
 #    - sim_verilator:
 #      OpenTitan SoC design simulated in Verilator.
 fpga = []
 silicon = ["sival"]
-sival = ["earlgrey/sival"]
 sim_verilator = []
+
+# This is used to indicate that we intend to use this kernel with a silicon
+# validation execution environment.
+sival = ["earlgrey/sival"]
 
 # This is used to indicate that we should include tests that only pass on
 # hardware.

@@ -111,7 +111,7 @@ impl<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig>
         kernel::deferred_call::DeferredCallClient::register(&self.aes);
         kernel::deferred_call::DeferredCallClient::register(&self.uart0);
         // OTP is locked by ePMP during SiVal.
-       if cfg!(not(feature = "sival")) {
+        if cfg!(not(feature = "sival")) {
             // Recommended value by documentation
             const INTEGRITY_CHECK_PERIOD: u32 = 0x3_FFFF;
             // Recommended value by documentation

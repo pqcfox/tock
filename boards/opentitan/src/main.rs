@@ -147,7 +147,7 @@ enum ChipConfig {}
 
 #[cfg(feature = "fpga")]
 impl EarlGreyConfig for ChipConfig {
-    const NAME: &'static str = "fpga_cw310";
+    const NAME: &'static str = "fpga";
     const CPU_FREQ: u32 = 24_000_000;
     const PERIPHERAL_FREQ: u32 = 6_000_000;
     const AON_TIMER_FREQ: u32 = 250_000;
@@ -161,6 +161,17 @@ impl EarlGreyConfig for ChipConfig {
     const PERIPHERAL_FREQ: u32 = 24_000_000;
     const AON_TIMER_FREQ: u32 = 200_000;
     const UART_BAUDRATE: u32 = 115200;
+}
+
+#[cfg(feature = "sim_verilator")]
+impl EarlGreyConfig for ChipConfig {
+    const NAME: &'static str = "sim_verilator";
+
+    // Clock frequencies as of https://github.com/lowRISC/opentitan/pull/19368
+    const CPU_FREQ: u32 = 500_000;
+    const PERIPHERAL_FREQ: u32 = 125_000;
+    const AON_TIMER_FREQ: u32 = 125_000;
+    const UART_BAUDRATE: u32 = 7200;
 }
 
 type EarlGreyChip = earlgrey::chip::EarlGrey<
