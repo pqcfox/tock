@@ -13,12 +13,12 @@ MEMORY
    * tock/boards/kernel_layout.ld) -- it is not the region the chip's ROM exists
    * in.
    */
-  rom   (rx)  : ORIGIN = 0x20010000, LENGTH = 0x30000
+  rom   (rx)  : ORIGIN = 0x20010000, LENGTH = 0x40000
   /* Support up to 0x200a_0000 for apps
    * and 0x200a_0000 to 0x2010_0000 is for flash storage.
    */
-  prog  (rx)  : ORIGIN = 0x20040000, LENGTH = 0x60000
-  fs (r)      : ORIGIN = 0x200a0000, LENGTH = 0x60000
+  prog  (rx)  : ORIGIN = 0x20050000, LENGTH = 0xa0000
+  fs (r)      : ORIGIN = 0x200f0000, LENGTH = 0x10000
 
   /* Retention sram that survives reset operations */
   rram_creator(r) : ORIGIN = 0x40600000, LENGTH = 0x800
@@ -39,7 +39,7 @@ SECTIONS {
      * be made executable by a separate PMP region.
      */
     _sflash = ORIGIN(rom_ext);
-	_skernel = ORIGIN(rom);
+    _skernel = ORIGIN(rom);
     _eflash = ORIGIN(fs) + LENGTH(fs);
 
     _ssram  = ORIGIN(ram) - 0x650;
@@ -62,8 +62,9 @@ SECTIONS {
         . += 384; /* rsa_modulus */
         LONG(0x1d4); /* . += 4;   /* address_translation (HardenedFalse) */
         . += 4;   /* identifier */
-        LONG(0x6c47); /* . += 4;   /* manifest_version.minor */
-        LONG(0x71c3); /* . += 4;   /* signed_region_end */
+        SHORT(0x6c47); /* . += 4;   /* manifest_version.minor */
+        SHORT(0x71c3); /* . += 4;   /* manifest_version.major */
+        . += 4;   /* signed_region_end */
         . += 4;   /* length */
         . += 4;   /* version_major */
         . += 4;   /* version_minor */
