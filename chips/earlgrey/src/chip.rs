@@ -21,6 +21,7 @@ use crate::interrupts;
 use crate::pinmux_config::EarlGreyPinmuxConfig;
 use crate::plic::Plic;
 use crate::plic::PLIC;
+use crate::registers::top_earlgrey;
 use crate::registers::top_earlgrey::{AlertId, SYSRST_CTRL_AON_BASE_ADDR};
 use crate::rstmgr::RstMgr;
 
@@ -57,7 +58,7 @@ pub struct EarlGreyDefaultPeripherals<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyP
     pub spi_host1: lowrisc::spi_host::SpiHost<'a>,
     pub flash_ctrl: crate::flash_ctrl::FlashCtrl<'a>,
     pub rng: lowrisc::csrng::CsRng<'a>,
-    pub watchdog: lowrisc::aon_timer::AonTimer,
+    pub watchdog: lowrisc::aon_timer::AonTimer<'a>,
     pub sysreset: lowrisc::sysrst_ctrl::SysRstCtrl<'a>,
     pub timer: crate::timer::RvTimer<'static, CFG>,
     pub alert_handler: AlertHandler,
@@ -96,8 +97,8 @@ impl<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig>
             flash_ctrl: crate::flash_ctrl::FlashCtrl::new(flash_memory_protection_configuration),
             rng: lowrisc::csrng::CsRng::new(crate::csrng::CSRNG_BASE),
             watchdog: lowrisc::aon_timer::AonTimer::new(
-                crate::aon_timer::AON_TIMER_BASE,
-                CFG::CPU_FREQ,
+                top_earlgrey::AON_TIMER_AON_BASE_ADDR,
+                CFG::AON_TIMER_FREQ,
             ),
             sysreset: lowrisc::sysrst_ctrl::SysRstCtrl::new(SYSRST_CTRL_AON_BASE_ADDR),
             timer: crate::timer::RvTimer::new(),
