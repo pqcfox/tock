@@ -175,6 +175,12 @@ licensecheck:
 	$(call banner,License checker)
 	@cargo run --manifest-path=tools/license-checker/Cargo.toml --release
 
+.PHONY: ot-license-compat
+ot-license-compat:
+	@cargo install cargo-deny --version 0.16.1
+	@cargo deny --all-features --manifest-path boards/opentitan/earlgrey-cw310/Cargo.toml check
+
+
 ## Commands
 .PHONY: clean
 clean:
@@ -613,6 +619,11 @@ ci-job-qemu: ci-setup-qemu
 ci-job-rustdoc:
 	$(call banner,CI-Job: Rustdoc Documentation)
 	@NOWARNINGS=true tools/build-all-docs.sh
+
+.PHONY: ci-job-ot-license-compat
+ci-job-ot-license-compat:
+	$(call banner,CI-Job: OtLicenseCompat)
+	@NOWARNINGS=true $(MAKE) ot-license-compat
 
 ## End CI rules
 ##
