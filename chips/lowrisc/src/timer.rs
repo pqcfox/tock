@@ -98,7 +98,9 @@ impl<'a> RvTimer<'a> {
     }
 
     pub fn set_now_tick(&self, ticks: u64) {
-        self.registers.timer_v_lower0.set(ticks as u32);
+        self.registers
+            .timer_v_lower0
+            .set((ticks & 0xFFFF_FFFF) as u32);
         self.registers.timer_v_upper0.set((ticks >> 32) as u32);
     }
 
@@ -269,7 +271,7 @@ impl<'a> time::Counter<'a> for RvTimer<'a> {
 
     fn stop(&self) -> Result<(), ErrorCode> {
         // RISCV counter can't be stopped...
-        Err(ErrorCode::BUSY)
+        Err(ErrorCode::FAIL)
     }
 
     fn reset(&self) -> Result<(), ErrorCode> {
@@ -288,8 +290,7 @@ impl<'a> time::Alarm<'a> for RvTimer<'a> {
     }
 
     fn set_alarm(&self, reference: Self::Ticks, dt: Self::Ticks) {
-        self.registers.intr_enable0[0].write(INTR_ENABLE0::IE_0::SET);
-
+        self.isr_enable();
         self.mtimer.set_alarm(reference, dt)
     }
 
@@ -298,8 +299,7 @@ impl<'a> time::Alarm<'a> for RvTimer<'a> {
     }
 
     fn disarm(&self) -> Result<(), ErrorCode> {
-        self.registers.intr_enable0[0].write(INTR_ENABLE0::IE_0::CLEAR);
-
+        self.isr_disable();
         self.mtimer.disarm()
     }
 
