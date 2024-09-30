@@ -52,25 +52,25 @@ pub enum SetClkResult {
 }
 
 impl<'a> RvTimer<'a> {
-    pub fn new(register_base: usize, clock_frequency: u32) -> Self {
-        let timer_base = unsafe { &(*(register_base as *const RvTimerRegisters)) };
-
+    pub fn new(register_base: StaticRef<RvTimerRegisters>, clock_frequency: u32) -> Self {
         Self {
-            registers: unsafe { StaticRef::new(register_base as *const RvTimerRegisters) },
+            registers: register_base,
             peripherial_clock_frequency: clock_frequency,
             alarm_client: OptionalCell::empty(),
             overflow_client: OptionalCell::empty(),
             mtimer: unsafe {
                 MachineTimer::new(
-                    &*(&timer_base.compare_lower0_0
+                    &*(&register_base.compare_lower0_0
                         as *const ReadWrite<u32, COMPARE_LOWER0_0::Register>
                         as *const ReadWrite<u32>),
-                    &*(&timer_base.compare_upper0_0
+                    &*(&register_base.compare_upper0_0
                         as *const ReadWrite<u32, COMPARE_UPPER0_0::Register>
                         as *const ReadWrite<u32>),
-                    &*(&timer_base.timer_v_lower0 as *const ReadWrite<u32, TIMER_V_LOWER0::Register>
+                    &*(&register_base.timer_v_lower0
+                        as *const ReadWrite<u32, TIMER_V_LOWER0::Register>
                         as *const ReadWrite<u32>),
-                    &*(&timer_base.timer_v_upper0 as *const ReadWrite<u32, TIMER_V_UPPER0::Register>
+                    &*(&register_base.timer_v_upper0
+                        as *const ReadWrite<u32, TIMER_V_UPPER0::Register>
                         as *const ReadWrite<u32>),
                 )
             },

@@ -8,6 +8,7 @@ use core::marker::PhantomData;
 use core::ptr::addr_of;
 use kernel::platform::chip::{Chip, InterruptService};
 use kernel::utilities::registers::interfaces::{ReadWriteable, Readable, Writeable};
+use kernel::utilities::StaticRef;
 use lowrisc::timer::RvTimer;
 use rv32i::csr::{mcause, mie::mie, mtvec::mtvec, CSR};
 use rv32i::pmp::{PMPUserMPU, TORUserPMP};
@@ -98,7 +99,15 @@ impl<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig>
                 CFG::AON_TIMER_FREQ,
             ),
             sysreset: lowrisc::sysrst_ctrl::SysRstCtrl::new(SYSRST_CTRL_AON_BASE_ADDR),
-            timer: RvTimer::new(RV_TIMER_BASE_ADDR, CFG::PERIPHERAL_FREQ),
+            timer: RvTimer::new(
+                unsafe {
+                    StaticRef::new(
+                        RV_TIMER_BASE_ADDR
+                            as *const lowrisc::registers::rv_timer_regs::RvTimerRegisters,
+                    )
+                },
+                CFG::PERIPHERAL_FREQ,
+            ),
             alert_handler: AlertHandler::new(),
             pattgen: lowrisc::pattgen::PattGen::new(crate::pattgen::PATTGEN_BASE),
             rst_mgmt: RstMgr::new(),
