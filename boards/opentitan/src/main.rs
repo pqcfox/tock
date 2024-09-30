@@ -52,6 +52,8 @@ use kernel::platform::{KernelResources, SyscallDriverLookup, TbfHeaderFilterDefa
 use kernel::scheduler::priority::PrioritySched;
 use kernel::utilities::registers::interfaces::ReadWriteable;
 use kernel::{create_capability, debug, static_init};
+#[cfg(feature = "test_aon_timer")]
+use lowrisc::aon_timer;
 use lowrisc::sysrst_ctrl::SysRstCtrl;
 use rv32i::csr;
 
@@ -60,7 +62,6 @@ mod otbn;
 pub mod pinmux_layout;
 #[cfg(test)]
 mod tests;
-
 /// The `earlgrey` chip crate supports multiple targets with slightly different
 /// configurations, which are encoded through implementations of the
 /// `earlgrey::chip_config::EarlGreyConfig` trait. This type provides different

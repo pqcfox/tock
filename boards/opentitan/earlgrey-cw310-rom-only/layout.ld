@@ -9,7 +9,7 @@ MEMORY
    * and 0x2009_0000 to 0x2010_0000 is for flash storage.
    */
   prog  (rx)  : ORIGIN = 0x20040000, LENGTH = 0xb0000
-  fs (r)      : ORIGIN = 0x200f0000, LENGTH = 0x70000
+  fs (r)      : ORIGIN = 0x200f0000, LENGTH = 0x10000
 
   /* Retention sram that survives reset operations */
   rram_creator(r) : ORIGIN = 0x40600000, LENGTH = 0x800
