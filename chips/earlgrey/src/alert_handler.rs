@@ -680,7 +680,7 @@ impl AlertHandler {
     }
 
     /// function called when a local alert happened. Should return `AlertWasHandled::Yes` if the source of the alert was handled and the caller should clear the alert flag
-    pub fn handle_alert(&self, alert: LocalAlertId, _state: AlertState) -> bool {
+    pub fn handle_alert(&self, _alert: LocalAlertId, _state: AlertState) -> bool {
         #[cfg(feature = "test_alerthandler")]
         {
             //SAFETY: actually safe as the kernel is monothreaded
@@ -735,7 +735,7 @@ impl AlertHandler {
 pub mod tests {
     use core::cell::Cell;
 
-  use crate::alert_handler::{
+    use crate::alert_handler::{
         AlertClass, AlertFlags, LocalAlertFlags, ALERTFLAGS_NUMBER_OF_ALERTS,
         ALERTFLAGS_NUMBER_OF_LOCAL_ALERTS,
     };
