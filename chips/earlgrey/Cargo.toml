@@ -17,6 +17,7 @@ kernel = { path = "../../kernel" }
 [features]
 clkmgr_tests = []
 sival = []
+qemu = []
 test_alerthandler = ["lowrisc/test_alerthandler"]
 test_sram_ret = ["lowrisc/test_sram_ret"]
 test_aon_timer = ["lowrisc/test_aon_timer"]

@@ -24,7 +24,7 @@ capsules-system = { path = "../../../capsules/system" }
 
 
 [features]
-default = ["fpga"]
+default = ["qemu"]
 test_sram_ret = ["earlgrey/test_sram_ret"]
 test_sysrst_ctrl = ["lowrisc/test_sysrst_ctrl"]
 test_aon_timer = ["lowrisc/test_aon_timer"]
@@ -47,6 +47,7 @@ test_resetmanager = ["capsules-extra/test_resetmanager_opentitan"]
 #    - sim_verilator:
 #      OpenTitan SoC design simulated in Verilator.
 fpga = []
+qemu = ["earlgrey/qemu"]
 silicon = ["sival"]
 sim_verilator = []
 
