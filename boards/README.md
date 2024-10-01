@@ -103,9 +103,10 @@ but the approximate definitions:
 
 An FPGA and Verilator implementation that is well supported and is regularly tested as part of CI.
 
-| Board                                                             | Architecture     | MCU            | Interface  | App deployment              | QEMU Support? |
-|-------------------------------------------------------------------|------------------|----------------|------------|-----------------------------|---------------|
-| [OpenTitan Earlgrey on CW310](opentitan/earlgrey-cw310/README.md) | RISC-V RV32IMC   | EarlGrey       | custom     | custom                      | Yes (5.1)     |
+| Board                                                                                | Architecture     | MCU            | Interface  | App deployment              | QEMU Support? |
+|--------------------------------------------------------------------------------------|------------------|----------------|------------|-----------------------------|---------------|
+| [OpenTitan Earlgrey on CW310](opentitan/earlgrey-cw310/README.md)                    | RISC-V RV32IMC   | EarlGrey       | custom     | custom                      | Yes (5.1)     |
+| [OpenTitan Earlgrey on CW310, ROM only](opentitan/earlgrey-cw310-rom-only/README.md) | RISC-V RV32IMC   | EarlGrey       | custom     | custom                      | Yes (5.1)     |
 
 Virtual hardware platforms that are regularly tested as part of the CI.
 

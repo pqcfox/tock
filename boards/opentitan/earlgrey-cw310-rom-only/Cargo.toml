@@ -3,12 +3,11 @@
 # Copyright Tock Contributors 2022.
 
 [package]
-name = "earlgrey-cw310"
+name = "earlgrey-cw310-rom-only"
 version.workspace = true
 authors.workspace = true
 build = "../../build.rs"
 edition.workspace = true
-license = "Apache-2.0 OR MIT"
 
 [dependencies]
 components = { path = "../../components" }
@@ -25,7 +24,7 @@ capsules-system = { path = "../../../capsules/system" }
 
 
 [features]
-default = ["fpga", "sival"]
+default = ["fpga"]
 test_sram_ret = ["earlgrey/test_sram_ret"]
 test_sysrst_ctrl = ["lowrisc/test_sysrst_ctrl"]
 test_aon_timer = ["lowrisc/test_aon_timer"]

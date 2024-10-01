@@ -122,7 +122,13 @@ test-verilator: ot-check
 	$(Q)cp ../../kernel_layout.ld $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/
 	$(Q)RUSTFLAGS="$(RUSTC_FLAGS_TOCK)" VERILATOR="yes" OBJCOPY=$(RISC_PREFIX)-objcopy TOCK_ROOT_DIRECTORY=${TOCK_ROOT_DIRECTORY} TARGET=${TARGET} $(CARGO) test $(CARGO_FLAGS_TOCK) $(NO_RUN) --bin $(PLATFORM) --release --features=hardware_tests,sim_verilator
 
-
+rom-only:
+	mkdir -p $(TARGET_PATH)/release/deps/
+	$(Q)cp rom_layout.ld $(TARGET_PATH)/release/deps/layout.ld
+	$(Q)cp ../../kernel_layout.ld $(TARGET_PATH)
+	$(Q)RUSTFLAGS="$(RUSTC_FLAGS_TOCK)" $(CARGO) rustc $(CARGO_FLAGS_TOCK) --bin $(PLATFORM) --release --no-default-features --features=fpga -- $(RUSTC_FLAGS_FOR_BIN)
+	$(Q)cp $(TARGET_PATH)/release/$(PLATFORM) $(TARGET_PATH)/release/$(PLATFORM).elf
+	$(Q)$(OBJCOPY) --output-target=binary $(OBJCOPY_FLAGS) $(TARGET_PATH)/release/$(PLATFORM) $(TARGET_PATH)/release/$(PLATFORM).bin
 
 remote_flash:  $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/$(PLATFORM).bin
 	scp $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/$(PLATFORM).bin vladr@$(REMOTE_SERV):~/exepack/$(PLATFORM).bin
