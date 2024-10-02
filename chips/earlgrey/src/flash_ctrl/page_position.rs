@@ -9,9 +9,7 @@ use super::bank::{Bank, BANK0_STARTING_FLASH_ADDRESS, BANK1_STARTING_FLASH_ADDRE
 use super::flash_address::FlashAddress;
 use super::info_partition_type::InfoPartitionType;
 use super::page::EARLGREY_PAGE_SIZE;
-use super::page_index::{
-    DataPageIndex, Info0PageIndex, Info1PageIndex, Info2PageIndex, MAX_DATA_PAGE_INDEX,
-};
+use super::page_index::{DataPageIndex, Info0PageIndex, Info1PageIndex, Info2PageIndex};
 
 /// Implement a generic page position
 macro_rules! implement_page_position {
@@ -166,16 +164,16 @@ impl InfoPagePosition {
     }
 }
 
+#[cfg(feature = "test_flash_ctrl")]
 pub(super) mod tests {
-    use super::super::page_index::DataPageIndex;
-    use super::super::tests::{print_test_footer, print_test_header};
-    use super::DataPagePosition;
-    use super::MAX_DATA_PAGE_INDEX;
+    use super::super::page_index::{DataPageIndex, MAX_DATA_PAGE_INDEX};
     use super::{
         Info0PageIndex, Info0PagePosition, Info1PageIndex, Info1PagePosition, Info2PageIndex,
         Info2PagePosition, BANK0_STARTING_FLASH_ADDRESS, BANK1_STARTING_FLASH_ADDRESS,
         EARLGREY_PAGE_SIZE,
     };
+    use crate::flash_ctrl::tests::{print_test_footer, print_test_header};
+    use crate::flash_ctrl::DataPagePosition;
 
     macro_rules! check_to_flash_ptr {
         ($page_position:expr, $expected_flash_address:expr) => {{

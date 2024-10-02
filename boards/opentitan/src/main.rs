@@ -28,7 +28,6 @@ use capsules_extra::opentitan_alerthandler::AlertHandlerCapsule;
 #[cfg(not(feature = "qemu"))]
 use capsules_extra::opentitan_sysrst::SystemReset;
 use capsules_extra::reset_manager::ResetManager;
-use core::num::NonZeroU16;
 use core::ptr::{addr_of, from_ref};
 #[cfg(feature = "test_alerthandler")]
 use earlgrey::alert_handler;
@@ -42,7 +41,6 @@ use kernel::capabilities;
 use kernel::component::Component;
 use kernel::hil;
 use kernel::hil::entropy::Entropy32;
-use kernel::hil::flash::Flash as FlashHIL;
 use kernel::hil::hasher::Hasher;
 use kernel::hil::i2c::I2CMaster;
 use kernel::hil::led::LedHigh;
@@ -388,9 +386,6 @@ extern "C" {
     static _manifest: u8;
 }
 
-// Set this variable to true if tests are needed to be run
-const FLASH_TESTS_ENABLED: bool = false;
-
 fn get_flash_default_memory_protection_region() -> flash_ctrl::DefaultMemoryProtectionRegion {
     flash_ctrl::DefaultMemoryProtectionRegion::new()
 }
@@ -398,7 +393,8 @@ fn get_flash_default_memory_protection_region() -> flash_ctrl::DefaultMemoryProt
 fn get_flash_memory_protection_configuration() -> flash_ctrl::MemoryProtectionConfiguration {
     let flash_default_memory_protection_region = get_flash_default_memory_protection_region();
 
-    if FLASH_TESTS_ENABLED {
+    #[cfg(feature = "test_flash_ctrl")]
+    {
         let page_index_range =
             earlgrey::flash_ctrl::tests::convert_flash_slice_to_page_position_range(unsafe {
                 core::slice::from_raw_parts(
@@ -414,10 +410,11 @@ fn get_flash_memory_protection_configuration() -> flash_ctrl::MemoryProtectionCo
         let memory_protection_page0_base =
             DataMemoryProtectionRegionBase::new(*page_index_range.end());
 
-        const RAW_MEMORY_PROTECTION_PAGE0_SIZE: NonZeroU16 = match NonZeroU16::new(1) {
-            Some(non_zero_u16) => non_zero_u16,
-            None => unreachable!(),
-        };
+        const RAW_MEMORY_PROTECTION_PAGE0_SIZE: core::num::NonZeroU16 =
+            match core::num::NonZeroU16::new(1) {
+                Some(non_zero_u16) => non_zero_u16,
+                None => unreachable!(),
+            };
 
         const MEMORY_PROTECTION_PAGE0_SIZE: DataMemoryProtectionRegionSize =
             match DataMemoryProtectionRegionSize::new(RAW_MEMORY_PROTECTION_PAGE0_SIZE) {
@@ -444,7 +441,9 @@ fn get_flash_memory_protection_configuration() -> flash_ctrl::MemoryProtectionCo
             .enable_read()
             .enable_high_endurance()
             .finalize_region()
-    } else {
+    }
+    #[cfg(not(feature = "test_flash_ctrl"))]
+    {
         // SAFETY: &_stext represents a valid flash address in the host address space.
         let starting_address =
             flash_ctrl::FlashAddress::new_from_host_address(unsafe { from_ref(&_stext) }).unwrap();
@@ -862,8 +861,6 @@ unsafe fn setup() -> (
         capsules_extra::sip_hash::SipHasher24,
         2048
     ));
-    hil::flash::HasClient::set_client(&peripherals.flash_ctrl, mux_flash);
-    hil::flash::HasInfoClient::set_info_client(&peripherals.flash_ctrl, mux_info_flash);
     sip_hash.set_client(tickv);
     TICKV = Some(tickv);
     let kv_store = components::kv::TicKVKVStoreComponent::new(tickv).finalize(
@@ -1154,6 +1151,14 @@ unsafe fn setup() -> (
         }
     );
 
+    // If the feature is selected, run flash tests before setting the flash clients to the
+    // multiplexers.
+    #[cfg(feature = "test_flash_ctrl")]
+    test_flash(&peripherals.flash_ctrl, &peripherals.uart0);
+
+    hil::flash::HasClient::set_client(&peripherals.flash_ctrl, mux_flash);
+    hil::flash::HasInfoClient::set_info_client(&peripherals.flash_ctrl, mux_info_flash);
+
     // OTP tests (currently broken on sival)
     #[cfg(all(not(feature = "sival"), feature = "test_otp"))]
     {
@@ -1248,10 +1253,12 @@ fn test_sysrst_ctrl(peripherals: &EarlGreyDefaultPeripherals<ChipConfig, BoardPi
     );
 }
 
+#[cfg(feature = "test_flash_ctrl")]
 fn test_flash(
     flash_ctrl: &'static earlgrey::flash_ctrl::FlashCtrl,
     uart: &'static earlgrey::uart::Uart<'static>,
 ) {
+    use kernel::hil::flash::Flash as FlashHIL;
     let flash_page = unsafe {
         static_init!(
             <earlgrey::flash_ctrl::FlashCtrl as FlashHIL>::Page,
@@ -1353,11 +1360,7 @@ pub unsafe fn main() {
 
     #[cfg(not(test))]
     {
-        let (board_kernel, earlgrey, chip, peripherals) = setup();
-
-        if FLASH_TESTS_ENABLED {
-            test_flash(&peripherals.flash_ctrl, &peripherals.uart0);
-        }
+        let (board_kernel, earlgrey, chip, _peripherals) = setup();
 
         let main_loop_cap = create_capability!(capabilities::MainLoopCapability);
 

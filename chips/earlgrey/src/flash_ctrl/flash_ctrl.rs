@@ -1885,6 +1885,7 @@ impl FlashCtrl<'_> {
     }
 
     // This method is only used for tests
+    #[cfg(feature = "test_flash_ctrl")]
     pub(super) fn get_registers(&self) -> &StaticRef<FlashCtrlRegisters> {
         &self.registers
     }

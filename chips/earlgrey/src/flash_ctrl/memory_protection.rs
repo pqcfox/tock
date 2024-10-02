@@ -1586,6 +1586,7 @@ impl Info2MemoryProtectionRegionBuilder {
     }
 }
 
+#[cfg(feature = "test_flash_ctrl")]
 pub(super) mod tests {
     use super::*;
     use crate::flash_ctrl::tests::{print_test_footer, print_test_header};

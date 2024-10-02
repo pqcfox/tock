@@ -306,8 +306,8 @@ where
     fn do_next_op(&self) {
         if self.inflight.is_none() {
             let mnode = self.users.iter().find(|node| match node.operation.get() {
-                InfoOp::Idle => true,
-                _ => false,
+                InfoOp::Idle => false,
+                _ => true,
             });
             mnode.map(|node| {
                 node.buffer.take().map_or_else(

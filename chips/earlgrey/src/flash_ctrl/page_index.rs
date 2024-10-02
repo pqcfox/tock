@@ -12,6 +12,7 @@ use crate::utils;
 use core::num::NonZeroU8;
 
 /// The maximum data page index within a bank
+#[allow(unused)]
 pub(super) const MAX_DATA_PAGE_INDEX: NonZeroU8 =
     // PANIC: 256 - 1 = 255 != 0
     // CAST: 256 - 1 = 255 is a valid u8 value
@@ -223,6 +224,7 @@ impl Info2PageIndex {
     }
 }
 
+#[cfg(feature = "test_flash_ctrl")]
 pub(in super::super) mod tests {
     use super::super::tests::{print_test_footer, print_test_header};
     use super::{
