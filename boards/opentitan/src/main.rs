@@ -1149,13 +1149,13 @@ unsafe fn setup() -> (
     );
 
     // OTP tests (currently broken on sival)
-    #[cfg(all(not(feature = "sival"), feature = "test_otp"))] 
+    #[cfg(all(not(feature = "sival"), feature = "test_otp"))]
     {
         lowrisc::otp::tests::run_all(&peripherals.otp);
     }
 
     // Pattern generation tests
-    #[cfg(feature = "test_pattgen")] 
+    #[cfg(feature = "test_pattgen")]
     {
         let pattgen_test = static_init!(
             lowrisc::pattgen::tests::PattGenTest,
