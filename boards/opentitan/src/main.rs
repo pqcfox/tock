@@ -1148,14 +1148,21 @@ unsafe fn setup() -> (
         }
     );
 
+    // OTP tests (currently broken on sival)
+    #[cfg(all(not(feature = "sival"), feature = "test_otp"))] 
+    {
+        lowrisc::otp::tests::run_all(&peripherals.otp);
+    }
+
     // Pattern generation tests
-    /*
-    let pattgen_test = static_init!(
-        lowrisc::pattgen::tests::PattGenTest,
-        lowrisc::pattgen::tests::PattGenTest::new(&peripherals.pattgen),
-    );
-    lowrisc::pattgen::tests::run_all(pattgen_test);
-    */
+    #[cfg(feature = "test_pattgen")] 
+    {
+        let pattgen_test = static_init!(
+            lowrisc::pattgen::tests::PattGenTest,
+            lowrisc::pattgen::tests::PattGenTest::new(&peripherals.pattgen),
+        );
+        lowrisc::pattgen::tests::run_all(pattgen_test);
+    }
 
     // when running with ROM, reset reason is cleared from HW and stored inside RetentionRAM
     #[cfg(not(feature = "qemu"))]
@@ -1282,6 +1289,7 @@ unsafe fn test_alerthandler(
     peripherals: &'static EarlGreyDefaultPeripherals<ChipConfig, BoardPinmuxLayout>,
     mux_alarm: &'static MuxAlarm<'static, RvTimer<ChipConfig>>,
 ) {
+    debug!("Starting AlertHandler test...");
     // an Alarm is needed for some of the tests as alert handling works using interrupts
     let virtual_alarm_tests = static_init!(
         VirtualMuxAlarm<'static, earlgrey::timer::RvTimer<ChipConfig>>,
@@ -1301,6 +1309,7 @@ unsafe fn test_alerthandler(
     hil::time::Alarm::set_alarm_client(virtual_alarm_tests, alert_handler_tests);
 
     alert_handler_tests.run_tests();
+    debug!("Finished AlertHandler tests. Everything is alright!");
 }
 
 #[cfg(feature = "test_aon_timer")]

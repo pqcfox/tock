@@ -31,6 +31,8 @@ test_sysrst_ctrl = ["lowrisc/test_sysrst_ctrl"]
 test_aon_timer = ["lowrisc/test_aon_timer"]
 test_alerthandler = ["earlgrey/test_alerthandler", "lowrisc/test_alerthandler"]
 test_resetmanager = ["capsules-extra/test_resetmanager_opentitan"]
+test_otp = ["lowrisc/test_otp"]
+test_pattgen = ["lowrisc/test_pattgen"]
 
 # OpenTitan SoC design can be synthesized or compiled for different targets. A
 # target can be a specific FPGA board, an ASIC technology, or a simulation tool.
