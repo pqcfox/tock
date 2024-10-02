@@ -18,10 +18,12 @@ use crate::hil::symmetric_encryption::AES128_BLOCK_SIZE;
 use crate::otbn::OtbnComponent;
 use crate::pinmux_layout::BoardPinmuxLayout;
 use capsules_aes_gcm::aes_gcm;
+#[cfg(not(feature = "qemu"))]
 use capsules_core::driver;
 use capsules_core::virtualizers::virtual_aes_ccm;
 use capsules_core::virtualizers::virtual_alarm::{MuxAlarm, VirtualMuxAlarm};
 use capsules_extra::opentitan_alerthandler::AlertHandlerCapsule;
+#[cfg(not(feature = "qemu"))]
 use capsules_extra::opentitan_sysrst::SystemReset;
 use capsules_extra::reset_manager::ResetManager;
 use core::num::NonZeroU16;
@@ -54,6 +56,7 @@ use kernel::utilities::registers::interfaces::ReadWriteable;
 use kernel::{create_capability, debug, static_init};
 #[cfg(feature = "test_aon_timer")]
 use lowrisc::aon_timer;
+#[cfg(not(feature = "qemu"))]
 use lowrisc::sysrst_ctrl::SysRstCtrl;
 use rv32i::csr;
 
@@ -69,6 +72,17 @@ mod tests;
 /// conditional compilation feature flags. If no feature is selected,
 /// compilation will error.
 enum ChipConfig {}
+
+#[cfg(feature = "qemu")]
+impl EarlGreyConfig for ChipConfig {
+    const NAME: &'static str = "qemu";
+
+    // Clock frequencies as of https://github.com/lowRISC/opentitan/pull/19479
+    const CPU_FREQ: u32 = 24_000_000;
+    const PERIPHERAL_FREQ: u32 = 6_000_000;
+    const AON_TIMER_FREQ: u32 = 250_000;
+    const UART_BAUDRATE: u32 = 115200;
+}
 
 #[cfg(feature = "fpga")]
 impl EarlGreyConfig for ChipConfig {
@@ -270,6 +284,7 @@ struct EarlGrey {
         lowrisc::usb::Usb<'static>,
         { lowrisc::usb::MAXIMUM_PACKET_SIZE.get() },
     >,
+    #[cfg(not(feature = "qemu"))]
     opentitan_sysrst: &'static SystemReset<'static, SysRstCtrl<'static>>,
     syscall_filter: &'static TbfHeaderFilterDefaultAllow,
     scheduler: &'static PrioritySched,
@@ -310,6 +325,7 @@ impl SyscallDriverLookup for EarlGrey {
                 f(Some(self.opentitan_alerthandler))
             }
             capsules_extra::reset_manager::DRIVER_NUM => f(Some(self.reset_manager)),
+            #[cfg(not(feature = "qemu"))]
             capsules_extra::opentitan_sysrst::DRIVER_NUM => f(Some(self.opentitan_sysrst)),
             kernel::ipc::DRIVER_NUM => f(Some(&self.ipc)),
             _ => f(None),
@@ -1089,19 +1105,22 @@ unsafe fn setup() -> (
     );
     peripherals.alert_handler.set_client(alert_handler_capsule);
 
-    let opentitan_sysrst = static_init!(
-        SystemReset<'static, SysRstCtrl>,
-        SystemReset::new(
-            &peripherals.sysreset,
-            board_kernel.create_grant(
-                driver::NUM::OpenTitanSysRst as usize,
-                &memory_allocation_cap
-            ),
-        )
-    );
-    peripherals.sysreset.set_client(Some(opentitan_sysrst));
-
-    peripherals.sysreset.enable_interrupts();
+    #[cfg(not(feature = "qemu"))]
+    let opentitan_sysrst = {
+        let opentitan_sysrst: &'static SystemReset<'static, SysRstCtrl> = static_init!(
+            SystemReset<'static, SysRstCtrl>,
+            SystemReset::new(
+                &peripherals.sysreset,
+                board_kernel.create_grant(
+                    driver::NUM::OpenTitanSysRst as usize,
+                    &memory_allocation_cap
+                ),
+            )
+        );
+        peripherals.sysreset.set_client(Some(opentitan_sysrst));
+        peripherals.sysreset.enable_interrupts();
+        opentitan_sysrst
+    };
 
     let ipc = kernel::ipc::IPC::new(
         board_kernel,
@@ -1129,6 +1148,7 @@ unsafe fn setup() -> (
             syscall_filter,
             scheduler,
             scheduler_timer,
+            #[cfg(not(feature = "qemu"))]
             opentitan_sysrst,
             watchdog,
             reset_manager,
@@ -1137,22 +1157,32 @@ unsafe fn setup() -> (
         }
     );
 
+    // OTP tests (currently broken on sival)
+    #[cfg(all(not(feature = "sival"), feature = "test_otp"))]
+    {
+        lowrisc::otp::tests::run_all(&peripherals.otp);
+    }
+
     // Pattern generation tests
-    /*
-    let pattgen_test = static_init!(
-        lowrisc::pattgen::tests::PattGenTest,
-        lowrisc::pattgen::tests::PattGenTest::new(&peripherals.pattgen),
-    );
-    lowrisc::pattgen::tests::run_all(pattgen_test);
-    */
+    #[cfg(feature = "test_pattgen")]
+    {
+        let pattgen_test = static_init!(
+            lowrisc::pattgen::tests::PattGenTest,
+            lowrisc::pattgen::tests::PattGenTest::new(&peripherals.pattgen),
+        );
+        lowrisc::pattgen::tests::run_all(pattgen_test);
+    }
 
     // when running with ROM, reset reason is cleared from HW and stored inside RetentionRAM
-    let reset_reason = earlgrey::rstmgr::RstMgr::get_rr_from_rram(&peripherals.sram_ret);
-    earlgrey.reset_manager.startup();
-    earlgrey.reset_manager.populate_reset_reason(reset_reason);
+    #[cfg(not(feature = "qemu"))]
+    {
+        let reset_reason = earlgrey::rstmgr::RstMgr::get_rr_from_rram(&peripherals.sram_ret);
+        earlgrey.reset_manager.startup();
+        earlgrey.reset_manager.populate_reset_reason(reset_reason);
+    }
 
     /* TESTs */
-    #[cfg(feature = "test_resetmanager")]
+    #[cfg(all(not(feature = "qemu"), feature = "test_resetmanager"))]
     capsules_extra::reset_manager::test::test_software_reset(
         &peripherals.sram_ret,
         earlgrey.reset_manager,
@@ -1160,7 +1190,7 @@ unsafe fn setup() -> (
         core::ptr::addr_of!(_eflash) as usize,
     );
 
-    #[cfg(feature = "test_sysrst_ctrl")]
+    #[cfg(all(not(feature = "qemu"), feature = "test_sysrst_ctrl"))]
     {
         test_sysrst_ctrl(peripherals);
     }
@@ -1190,12 +1220,12 @@ unsafe fn setup() -> (
         test_alerthandler(peripherals, mux_alarm);
     }
 
-    #[cfg(feature = "test_sram_ret")]
+    #[cfg(all(not(feature = "qemu"), feature = "test_sram_ret"))]
     peripherals
         .sram_ret
         .test(&peripherals.rst_mgmt, &peripherals.uart0);
 
-    #[cfg(feature = "test_aon_timer")]
+    #[cfg(all(not(feature = "qemu"), feature = "test_aon_timer"))]
     {
         peripherals.watchdog.test(
             &peripherals.uart0,
@@ -1210,7 +1240,7 @@ unsafe fn setup() -> (
     (board_kernel, earlgrey, chip, peripherals)
 }
 
-#[cfg(feature = "test_sysrst_ctrl")]
+#[cfg(all(not(feature = "qemu"), feature = "test_sysrst_ctrl"))]
 fn test_sysrst_ctrl(peripherals: &EarlGreyDefaultPeripherals<ChipConfig, BoardPinmuxLayout>) {
     pinmux_layout::prepare_wiring_sysrst_ctrl_tests();
     lowrisc::sysrst_ctrl::tests::test_all(
@@ -1268,6 +1298,7 @@ unsafe fn test_alerthandler(
     peripherals: &'static EarlGreyDefaultPeripherals<ChipConfig, BoardPinmuxLayout>,
     mux_alarm: &'static MuxAlarm<'static, RvTimer<ChipConfig>>,
 ) {
+    debug!("Starting AlertHandler test...");
     // an Alarm is needed for some of the tests as alert handling works using interrupts
     let virtual_alarm_tests = static_init!(
         VirtualMuxAlarm<'static, earlgrey::timer::RvTimer<ChipConfig>>,
@@ -1287,6 +1318,7 @@ unsafe fn test_alerthandler(
     hil::time::Alarm::set_alarm_client(virtual_alarm_tests, alert_handler_tests);
 
     alert_handler_tests.run_tests();
+    debug!("Finished AlertHandler tests. Everything is alright!");
 }
 
 #[cfg(feature = "test_aon_timer")]

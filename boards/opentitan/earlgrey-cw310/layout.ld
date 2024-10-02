@@ -1,24 +1,15 @@
-/* Copyright lowRISC contributors (OpenTitan project). */
-/* Licensed under the Apache License, Version 2.0, see LICENSE for details. */
-/* SPDX-License-Identifier: Apache-2.0 */
-
 /* Licensed under the Apache License, Version 2.0 or the MIT License. */
 /* SPDX-License-Identifier: Apache-2.0 OR MIT                         */
 /* Copyright Tock Contributors 2023.                                  */
 
 MEMORY
 {
-  rom_ext(r)  : ORIGIN = 0x20000000, LENGTH = 0x10000
-  /* rom is the region the kernel image occupies (a Tock convention required by
-   * tock/boards/kernel_layout.ld) -- it is not the region the chip's ROM exists
-   * in.
+  rom   (rx)  : ORIGIN = 0x20000000, LENGTH = 0x30000
+  /* Support up to 0x2009_0000 for apps
+   * and 0x2009_0000 to 0x2010_0000 is for flash storage.
    */
-  rom   (rx)  : ORIGIN = 0x20010000, LENGTH = 0x30000
-  /* Support up to 0x200a_0000 for apps
-   * and 0x200a_0000 to 0x2010_0000 is for flash storage.
-   */
-  prog  (rx)  : ORIGIN = 0x20040000, LENGTH = 0x60000
-  fs (r)      : ORIGIN = 0x200a0000, LENGTH = 0x60000
+  prog  (rx)  : ORIGIN = 0x20030000, LENGTH = 0x60000
+  fs (r)      : ORIGIN = 0x20090000, LENGTH = 0x70000
 
   /* Retention sram that survives reset operations */
   rram_creator(r) : ORIGIN = 0x40600000, LENGTH = 0x800
@@ -38,8 +29,7 @@ SECTIONS {
      * that we can use a single NAPOT region. The .text section will
      * be made executable by a separate PMP region.
      */
-    _sflash = ORIGIN(rom_ext);
-    _skernel = ORIGIN(rom);
+    _sflash = ORIGIN(rom);
     _eflash = ORIGIN(fs) + LENGTH(fs);
 
     _ssram  = ORIGIN(ram) - 0x650;
@@ -60,10 +50,10 @@ SECTIONS {
         . += 4;   /* usage_constraints.manuf_state_owner */
         . += 4;   /* usage_constraints.life_cycle_state */
         . += 384; /* rsa_modulus */
-        LONG(0x1d4); /* . += 4;   /* address_translation (HardenedFalse) */
+        . += 4;   /* address_translation */
         . += 4;   /* identifier */
-        LONG(0x6c47); /* . += 4; manifest_version.minor */
-        LONG(0x71c3); /* . += 4; manifest_version.major */
+        . += 4;   /* manifest_version */
+        . += 4;   /* signed_region_end */
         . += 4;   /* length */
         . += 4;   /* version_major */
         . += 4;   /* version_minor */
@@ -71,8 +61,8 @@ SECTIONS {
         . += 8;   /* timestamp */
         . += 32;  /* binding_value */
         . += 4;   /* max_key_version */
-        LONG(_stext - ORIGIN(rom)); /* . += 4;   /* code_start */
-        LONG(_etext - ORIGIN(rom)); /* . += 4;   /* code_end */
+        . += 4;   /* code_start */
+        . += 4;   /* code_end */
         LONG(_stext - ORIGIN(rom)); /* . = . + 4; entry_point */
         /* manifest extension table */
         /* see: sw/device/silicon_creator/lib/base/chip.h */
@@ -82,6 +72,4 @@ SECTIONS {
     } > rom
 }
 ASSERT (((_etext - _manifest) > 0), "Error: PMP and Flash protection setup assumes _etext follows _manifest");
-/* TODO(cfrantz): Fix the ld_library rule to allow include paths and avoid */
-/* having to specify an external path here */
 INCLUDE ../../kernel_layout.ld

@@ -23,7 +23,9 @@ use crate::pinmux_config::EarlGreyPinmuxConfig;
 use crate::plic::Plic;
 use crate::plic::PLIC;
 use crate::registers::top_earlgrey;
-use crate::registers::top_earlgrey::{AlertId, SYSRST_CTRL_AON_BASE_ADDR};
+use crate::registers::top_earlgrey::AlertId;
+#[cfg(not(feature = "qemu"))]
+use crate::registers::top_earlgrey::SYSRST_CTRL_AON_BASE_ADDR;
 use crate::rstmgr::RstMgr;
 
 pub struct EarlGrey<
@@ -44,6 +46,7 @@ pub struct EarlGrey<
 }
 
 pub struct EarlGreyDefaultPeripherals<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig> {
+    #[cfg(not(feature = "qemu"))]
     pub sram_ret: crate::sram_ret::SramCtrl,
     pub aes: crate::aes::Aes<'a>,
     pub hmac: lowrisc::hmac::Hmac<'a>,
@@ -60,6 +63,7 @@ pub struct EarlGreyDefaultPeripherals<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyP
     pub flash_ctrl: crate::flash_ctrl::FlashCtrl<'a>,
     pub rng: lowrisc::csrng::CsRng<'a>,
     pub watchdog: lowrisc::aon_timer::AonTimer<'a>,
+    #[cfg(not(feature = "qemu"))]
     pub sysreset: lowrisc::sysrst_ctrl::SysRstCtrl<'a>,
     pub timer: crate::timer::RvTimer<'static, CFG>,
     pub alert_handler: AlertHandler,
@@ -76,6 +80,7 @@ impl<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig>
         flash_memory_protection_configuration: crate::flash_ctrl::MemoryProtectionConfiguration,
     ) -> Self {
         Self {
+            #[cfg(not(feature = "qemu"))]
             sram_ret: crate::sram_ret::SramCtrl::new(),
             aes: crate::aes::Aes::new(),
             hmac: lowrisc::hmac::Hmac::new(crate::hmac::HMAC0_BASE),
@@ -101,6 +106,7 @@ impl<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig>
                 top_earlgrey::AON_TIMER_AON_BASE_ADDR,
                 CFG::AON_TIMER_FREQ,
             ),
+            #[cfg(not(feature = "qemu"))]
             sysreset: lowrisc::sysrst_ctrl::SysRstCtrl::new(SYSRST_CTRL_AON_BASE_ADDR),
             timer: crate::timer::RvTimer::new(),
             alert_handler: AlertHandler::new(),
@@ -253,6 +259,7 @@ impl<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig> InterruptService
             interrupts::SPIHOST1_ERROR..=interrupts::SPIHOST1_SPIEVENT => {
                 self.spi_host1.handle_interrupt()
             }
+            #[cfg(not(feature = "qemu"))]
             interrupts::SYSRST_CTRL_AON_SYSRST_CTRL => self.sysreset.handle_interrupt(),
             interrupts::ALERTHANDLER_CLASSA => {
                 self.handle_alert_interrupt(AlertClass::ClassA);

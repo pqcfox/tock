@@ -568,7 +568,7 @@ impl Otp {
 /// ```
 ///
 /// In case of an error, the tests will panic and print an error message.
-#[cfg(feature = "tests")]
+#[cfg(feature = "test_otp")]
 pub mod tests {
     use super::*;
 

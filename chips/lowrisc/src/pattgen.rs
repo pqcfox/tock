@@ -410,7 +410,7 @@ impl<'a> PattGenHIL<'a> for PattGen<'a> {
 ///
 /// lowrisc::pattgen::tests::run_all(pattgen_test);
 /// ```
-#[cfg(feature = "tests")]
+#[cfg(feature = "test_pattgen")]
 pub mod tests {
     use super::*;
     use core::cell::Cell;
@@ -560,8 +560,10 @@ pub mod tests {
 
     /// Channel 0 makes a LED brighten, while channel 1 makes a LED fade.
     pub fn run_all<'a>(pattgen_test: &'a PattGenTest<'a>) {
+        kernel::debug!("Starting Pattgen tests...");
         pattgen_test.pattgen.set_client(pattgen_test);
         pattgen_test.start_channel0();
         pattgen_test.start_channel1();
+        kernel::debug!("Finished Pattgen tests. Everything is alright!");
     }
 }

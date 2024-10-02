@@ -141,6 +141,7 @@ allaudit audit:
 ot-board:
 	@echo "$$(tput bold)Build opentitan/earlgrey-cw310";\
 		$(MAKE) -C "boards/opentitan/earlgrey-cw310" || exit 1;
+		$(MAKE) -C "boards/opentitan/earlgrey-cw310" fpga || exit 1;
 
 .PHONY: allboards boards
 allboards boards:

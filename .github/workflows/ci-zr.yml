@@ -72,6 +72,24 @@ jobs:
         with:
           name: build-artifacts
           path: tools/ci-artifacts
+  
+  ci-test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Update package repositories
+        run: |
+          sudo apt update
+      - name: Install dependencies
+        continue-on-error: true
+        run: |
+          sudo apt install meson
+      - uses: actions/checkout@v4
+      - name:      Run kernel driver tests in QEMU (ci-job-qemu)
+        run:  make ci-job-qemu
 
   ci-license-comatibility-check:
     strategy:
