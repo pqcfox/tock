@@ -45,22 +45,23 @@ pub struct Attestation<'a> {
     owning_process: OptionalCell<ProcessId>,
 }
 
-impl <'a> Attestation<'a> {
+impl<'a> Attestation<'a> {
     /// Create a new attestation driver
     pub fn new(
         info_flash: &'a FlashCtrl<'a>,
+        flash_buf: &'static mut RawFlashCtrlPage,
     ) -> Attestation<'a> {
         Attestation {
             info_flash,
-            flash_buf: TakeCell::empty(),
-            app_certs: [Default::default(); MAX_APPS],
+            flash_buf: TakeCell::new(flash_buf),
+            app_certs: [AppCertsEntry::default(); MAX_APPS],
             app_cert_memory_cache: [0u8; MEM_CACHE_SIZE],
             cert_off_len: OptionalCell::empty(),
             client: OptionalCell::empty(),
             owning_process: OptionalCell::empty(),
         }
     }
-    
+
     /// Read a specific page from the flash info partition.
     fn read_flash_info_page(
         &self,

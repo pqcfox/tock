@@ -1136,20 +1136,19 @@ unsafe fn setup() -> (
         &memory_allocation_cap,
     );
 
-    let attestation = if let Some(_info_flash) = info_flash
-    {
-        //let raw_flash_ctrl_page = static_init!(
-        //    earlgrey::flash_ctrl::RawFlashCtrlPage,
-        //    earlgrey::flash_ctrl::RawFlashCtrlPage::default(),
-        //);
+    let attestation = if let Some(_info_flash) = info_flash {
+        let raw_flash_ctrl_page = static_init!(
+            earlgrey::flash_ctrl::RawFlashCtrlPage,
+            earlgrey::flash_ctrl::RawFlashCtrlPage::default(),
+        );
         let earlgrey_attestation: &'static EarlgreyAttestation<'static> = static_init!(
             EarlgreyAttestation<'static>,
-            EarlgreyAttestation::new(&peripherals.flash_ctrl),
+            EarlgreyAttestation::new(&peripherals.flash_ctrl, raw_flash_ctrl_page),
         );
         //peripherals
         //    .flash_ctrl
         //    .set_secondary_info_client(earlgrey_attestation);
-        
+
         let attestation: &'static Attestation<'static, EarlgreyAttestation<'static>> = static_init!(
             Attestation<'static, EarlgreyAttestation<'static>>,
             Attestation::new(

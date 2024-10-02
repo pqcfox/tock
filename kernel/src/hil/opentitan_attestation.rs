@@ -17,7 +17,7 @@ pub trait CertificateReader<'a> {
     ///
     /// + `Ok(Some(..))` if the certificate could be read synchronously, and an upcall will
     ///   be invoked on the client when the read is complete.
-    /// + `Ok(None())` if the certificate is being read asynchronously, and no upcall will
+    /// + `Ok(None)` if the certificate is being read asynchronously, and no upcall will
     ///   occur.
     /// + `Err(..)` if an error occurred.
     fn read_certificate(
