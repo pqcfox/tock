@@ -331,6 +331,10 @@ impl SyscallDriverLookup for EarlGrey {
             capsules_extra::reset_manager::DRIVER_NUM => f(Some(self.reset_manager)),
             #[cfg(not(feature = "qemu"))]
             capsules_extra::opentitan_sysrst::DRIVER_NUM => f(Some(self.opentitan_sysrst)),
+            capsules_extra::opentitan_attestation::DRIVER_NUM => match self.attestation {
+                Some(attestation) => f(Some(attestation)),
+                None => f(None),
+            },
             kernel::ipc::DRIVER_NUM => f(Some(&self.ipc)),
             _ => f(None),
         }
@@ -1131,6 +1135,7 @@ unsafe fn setup() -> (
         kernel::ipc::DRIVER_NUM,
         &memory_allocation_cap,
     );
+
     let attestation = if let Some(_info_flash) = info_flash
     {
         //let raw_flash_ctrl_page = static_init!(

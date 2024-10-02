@@ -153,6 +153,8 @@ impl<'a, CertReader> Attestation<'a, CertReader> {
                     (ErrorCode::FAIL as usize, 1, 2)
                 }
             };
+            // Scheduling errors are ignored, since there is no
+            // reasonable way to handle them.
             let _ = kernel_data.schedule_upcall(upcall::UpcallId::CertAvailable.to_usize(), args);
         });
     }
@@ -179,8 +181,6 @@ impl<'a, CertReader: CertificateReader<'a>> Attestation<'a, CertReader> {
                     // Grant errors are ignored, since there is no reasonable way
                     // to handle them.
                     let _ = self.grant.enter(calling_process, |_, kernel_data| {
-                        // Scheduling errors are ignored, since there is no
-                        // reasonable way to handle them.
                         // Store the certificate in the allow buffer
                         let _ = kernel_data
                             .get_readwrite_processbuffer(RwAllowId::Certificate.to_usize())

@@ -103,6 +103,9 @@ impl<'a> CertificateReader<'a> for Attestation<'a> {
         calling_process: ProcessId,
         certificate: Certificate,
     ) -> Result<Option<&[u8]>, ErrorCode> {
+        if let Some(_) = self.owning_process.get() {
+            return Err(ErrorCode::BUSY);
+        }
         let (page_type, bank, page, offset, length) = match certificate {
             Certificate::Boot(boot_cert) => {
                 // The location of boot-certificates is top- and (on
