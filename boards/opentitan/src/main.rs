@@ -22,6 +22,8 @@ use capsules_aes_gcm::aes_gcm;
 use capsules_core::driver;
 use capsules_core::virtualizers::virtual_aes_ccm;
 use capsules_core::virtualizers::virtual_alarm::{MuxAlarm, VirtualMuxAlarm};
+use capsules_core::virtualizers::virtual_flash::InfoFlashUser;
+use capsules_extra::info_flash::InfoFlash;
 use capsules_extra::opentitan_alerthandler::AlertHandlerCapsule;
 #[cfg(not(feature = "qemu"))]
 use capsules_extra::opentitan_sysrst::SystemReset;
@@ -41,7 +43,6 @@ use kernel::component::Component;
 use kernel::hil;
 use kernel::hil::entropy::Entropy32;
 use kernel::hil::flash::Flash as FlashHIL;
-use kernel::hil::flash::HasInfoClient;
 use kernel::hil::hasher::Hasher;
 use kernel::hil::i2c::I2CMaster;
 use kernel::hil::led::LedHigh;
@@ -226,11 +227,9 @@ struct EarlGrey {
         VirtualMuxAlarm<'static, earlgrey::timer::RvTimer<'static, ChipConfig>>,
     >,
     hmac: &'static capsules_extra::hmac::HmacDriver<'static, lowrisc::hmac::Hmac<'static>, 32>,
-    info_flash: Option<
-        &'static capsules_extra::info_flash::InfoFlash<
-            'static,
-            earlgrey::flash_ctrl::FlashCtrl<'static>,
-        >,
+    info_flash: &'static capsules_extra::info_flash::InfoFlash<
+        'static,
+        InfoFlashUser<'static, earlgrey::flash_ctrl::FlashCtrl<'static>>,
     >,
     lldb: &'static capsules_core::low_level_debug::LowLevelDebug<
         'static,
@@ -315,10 +314,7 @@ impl SyscallDriverLookup for EarlGrey {
             capsules_core::rng::DRIVER_NUM => f(Some(self.rng)),
             capsules_extra::symmetric_encryption::aes::DRIVER_NUM => f(Some(self.aes)),
             capsules_extra::kv_driver::DRIVER_NUM => f(Some(self.kv_driver)),
-            capsules_extra::info_flash::DRIVER_NUMBER => match self.info_flash {
-                Some(info_flash) => f(Some(info_flash)),
-                None => f(None),
-            },
+            capsules_extra::info_flash::DRIVER_NUMBER => f(Some(self.info_flash)),
             capsules_extra::usb::usb_user2::DRIVER_NUM => f(Some(self.usb)),
             capsules_extra::pattgen::DRIVER_NUM => f(Some(self.pattgen)),
             capsules_extra::opentitan_alerthandler::DRIVER_NUM => {
@@ -838,6 +834,10 @@ unsafe fn setup() -> (
     let mux_flash = components::flash::FlashMuxComponent::new(&peripherals.flash_ctrl).finalize(
         components::flash_mux_component_static!(earlgrey::flash_ctrl::FlashCtrl),
     );
+    let mux_info_flash = components::flash::InfoFlashMuxComponent::new(&peripherals.flash_ctrl)
+        .finalize(components::info_flash_mux_component_static!(
+            earlgrey::flash_ctrl::FlashCtrl
+        ));
 
     // SipHash
     let sip_hash = static_init!(
@@ -863,6 +863,7 @@ unsafe fn setup() -> (
         2048
     ));
     hil::flash::HasClient::set_client(&peripherals.flash_ctrl, mux_flash);
+    hil::flash::HasInfoClient::set_info_client(&peripherals.flash_ctrl, mux_info_flash);
     sip_hash.set_client(tickv);
     TICKV = Some(tickv);
     let kv_store = components::kv::TicKVKVStoreComponent::new(tickv).finalize(
@@ -949,33 +950,29 @@ unsafe fn setup() -> (
         >
     ));
 
-    let info_flash = if !FLASH_TESTS_ENABLED {
-        use capsules_extra::info_flash::InfoFlash;
-        let raw_flash_ctrl_page = static_init!(
-            earlgrey::flash_ctrl::RawFlashCtrlPage,
-            earlgrey::flash_ctrl::RawFlashCtrlPage::default()
-        );
+    // Info flash multiplexer user endpoint
+    let virtual_info_flash = components::flash::InfoFlashUserComponent::new(mux_info_flash)
+        .finalize(components::info_flash_user_component_static!(
+            earlgrey::flash_ctrl::FlashCtrl
+        ));
 
-        let info_flash: &'static InfoFlash<earlgrey::flash_ctrl::FlashCtrl> = static_init!(
-            InfoFlash<earlgrey::flash_ctrl::FlashCtrl>,
-            InfoFlash::new(
-                &peripherals.flash_ctrl,
-                board_kernel.create_grant(
-                    capsules_extra::info_flash::DRIVER_NUMBER,
-                    &memory_allocation_cap
-                ),
-                raw_flash_ctrl_page,
+    // Raw page buffer for info flash driver
+    let raw_flash_ctrl_page = static_init!(
+        earlgrey::flash_ctrl::RawFlashCtrlPage,
+        earlgrey::flash_ctrl::RawFlashCtrlPage::default()
+    );
+    // Info flash capsule
+    let info_flash: &'static InfoFlash<InfoFlashUser<earlgrey::flash_ctrl::FlashCtrl>> = static_init!(
+        InfoFlash<InfoFlashUser<'static, earlgrey::flash_ctrl::FlashCtrl>>,
+        InfoFlash::new(
+            virtual_info_flash,
+            board_kernel.create_grant(
+                capsules_extra::info_flash::DRIVER_NUMBER,
+                &memory_allocation_cap
             ),
-        );
-
-        peripherals.flash_ctrl.set_info_client(info_flash);
-
-        Some(info_flash)
-    } else {
-        // Don't instantiate the info flash capsule when testing the flash peripheral. It may
-        // interfere with the tests.
-        None
-    };
+            raw_flash_ctrl_page,
+        ),
+    );
 
     let mux_otbn = crate::otbn::AccelMuxComponent::new(&peripherals.otbn)
         .finalize(otbn_mux_component_static!());
