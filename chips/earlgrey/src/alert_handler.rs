@@ -684,7 +684,7 @@ impl AlertHandler {
         #[cfg(feature = "test_alerthandler")]
         {
             //SAFETY: actually safe as the kernel is monothreaded
-            unsafe { tests::TEST_ALERTHANDLER.set(alert) };
+            unsafe { tests::TEST_ALERTHANDLER.set(_alert) };
         }
         //TODO: actually handle the alert
         true
@@ -752,7 +752,7 @@ pub mod tests {
 
     pub static mut TEST_ALERTHANDLER: OptionalCell<LocalAlertId> = OptionalCell::empty();
 
-    #[derive(Copy)]
+    #[derive(Clone, Copy)]
     pub enum TestStage {
         TRIGGERS,
         CHECKS,

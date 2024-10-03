@@ -14,6 +14,9 @@ use rv32i::csr::{mcause, mie::mie, mtvec::mtvec, CSR};
 use rv32i::pmp::{PMPUserMPU, TORUserPMP};
 use rv32i::syscall::SysCall;
 
+#[cfg(not(feature = "sival"))]
+use {core::num::NonZeroU32, kernel::utilities::helpers::create_non_zero_u32};
+
 use crate::alert_handler::{AlertClass, LocalAlertFlags};
 use crate::alert_handler::{AlertFlags, AlertHandler};
 use crate::chip_config::EarlGreyConfig;
@@ -22,7 +25,9 @@ use crate::pinmux_config::EarlGreyPinmuxConfig;
 use crate::plic::Plic;
 use crate::plic::PLIC;
 use crate::registers::top_earlgrey::{self, RV_TIMER_BASE_ADDR};
-use crate::registers::top_earlgrey::{AlertId, SYSRST_CTRL_AON_BASE_ADDR};
+use crate::registers::top_earlgrey::AlertId;
+#[cfg(not(feature = "qemu"))]
+use crate::registers::top_earlgrey::SYSRST_CTRL_AON_BASE_ADDR;
 use crate::rstmgr::RstMgr;
 
 pub struct EarlGrey<
@@ -43,6 +48,7 @@ pub struct EarlGrey<
 }
 
 pub struct EarlGreyDefaultPeripherals<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig> {
+    #[cfg(not(feature = "qemu"))]
     pub sram_ret: crate::sram_ret::SramCtrl,
     pub aes: crate::aes::Aes<'a>,
     pub hmac: lowrisc::hmac::Hmac<'a>,
@@ -50,6 +56,7 @@ pub struct EarlGreyDefaultPeripherals<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyP
     pub usb: lowrisc::usb::Usb<'a>,
     pub uart0: lowrisc::uart::Uart<'a>,
     pub otbn: lowrisc::otbn::Otbn<'a>,
+    #[cfg(not(feature = "sival"))]
     pub otp: lowrisc::otp::Otp,
     pub gpio_port: crate::gpio::Port<'a>,
     pub i2c0: lowrisc::i2c::I2c<'a>,
@@ -58,6 +65,7 @@ pub struct EarlGreyDefaultPeripherals<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyP
     pub flash_ctrl: crate::flash_ctrl::FlashCtrl<'a>,
     pub rng: lowrisc::csrng::CsRng<'a>,
     pub watchdog: lowrisc::aon_timer::AonTimer<'a>,
+    #[cfg(not(feature = "qemu"))]
     pub sysreset: lowrisc::sysrst_ctrl::SysRstCtrl<'a>,
     pub timer: RvTimer<'static>,
     pub alert_handler: AlertHandler,
@@ -74,6 +82,7 @@ impl<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig>
         flash_memory_protection_configuration: crate::flash_ctrl::MemoryProtectionConfiguration,
     ) -> Self {
         Self {
+            #[cfg(not(feature = "qemu"))]
             sram_ret: crate::sram_ret::SramCtrl::new(),
             aes: crate::aes::Aes::new(),
             hmac: lowrisc::hmac::Hmac::new(crate::hmac::HMAC0_BASE),
@@ -81,6 +90,7 @@ impl<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig>
             usb: lowrisc::usb::Usb::new(crate::usbdev::USB0_BASE),
             uart0: lowrisc::uart::Uart::new(crate::uart::UART0_BASE, CFG::PERIPHERAL_FREQ),
             otbn: lowrisc::otbn::Otbn::new(crate::otbn::OTBN_BASE),
+            #[cfg(not(feature = "sival"))]
             otp: lowrisc::otp::Otp::new(crate::otp::OTP_BASE),
             gpio_port: crate::gpio::Port::new::<PINMUX>(),
             i2c0: lowrisc::i2c::I2c::new(crate::i2c::I2C0_BASE, (1 / CFG::CPU_FREQ) * 1000 * 1000),
@@ -98,6 +108,7 @@ impl<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig>
                 top_earlgrey::AON_TIMER_AON_BASE_ADDR,
                 CFG::AON_TIMER_FREQ,
             ),
+            #[cfg(not(feature = "qemu"))]
             sysreset: lowrisc::sysrst_ctrl::SysRstCtrl::new(SYSRST_CTRL_AON_BASE_ADDR),
             timer: RvTimer::new(
                 unsafe {
@@ -119,23 +130,24 @@ impl<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig>
     pub fn init(&'static self) {
         kernel::deferred_call::DeferredCallClient::register(&self.aes);
         kernel::deferred_call::DeferredCallClient::register(&self.uart0);
-        /*
-        // Recommended value by documentation
-        const INTEGRITY_CHECK_PERIOD: u32 = 0x3_FFFF;
-        // Recommended value by documentation
-        const CONSISTENCY_CHECK_PERIOD: u32 = 0x3_FFFF;
-        // Recommended value by documentation is at least 100_000.
-        const CHECK_TIMEOUT: NonZeroU32 = create_non_zero_u32(100_000);
-
         // OTP is locked by ePMP during SiVal.
-        self.otp
-            .init(
-                INTEGRITY_CHECK_PERIOD,
-                CONSISTENCY_CHECK_PERIOD,
-                Some(CHECK_TIMEOUT),
-            )
-            .expect("Failed to initialize OTP");
-        */
+        #[cfg(not(feature = "sival"))]
+        {
+            // Recommended value by documentation
+            const INTEGRITY_CHECK_PERIOD: u32 = 0x3_FFFF;
+            // Recommended value by documentation
+            const CONSISTENCY_CHECK_PERIOD: u32 = 0x3_FFFF;
+            // Recommended value by documentation is at least 100_000.
+            const CHECK_TIMEOUT: NonZeroU32 = create_non_zero_u32(100_000);
+
+            self.otp
+                .init(
+                    INTEGRITY_CHECK_PERIOD,
+                    CONSISTENCY_CHECK_PERIOD,
+                    Some(CHECK_TIMEOUT),
+                )
+                .expect("Failed to initialize OTP");
+        }
     }
 
     #[inline]
@@ -257,6 +269,7 @@ impl<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig> InterruptService
             interrupts::SPIHOST1_ERROR..=interrupts::SPIHOST1_SPIEVENT => {
                 self.spi_host1.handle_interrupt()
             }
+            #[cfg(not(feature = "qemu"))]
             interrupts::SYSRST_CTRL_AON_SYSRST_CTRL => self.sysreset.handle_interrupt(),
             interrupts::ALERTHANDLER_CLASSA => {
                 self.handle_alert_interrupt(AlertClass::ClassA);

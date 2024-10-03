@@ -18,14 +18,17 @@ use crate::hil::symmetric_encryption::AES128_BLOCK_SIZE;
 use crate::otbn::OtbnComponent;
 use crate::pinmux_layout::BoardPinmuxLayout;
 use capsules_aes_gcm::aes_gcm;
+#[cfg(not(feature = "qemu"))]
 use capsules_core::driver;
 use capsules_core::virtualizers::virtual_aes_ccm;
 use capsules_core::virtualizers::virtual_alarm::{MuxAlarm, VirtualMuxAlarm};
 use capsules_extra::opentitan_alerthandler::AlertHandlerCapsule;
+#[cfg(not(feature = "qemu"))]
 use capsules_extra::opentitan_sysrst::SystemReset;
 use capsules_extra::reset_manager::ResetManager;
 use core::num::NonZeroU16;
 use core::ptr::{addr_of, from_ref};
+#[cfg(feature = "test_alerthandler")]
 use earlgrey::alert_handler;
 use earlgrey::chip::EarlGreyDefaultPeripherals;
 use earlgrey::chip_config::EarlGreyConfig;
@@ -51,6 +54,9 @@ use kernel::platform::{KernelResources, SyscallDriverLookup, TbfHeaderFilterDefa
 use kernel::scheduler::priority::PrioritySched;
 use kernel::utilities::registers::interfaces::ReadWriteable;
 use kernel::{create_capability, debug, static_init};
+#[cfg(feature = "test_aon_timer")]
+use lowrisc::aon_timer;
+#[cfg(not(feature = "qemu"))]
 use lowrisc::sysrst_ctrl::SysRstCtrl;
 use rv32i::csr;
 
@@ -59,23 +65,42 @@ mod otbn;
 pub mod pinmux_layout;
 #[cfg(test)]
 mod tests;
-
 /// The `earlgrey` chip crate supports multiple targets with slightly different
 /// configurations, which are encoded through implementations of the
 /// `earlgrey::chip_config::EarlGreyConfig` trait. This type provides different
 /// implementations of the `EarlGreyConfig` trait, depending on Cargo's
 /// conditional compilation feature flags. If no feature is selected,
 /// compilation will error.
-pub enum ChipConfig {}
+enum ChipConfig {}
 
-#[cfg(feature = "fpga_cw310")]
+#[cfg(feature = "qemu")]
 impl EarlGreyConfig for ChipConfig {
-    const NAME: &'static str = "fpga_cw310";
+    const NAME: &'static str = "qemu";
 
     // Clock frequencies as of https://github.com/lowRISC/opentitan/pull/19479
     const CPU_FREQ: u32 = 24_000_000;
     const PERIPHERAL_FREQ: u32 = 6_000_000;
     const AON_TIMER_FREQ: u32 = 250_000;
+    const UART_BAUDRATE: u32 = 115200;
+}
+
+#[cfg(feature = "fpga")]
+impl EarlGreyConfig for ChipConfig {
+    const NAME: &'static str = "fpga";
+
+    // Clock frequencies as of https://github.com/lowRISC/opentitan/pull/19479
+    const CPU_FREQ: u32 = 24_000_000;
+    const PERIPHERAL_FREQ: u32 = 6_000_000;
+    const AON_TIMER_FREQ: u32 = 250_000;
+    const UART_BAUDRATE: u32 = 115200;
+}
+
+#[cfg(feature = "silicon")]
+impl EarlGreyConfig for ChipConfig {
+    const NAME: &'static str = "silicon";
+    const CPU_FREQ: u32 = 100_000_000;
+    const PERIPHERAL_FREQ: u32 = 24_000_000;
+    const AON_TIMER_FREQ: u32 = 200_000;
     const UART_BAUDRATE: u32 = 115200;
 }
 
@@ -102,11 +127,14 @@ pub const EPMP_HANDOVER_CONFIG_CHECK: bool = false;
 // Either
 // - `earlgrey::epmp::EPMPDebugEnable`, or
 // - `earlgrey::epmp::EPMPDebugDisable`.
+#[cfg(feature = "sival")]
+pub type EPMPDebugConfig = earlgrey::epmp::EPMPDebugDisable;
+#[cfg(not(feature = "sival"))]
 pub type EPMPDebugConfig = earlgrey::epmp::EPMPDebugEnable;
 
 // EarlGrey Chip type signature, including generic PMP argument and peripherals
 // type:
-pub type EarlGreyChip = earlgrey::chip::EarlGrey<
+type EarlGreyChip = earlgrey::chip::EarlGrey<
     'static,
     { <EPMPDebugConfig as earlgrey::epmp::EPMPDebugConfig>::TOR_USER_REGIONS },
     EarlGreyDefaultPeripherals<'static, ChipConfig, BoardPinmuxLayout>,
@@ -254,6 +282,7 @@ struct EarlGrey {
         lowrisc::usb::Usb<'static>,
         { lowrisc::usb::MAXIMUM_PACKET_SIZE.get() },
     >,
+    #[cfg(not(feature = "qemu"))]
     opentitan_sysrst: &'static SystemReset<'static, SysRstCtrl<'static>>,
     syscall_filter: &'static TbfHeaderFilterDefaultAllow,
     scheduler: &'static PrioritySched,
@@ -261,6 +290,7 @@ struct EarlGrey {
     watchdog: &'static lowrisc::aon_timer::AonTimer<'static>,
     opentitan_alerthandler: &'static AlertHandlerCapsule,
     reset_manager: &'static ResetManager<'static, earlgrey::rstmgr::RstMgr>,
+    ipc: kernel::ipc::IPC<{ NUM_PROCS as u8 }>,
 }
 
 /// Mapping of integer syscalls to objects that implement syscalls.
@@ -291,7 +321,9 @@ impl SyscallDriverLookup for EarlGrey {
                 f(Some(self.opentitan_alerthandler))
             }
             capsules_extra::reset_manager::DRIVER_NUM => f(Some(self.reset_manager)),
+            #[cfg(not(feature = "qemu"))]
             capsules_extra::opentitan_sysrst::DRIVER_NUM => f(Some(self.opentitan_sysrst)),
+            kernel::ipc::DRIVER_NUM => f(Some(&self.ipc)),
             _ => f(None),
         }
     }
@@ -453,48 +485,58 @@ unsafe fn setup() -> (
     // Set up memory protection immediately after setting the trap handler, to
     // ensure that much of the board initialization routine runs with ePMP
     // protection.
-    let earlgrey_epmp = earlgrey::epmp::EarlGreyEPMP::new_debug(
-        earlgrey::epmp::FlashRegion(
-            rv32i::pmp::NAPOTRegionSpec::new(
-                core::ptr::addr_of!(_sflash),
-                core::ptr::addr_of!(_eflash) as usize - core::ptr::addr_of!(_sflash) as usize,
-            )
+    let flash_region = earlgrey::epmp::FlashRegion(
+        rv32i::pmp::NAPOTRegionSpec::new(
+            core::ptr::addr_of!(_sflash),
+            core::ptr::addr_of!(_eflash) as usize - core::ptr::addr_of!(_sflash) as usize,
+        )
+        .unwrap(),
+    );
+    let ram_region = earlgrey::epmp::RAMRegion(
+        rv32i::pmp::NAPOTRegionSpec::new(
+            core::ptr::addr_of!(_ssram),
+            core::ptr::addr_of!(_esram) as usize - core::ptr::addr_of!(_ssram) as usize,
+        )
+        .unwrap(),
+    );
+    let mmio_region = earlgrey::epmp::MMIORegion(
+        rv32i::pmp::NAPOTRegionSpec::new(
+            0x40000000 as *const u8, // start
+            0x10000000,              // size
+        )
+        .unwrap(),
+    );
+    let kernel_text_region = earlgrey::epmp::KernelTextRegion(
+        rv32i::pmp::TORRegionSpec::new(core::ptr::addr_of!(_stext), core::ptr::addr_of!(_etext))
             .unwrap(),
-        ),
-        earlgrey::epmp::RAMRegion(
-            rv32i::pmp::NAPOTRegionSpec::new(
-                core::ptr::addr_of!(_ssram),
-                core::ptr::addr_of!(_esram) as usize - core::ptr::addr_of!(_ssram) as usize,
-            )
-            .unwrap(),
-        ),
-        earlgrey::epmp::MMIORegion(
-            rv32i::pmp::NAPOTRegionSpec::new(
-                0x40000000 as *const u8, // start
-                0x10000000,              // size
-            )
-            .unwrap(),
-        ),
-        earlgrey::epmp::KernelTextRegion(
-            rv32i::pmp::TORRegionSpec::new(
-                core::ptr::addr_of!(_stext),
-                core::ptr::addr_of!(_etext),
-            )
-            .unwrap(),
-        ),
-        // RV Debug Manager memory region (required for JTAG debugging).
-        // This access can be disabled by changing the EarlGreyEPMP type
-        // parameter `EPMPDebugConfig` to `EPMPDebugDisable`, in which case
-        // this expects to be passed a unit (`()`) type.
-        earlgrey::epmp::RVDMRegion(
+    );
+
+    #[cfg(feature = "sival")]
+    let earlgrey_epmp = earlgrey::epmp::EarlGreyEPMP::new(
+        flash_region,
+        ram_region,
+        mmio_region,
+        kernel_text_region,
+    )
+    .unwrap();
+    #[cfg(not(feature = "sival"))]
+    let earlgrey_epmp = {
+        let debug_region = earlgrey::epmp::RVDMRegion(
             rv32i::pmp::NAPOTRegionSpec::new(
                 0x00010000 as *const u8, // start
                 0x00001000,              // size
             )
             .unwrap(),
-        ),
-    )
-    .unwrap();
+        );
+        earlgrey::epmp::EarlGreyEPMP::new_debug(
+            flash_region,
+            ram_region,
+            mmio_region,
+            kernel_text_region,
+            debug_region,
+        )
+        .unwrap()
+    };
 
     // Configure board layout in pinmux
     BoardPinmuxLayout::setup();
@@ -813,7 +855,6 @@ unsafe fn setup() -> (
     hil::flash::HasClient::set_client(&peripherals.flash_ctrl, mux_flash);
     sip_hash.set_client(tickv);
     TICKV = Some(tickv);
-
     let kv_store = components::kv::TicKVKVStoreComponent::new(tickv).finalize(
         components::tickv_kv_store_component_static!(
             capsules_extra::tickv::TicKVSystem<
@@ -1054,19 +1095,28 @@ unsafe fn setup() -> (
     );
     peripherals.alert_handler.set_client(alert_handler_capsule);
 
-    let opentitan_sysrst = static_init!(
-        SystemReset<'static, SysRstCtrl>,
-        SystemReset::new(
-            &peripherals.sysreset,
-            board_kernel.create_grant(
-                driver::NUM::OpenTitanSysRst as usize,
-                &memory_allocation_cap
-            ),
-        )
-    );
-    peripherals.sysreset.set_client(Some(opentitan_sysrst));
+    #[cfg(not(feature = "qemu"))]
+    let opentitan_sysrst = {
+        let opentitan_sysrst: &'static SystemReset<'static, SysRstCtrl> = static_init!(
+            SystemReset<'static, SysRstCtrl>,
+            SystemReset::new(
+                &peripherals.sysreset,
+                board_kernel.create_grant(
+                    driver::NUM::OpenTitanSysRst as usize,
+                    &memory_allocation_cap
+                ),
+            )
+        );
+        peripherals.sysreset.set_client(Some(opentitan_sysrst));
+        peripherals.sysreset.enable_interrupts();
+        opentitan_sysrst
+    };
 
-    peripherals.sysreset.enable_interrupts();
+    let ipc = kernel::ipc::IPC::new(
+        board_kernel,
+        kernel::ipc::DRIVER_NUM,
+        &memory_allocation_cap,
+    );
 
     let earlgrey = static_init!(
         EarlGrey,
@@ -1088,29 +1138,41 @@ unsafe fn setup() -> (
             syscall_filter,
             scheduler,
             scheduler_timer,
+            #[cfg(not(feature = "qemu"))]
             opentitan_sysrst,
             watchdog,
             reset_manager,
             opentitan_alerthandler: alert_handler_capsule,
+            ipc,
         }
     );
 
+    // OTP tests (currently broken on sival)
+    #[cfg(all(not(feature = "sival"), feature = "test_otp"))]
+    {
+        lowrisc::otp::tests::run_all(&peripherals.otp);
+    }
+
     // Pattern generation tests
-    /*
-    let pattgen_test = static_init!(
-        lowrisc::pattgen::tests::PattGenTest,
-        lowrisc::pattgen::tests::PattGenTest::new(&peripherals.pattgen),
-    );
-    lowrisc::pattgen::tests::run_all(pattgen_test);
-    */
+    #[cfg(feature = "test_pattgen")]
+    {
+        let pattgen_test = static_init!(
+            lowrisc::pattgen::tests::PattGenTest,
+            lowrisc::pattgen::tests::PattGenTest::new(&peripherals.pattgen),
+        );
+        lowrisc::pattgen::tests::run_all(pattgen_test);
+    }
 
     // when running with ROM, reset reason is cleared from HW and stored inside RetentionRAM
-    let reset_reason = earlgrey::rstmgr::RstMgr::get_rr_from_rram(&peripherals.sram_ret);
-    earlgrey.reset_manager.startup();
-    earlgrey.reset_manager.populate_reset_reason(reset_reason);
+    #[cfg(not(feature = "qemu"))]
+    {
+        let reset_reason = earlgrey::rstmgr::RstMgr::get_rr_from_rram(&peripherals.sram_ret);
+        earlgrey.reset_manager.startup();
+        earlgrey.reset_manager.populate_reset_reason(reset_reason);
+    }
 
     /* TESTs */
-    #[cfg(feature = "test_resetmanager")]
+    #[cfg(all(not(feature = "qemu"), feature = "test_resetmanager"))]
     capsules_extra::reset_manager::test::test_software_reset(
         &peripherals.sram_ret,
         earlgrey.reset_manager,
@@ -1118,7 +1180,7 @@ unsafe fn setup() -> (
         core::ptr::addr_of!(_eflash) as usize,
     );
 
-    #[cfg(feature = "test_sysrst_ctrl")]
+    #[cfg(all(not(feature = "qemu"), feature = "test_sysrst_ctrl"))]
     {
         test_sysrst_ctrl(peripherals);
     }
@@ -1148,12 +1210,12 @@ unsafe fn setup() -> (
         test_alerthandler(peripherals, mux_alarm);
     }
 
-    #[cfg(feature = "test_sram_ret")]
+    #[cfg(all(not(feature = "qemu"), feature = "test_sram_ret"))]
     peripherals
         .sram_ret
         .test(&peripherals.rst_mgmt, &peripherals.uart0);
 
-    #[cfg(feature = "test_aon_timer")]
+    #[cfg(all(not(feature = "qemu"), feature = "test_aon_timer"))]
     {
         peripherals.watchdog.test(
             &peripherals.uart0,
@@ -1178,7 +1240,7 @@ unsafe fn setup() -> (
     (board_kernel, earlgrey, chip, peripherals)
 }
 
-#[cfg(feature = "test_sysrst_ctrl")]
+#[cfg(all(not(feature = "qemu"), feature = "test_sysrst_ctrl"))]
 fn test_sysrst_ctrl(peripherals: &EarlGreyDefaultPeripherals<ChipConfig, BoardPinmuxLayout>) {
     pinmux_layout::prepare_wiring_sysrst_ctrl_tests();
     lowrisc::sysrst_ctrl::tests::test_all(
@@ -1236,6 +1298,7 @@ unsafe fn test_alerthandler(
     peripherals: &'static EarlGreyDefaultPeripherals<ChipConfig, BoardPinmuxLayout>,
     mux_alarm: &'static MuxAlarm<'static, RvTimer>,
 ) {
+    debug!("Starting AlertHandler test...");
     // an Alarm is needed for some of the tests as alert handling works using interrupts
     let virtual_alarm_tests = static_init!(
         VirtualMuxAlarm<'static, RvTimer>,
@@ -1255,6 +1318,7 @@ unsafe fn test_alerthandler(
     hil::time::Alarm::set_alarm_client(virtual_alarm_tests, alert_handler_tests);
 
     alert_handler_tests.run_tests();
+    debug!("Finished AlertHandler tests. Everything is alright!");
 }
 
 #[cfg(feature = "test_aon_timer")]
@@ -1325,7 +1389,7 @@ pub unsafe fn main() {
 
         let main_loop_cap = create_capability!(capabilities::MainLoopCapability);
 
-        board_kernel.kernel_loop(earlgrey, chip, None::<&kernel::ipc::IPC<0>>, &main_loop_cap);
+        board_kernel.kernel_loop(earlgrey, chip, Some(&earlgrey.ipc), &main_loop_cap);
     }
 }
 
