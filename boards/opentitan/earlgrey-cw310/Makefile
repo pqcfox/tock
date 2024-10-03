@@ -71,8 +71,18 @@ qemu-app: $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/$(PLATFORM).elf
 qemu-app-gdb : $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/$(PLATFORM).elf
 	$(QEMU) -s -S -M opentitan -kernel $^ -device loader,file=$(APP),addr=0x20030000 -nographic -serial mon:stdio -global driver=riscv.lowrisc.ibex.soc,property=resetvec,value=${QEMU_ENTRY_POINT}
 
-flash: $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/$(PLATFORM).bin
-	$(OPENTITAN_TREE)/bazel-bin/sw/host/opentitantool/opentitantool.runfiles/lowrisc_opentitan/sw/host/opentitantool/opentitantool --interface=cw310 bootstrap $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/$(PLATFORM).bin
+fpga: BOARD_CONFIGURATION ?= fpga,sival
+fpga: $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/$(PLATFORM).bin
+
+fpga-rom-only:
+	$(Q)$(MAKE) -C ../$(PLATFORM)-rom-only fpga
+
+flash:
+	$(Q)echo '`make flash` has been renamed to `make flash-rom-only`. For ROM_EXT builds, use `make fpga` and then follow the "Owner Firmware With ROM_EXT" guide.'
+
+flash-rom-only:
+flash-rom-only:
+	$(Q)$(MAKE) -C ../$(PLATFORM)-rom-only flash
 
 flash-app: $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/$(PLATFORM).elf
 	$(RISC_PREFIX)-objcopy --update-section .apps=$(APP) $^ $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/$(PLATFORM)-app.elf
@@ -124,21 +134,6 @@ test-verilator: ot-check
 	$(Q)cp test_layout.ld $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/deps/layout.ld
 	$(Q)cp ../../kernel_layout.ld $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/
 	$(Q)RUSTFLAGS="$(RUSTC_FLAGS_TOCK)" VERILATOR="yes" OBJCOPY=$(RISC_PREFIX)-objcopy TOCK_ROOT_DIRECTORY=${TOCK_ROOT_DIRECTORY} TARGET=${TARGET} $(CARGO) test $(CARGO_FLAGS_TOCK) $(NO_RUN) --bin $(PLATFORM) --release --features=hardware_tests,sim_verilator
-
-fpga:
-	mkdir -p $(TARGET_PATH)/release/deps/
-	$(Q)cp ../../kernel_layout.ld $(TARGET_PATH)
-	$(Q)RUSTFLAGS="$(RUSTC_FLAGS_TOCK)" $(CARGO) rustc $(CARGO_FLAGS_TOCK) --bin $(PLATFORM) --release --no-default-features --features=fpga -- $(RUSTC_FLAGS_FOR_BIN)
-	$(Q)cp $(TARGET_PATH)/release/$(PLATFORM) $(TARGET_PATH)/release/$(PLATFORM).elf
-	$(Q)$(OBJCOPY) --output-target=binary $(OBJCOPY_FLAGS) $(TARGET_PATH)/release/$(PLATFORM) $(TARGET_PATH)/release/$(PLATFORM).bin
-
-fpga-rom-only:
-	mkdir -p $(TARGET_PATH)/release/deps/
-	$(Q)cp rom_layout.ld $(TARGET_PATH)/release/deps/layout.ld
-	$(Q)cp ../../kernel_layout.ld $(TARGET_PATH)
-	$(Q)RUSTFLAGS="$(RUSTC_FLAGS_TOCK)" $(CARGO) rustc $(CARGO_FLAGS_TOCK) --bin $(PLATFORM) --release --no-default-features --features=fpga -- $(RUSTC_FLAGS_FOR_BIN)
-	$(Q)cp $(TARGET_PATH)/release/$(PLATFORM) $(TARGET_PATH)/release/$(PLATFORM).elf
-	$(Q)$(OBJCOPY) --output-target=binary $(OBJCOPY_FLAGS) $(TARGET_PATH)/release/$(PLATFORM) $(TARGET_PATH)/release/$(PLATFORM).bin
 
 remote_flash:  $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/$(PLATFORM).bin
 	scp $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/$(PLATFORM).bin vladr@$(REMOTE_SERV):~/exepack/$(PLATFORM).bin
