@@ -81,7 +81,6 @@ flash:
 	$(Q)echo '`make flash` has been renamed to `make flash-rom-only`. For ROM_EXT builds, use `make fpga` and then follow the "Owner Firmware With ROM_EXT" guide.'
 
 flash-rom-only:
-flash-rom-only:
 	$(Q)$(MAKE) -C ../$(PLATFORM)-rom-only flash
 
 flash-app: $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/$(PLATFORM).elf
