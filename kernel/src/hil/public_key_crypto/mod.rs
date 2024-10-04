@@ -4,6 +4,7 @@
 
 //! Provides public/private key encryption
 
+pub mod ecc;
 pub mod keys;
 pub mod rsa_math;
 pub mod signature;
