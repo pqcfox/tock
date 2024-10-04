@@ -178,14 +178,17 @@ impl FlashCtrl<'_> {
         // Lock down `kCertificateInfoPages` as it appears ROM_EXT doesn't do this!
         // kFlashCtrlInfoPageAttestationKeySeeds
         flash_ctrl.registers.bank0_info0_regwen[4].set(0);
-        // kFlashCtrlInfoPageUdsCertificate
-        flash_ctrl.registers.bank1_info0_regwen[6].set(0);
-        // kFlashCtrlInfoPageCdi0Certificate
-        flash_ctrl.registers.bank1_info0_regwen[8].set(0);
-        // kFlashCtrlInfoPageCdi1Certificate
-        flash_ctrl.registers.bank1_info0_regwen[9].set(0);
         // kFlashCtrlInfoPageTpmCerts
         flash_ctrl.registers.bank1_info0_regwen[4].set(0);
+        #[cfg(not(feature = "unlock_dice_info_pages"))]
+        {
+            // kFlashCtrlInfoPageUdsCertificate
+            flash_ctrl.registers.bank1_info0_regwen[6].set(0);
+            // kFlashCtrlInfoPageCdi0Certificate
+            flash_ctrl.registers.bank1_info0_regwen[8].set(0);
+            // kFlashCtrlInfoPageCdi1Certificate
+            flash_ctrl.registers.bank1_info0_regwen[9].set(0);
+        }
 
         flash_ctrl.init(memory_protection_configuration);
         flash_ctrl

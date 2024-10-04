@@ -42,6 +42,7 @@ use kernel::capabilities;
 use kernel::component::Component;
 use kernel::hil;
 use kernel::hil::entropy::Entropy32;
+use kernel::hil::flash::HasInfoClient;
 use kernel::hil::hasher::Hasher;
 use kernel::hil::i2c::I2CMaster;
 use kernel::hil::led::LedHigh;
@@ -291,7 +292,13 @@ struct EarlGrey {
     reset_manager: &'static ResetManager<'static, earlgrey::rstmgr::RstMgr>,
     ipc: kernel::ipc::IPC<{ NUM_PROCS as u8 }>,
     #[allow(dead_code)]
-    attestation: &'static Attestation<'static, EarlgreyAttestation<'static>>,
+    attestation: &'static Attestation<
+        'static,
+        EarlgreyAttestation<
+            'static,
+            InfoFlashUser<'static, earlgrey::flash_ctrl::FlashCtrl<'static>>,
+        >,
+    >,
 }
 
 /// Mapping of integer syscalls to objects that implement syscalls.
@@ -393,6 +400,34 @@ fn get_flash_default_memory_protection_region() -> flash_ctrl::DefaultMemoryProt
 fn get_flash_memory_protection_configuration() -> flash_ctrl::MemoryProtectionConfiguration {
     let flash_default_memory_protection_region = get_flash_default_memory_protection_region();
 
+    #[cfg(feature = "unlock_dice_info_pages")]
+    let base_memory_protection_config =
+        flash_ctrl::MemoryProtectionConfiguration::new(flash_default_memory_protection_region)
+            .enable_and_configure_info0_region(flash_ctrl::Info0MemoryProtectionRegionIndex::Bank1(
+                flash_ctrl::Info0PageIndex::Index6,
+            ))
+            .enable_erase()
+            .enable_write()
+            .enable_read()
+            .finalize_region()
+            .enable_and_configure_info0_region(flash_ctrl::Info0MemoryProtectionRegionIndex::Bank1(
+                flash_ctrl::Info0PageIndex::Index8,
+            ))
+            .enable_erase()
+            .enable_write()
+            .enable_read()
+            .finalize_region()
+            .enable_and_configure_info0_region(flash_ctrl::Info0MemoryProtectionRegionIndex::Bank1(
+                flash_ctrl::Info0PageIndex::Index9,
+            ))
+            .enable_erase()
+            .enable_write()
+            .enable_read()
+            .finalize_region();
+    #[cfg(not(feature = "unlock_dice_info_pages"))]
+    let base_memory_protection_config =
+        flash_ctrl::MemoryProtectionConfiguration::new(flash_default_memory_protection_region);
+
     #[cfg(feature = "test_flash_ctrl")]
     {
         let page_index_range =
@@ -422,7 +457,7 @@ fn get_flash_memory_protection_configuration() -> flash_ctrl::MemoryProtectionCo
                 Err(()) => unreachable!(),
             };
 
-        flash_ctrl::MemoryProtectionConfiguration::new(flash_default_memory_protection_region)
+        base_memory_protection_config
             .enable_and_configure_data_region(
                 flash_ctrl::DataMemoryProtectionRegionIndex::Index0,
                 memory_protection_page0_base,
@@ -454,7 +489,7 @@ fn get_flash_memory_protection_configuration() -> flash_ctrl::MemoryProtectionCo
         // Setup flash memory protection for the kernel
         // PANIC: the unwrap panics only if Flash(_stext) < FlashAddress(_etext), which occurs
         // only due to a linker script bug.
-        flash_ctrl::MemoryProtectionConfiguration::new(flash_default_memory_protection_region)
+        base_memory_protection_config
             .enable_and_configure_data_region_from_pointers(
                 flash_ctrl::DataMemoryProtectionRegionIndex::Index0,
                 starting_address,
@@ -965,6 +1000,7 @@ unsafe fn setup() -> (
             raw_flash_ctrl_page,
         ),
     );
+    virtual_info_flash.set_info_client(info_flash);
 
     let mux_otbn = crate::otbn::AccelMuxComponent::new(&peripherals.otbn)
         .finalize(otbn_mux_component_static!());
@@ -1117,20 +1153,24 @@ unsafe fn setup() -> (
         &memory_allocation_cap,
     );
 
+    let attestation_virtual_info_flash =
+        components::flash::InfoFlashUserComponent::new(mux_info_flash).finalize(
+            components::info_flash_user_component_static!(earlgrey::flash_ctrl::FlashCtrl),
+        );
     let raw_flash_ctrl_page = static_init!(
         earlgrey::flash_ctrl::RawFlashCtrlPage,
         earlgrey::flash_ctrl::RawFlashCtrlPage::default(),
     );
-    let earlgrey_attestation: &'static EarlgreyAttestation<'static> = static_init!(
-        EarlgreyAttestation<'static>,
-        EarlgreyAttestation::new(&peripherals.flash_ctrl, raw_flash_ctrl_page),
+    let earlgrey_attestation: &'static EarlgreyAttestation<
+        InfoFlashUser<earlgrey::flash_ctrl::FlashCtrl>,
+    > = static_init!(
+        EarlgreyAttestation<'static, InfoFlashUser<earlgrey::flash_ctrl::FlashCtrl>>,
+        EarlgreyAttestation::new(attestation_virtual_info_flash, raw_flash_ctrl_page),
     );
-    //peripherals
-    //    .flash_ctrl
-    //    .set_secondary_info_client(earlgrey_attestation);
-
-    let attestation: &'static Attestation<'static, EarlgreyAttestation<'static>> = static_init!(
-        Attestation<'static, EarlgreyAttestation<'static>>,
+    let attestation: &'static Attestation<
+        EarlgreyAttestation<InfoFlashUser<earlgrey::flash_ctrl::FlashCtrl>>,
+    > = static_init!(
+        Attestation<EarlgreyAttestation<InfoFlashUser<earlgrey::flash_ctrl::FlashCtrl>>>,
         Attestation::new(
             earlgrey_attestation,
             board_kernel.create_grant(
@@ -1139,6 +1179,7 @@ unsafe fn setup() -> (
             ),
         )
     );
+    attestation_virtual_info_flash.set_info_client(earlgrey_attestation);
     earlgrey_attestation.set_client(attestation);
 
     let earlgrey = static_init!(

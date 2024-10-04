@@ -55,6 +55,7 @@ fpga = []
 qemu = ["earlgrey/qemu"]
 silicon = ["sival"]
 sim_verilator = []
+unlock_dice_info_pages = ["earlgrey/unlock_dice_info_pages"]
 
 # This is used to indicate that we intend to use this kernel with a silicon
 # validation execution environment.

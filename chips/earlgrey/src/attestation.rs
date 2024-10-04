@@ -5,7 +5,6 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // Copyright Tock Contributors 2022.
 
-use crate::flash_ctrl::{Bank, FlashCtrl, RawFlashCtrlPage};
 use kernel::hil::flash::{
     Error as FlashError, InfoClient as InfoClientTrait, InfoFlash as InfoFlashTrait,
 };
@@ -35,9 +34,12 @@ const MEM_CACHE_SIZE: usize = 0x1800;
 const MAX_APPS: usize = 8;
 
 /// Earlgrey-specific driver for attestation
-pub struct Attestation<'a> {
-    info_flash: &'a FlashCtrl<'a>,
-    flash_buf: TakeCell<'static, RawFlashCtrlPage>,
+pub struct Attestation<'a, Flash: InfoFlashTrait>
+where
+    <Flash as InfoFlashTrait>::Page: 'static,
+{
+    info_flash: &'a Flash,
+    flash_buf: TakeCell<'static, Flash::Page>,
     app_certs: AppCerts<MAX_APPS>,
     app_cert_memory_cache: [u8; MEM_CACHE_SIZE],
     cert_off_len: OptionalCell<(usize, Option<usize>)>,
@@ -45,12 +47,12 @@ pub struct Attestation<'a> {
     owning_process: OptionalCell<ProcessId>,
 }
 
-impl<'a> Attestation<'a> {
+impl<'a, Flash: InfoFlashTrait> Attestation<'a, Flash> {
     /// Create a new attestation driver
     pub fn new(
-        info_flash: &'a FlashCtrl<'a>,
-        flash_buf: &'static mut RawFlashCtrlPage,
-    ) -> Attestation<'a> {
+        info_flash: &'a Flash,
+        flash_buf: &'static mut Flash::Page,
+    ) -> Attestation<'a, Flash> {
         Attestation {
             info_flash,
             flash_buf: TakeCell::new(flash_buf),
@@ -73,7 +75,7 @@ impl<'a> Attestation<'a> {
             Err(()) => return Err(ErrorCode::FAIL),
             Ok(info_partition_type) => info_partition_type,
         };
-        let bank: Bank = match bank.try_into() {
+        let bank = match bank.try_into() {
             Err(()) => return Err(ErrorCode::INVAL),
             Ok(bank) => bank,
         };
@@ -90,7 +92,7 @@ impl<'a> Attestation<'a> {
     }
 }
 
-impl<'a> CertificateReader<'a> for Attestation<'a> {
+impl<'a, Flash: InfoFlashTrait> CertificateReader<'a> for Attestation<'a, Flash> {
     /// Read a certificate stored in hardware. This implementation
     /// uses the flash controller.
     ///
@@ -169,10 +171,10 @@ impl<'a> CertificateReader<'a> for Attestation<'a> {
     }
 }
 
-impl<'a> InfoClientTrait<FlashCtrl<'a>> for Attestation<'a> {
+impl<'a, Flash: InfoFlashTrait> InfoClientTrait<Flash> for Attestation<'a, Flash> {
     fn info_read_complete(
         &self,
-        read_buffer: &'static mut RawFlashCtrlPage,
+        read_buffer: &'static mut Flash::Page,
         status: Result<(), FlashError>,
     ) {
         self.owning_process.map(|owner_id| {
@@ -180,7 +182,7 @@ impl<'a> InfoClientTrait<FlashCtrl<'a>> for Attestation<'a> {
                 client.certificate_available(
                     owner_id,
                     status
-                        .map(|()| read_buffer.as_ref().as_ref())
+                        .map(|()| &*read_buffer.as_mut())
                         .map_err(|e| CertificateReadError::Flash(e)),
                 );
             });
@@ -191,7 +193,7 @@ impl<'a> InfoClientTrait<FlashCtrl<'a>> for Attestation<'a> {
 
     fn info_write_complete(
         &self,
-        _write_buffer: &'static mut RawFlashCtrlPage,
+        _write_buffer: &'static mut Flash::Page,
         _result: Result<(), FlashError>,
     ) {
         // Should never happen
