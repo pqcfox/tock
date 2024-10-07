@@ -16,5 +16,6 @@ mod system_reset_controller;
 mod timer;
 mod uart;
 mod usb;
+mod watchdog;
 
 pub use chip::*;

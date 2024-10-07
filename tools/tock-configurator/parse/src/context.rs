@@ -99,6 +99,7 @@ impl<C: Chip> Context<C> {
                 capsules,
                 Scheduler::insert_get(config.scheduler, &mut visited),
                 chip.systick()?,
+                chip.watchdog()?,
             )),
             chip: Rc::new(chip),
             process_count: config.process_count,

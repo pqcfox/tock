@@ -541,6 +541,11 @@ impl<C: Chip + 'static> TockMain<C> {
             self.context.platform.scheduler.ty()?,
         );
 
+        let (watchdog_id, watchdog_ty) = (
+            format_ident!("{}", self.context.platform.watchdog.ident()?),
+            self.context.platform.watchdog.ty()?,
+        );
+
         let chip_ty = self.context.chip.ty()?;
 
         let capsules = &self.context.platform.capsules;
@@ -559,7 +564,8 @@ impl<C: Chip + 'static> TockMain<C> {
             struct #board_ty {
                 #(#capsules_identifiers: &'static #capsules_types,)*
                 #scheduler_id: &'static #scheduler_ty,
-                #scheduler_timer_id: #scheduler_timer_type,
+                #scheduler_timer_id: &'static #scheduler_timer_type,
+                #watchdog_id: &'static #watchdog_ty,
             }
 
             impl SyscallDriverLookup for #board_ty {
@@ -580,7 +586,7 @@ impl<C: Chip + 'static> TockMain<C> {
                 type ProcessFault = ();
                 type Scheduler = #scheduler_ty;
                 type SchedulerTimer = #scheduler_timer_type;
-                type WatchDog = ();
+                type WatchDog = #watchdog_ty;
                 type ContextSwitchCallback = ();
 
                 fn syscall_driver_lookup(&self) -> &Self::SyscallDriverLookup {
@@ -599,7 +605,7 @@ impl<C: Chip + 'static> TockMain<C> {
                     &self.#scheduler_timer_id
                 }
                 fn watchdog(&self) -> &Self::WatchDog {
-                    &()
+                    self.#watchdog_id
                 }
                 fn context_switch_callback(&self) -> &Self::ContextSwitchCallback {
                     &()

@@ -9,6 +9,7 @@ pub struct Chip {
     epmp: Rc<crate::epmp::Epmp>,
     peripherals: Rc<crate::peripherals::Peripherals>,
     scheduler_timer: Rc<parse::SchedulerTimer<crate::timer::RvTimer>>,
+    watchdog: Rc<crate::watchdog::Watchdog>,
 }
 
 impl Default for Chip {
@@ -22,6 +23,7 @@ impl Default for Chip {
             epmp: Rc::new(crate::epmp::Epmp::new()),
             peripherals,
             scheduler_timer: parse::SchedulerTimer::new(virtual_mux_alarm),
+            watchdog: Rc::new(crate::watchdog::Watchdog::new()),
         }
     }
 }
@@ -104,6 +106,7 @@ impl parse::Component for Chip {
 impl parse::Chip for Chip {
     type Peripherals = crate::peripherals::Peripherals;
     type Systick = parse::SchedulerTimer<crate::timer::RvTimer>;
+    type Watchdog = crate::watchdog::Watchdog;
 
     fn peripherals(&self) -> Rc<Self::Peripherals> {
         self.peripherals.clone()
@@ -111,5 +114,9 @@ impl parse::Chip for Chip {
 
     fn systick(&self) -> Result<Rc<Self::Systick>, parse::Error> {
         Ok(self.scheduler_timer.clone())
+    }
+
+    fn watchdog(&self) -> Result<Rc<Self::Watchdog>, parse::Error> {
+        Ok(self.watchdog.clone())
     }
 }

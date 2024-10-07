@@ -140,6 +140,7 @@ pub trait Chip: Component {
         + for<'de> serde::Deserialize<'de>
         + serde::Serialize;
     type Systick: for<'de> serde::Deserialize<'de> + serde::Serialize + 'static + Component;
+    type Watchdog: for<'de> serde::Deserialize<'de> + serde::Serialize + 'static + Component;
 
     /// Return chip prelude code needed before booting the platform.
     /// If this returns Some, it should be called before setting up the platform
@@ -153,4 +154,7 @@ pub trait Chip: Component {
 
     /// Return a pointer to the chip's systick.
     fn systick(&self) -> Result<Rc<Self::Systick>, crate::Error>;
+
+    /// Return a pointer to the chip's watchdog.
+    fn watchdog(&self) -> Result<Rc<Self::Watchdog>, crate::Error>;
 }

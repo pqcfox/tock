@@ -31,6 +31,7 @@ pub struct Platform<C: Chip> {
     pub capsules: Vec<std::rc::Rc<dyn crate::Capsule>>,
     pub scheduler: std::rc::Rc<Scheduler>,
     pub systick: std::rc::Rc<C::Systick>,
+    pub watchdog: std::rc::Rc<C::Watchdog>,
 }
 
 impl<C: Chip + 'static> crate::Component for Platform<C> {
@@ -43,6 +44,7 @@ impl<C: Chip + 'static> crate::Component for Platform<C> {
 
         dependencies.push(self.scheduler.clone());
         dependencies.push(self.systick.clone());
+        dependencies.push(self.watchdog.clone());
 
         Some(dependencies)
     }
@@ -56,6 +58,7 @@ impl<C: Chip + 'static> crate::Component for Platform<C> {
         let ty = self.ty()?;
         let scheduler = format_ident!("{}", self.scheduler.as_ref().ident()?);
         let systick_id = format_ident!("{}", self.systick.as_ref().ident()?);
+        let watchdog = format_ident!("{}", self.watchdog.as_ref().ident()?);
         let capsules = self
             .capsules
             .iter()
@@ -69,6 +72,7 @@ impl<C: Chip + 'static> crate::Component for Platform<C> {
                     #(#capsules,)*
                     #scheduler,
                     #systick_id,
+                    #watchdog,
                 }
             )
         })
