@@ -128,9 +128,3 @@ test-verilator: ot-check
 	$(Q)cp test_layout.ld $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/deps/layout.ld
 	$(Q)cp ../../kernel_layout.ld $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/
 	$(Q)RUSTFLAGS="$(RUSTC_FLAGS_TOCK)" VERILATOR="yes" OBJCOPY=$(RISC_PREFIX)-objcopy TOCK_ROOT_DIRECTORY=${TOCK_ROOT_DIRECTORY} TARGET=${TARGET} $(CARGO) test $(CARGO_FLAGS_TOCK) $(NO_RUN) --bin $(PLATFORM) --release --features=hardware_tests,sim_verilator
-
-remote_flash:  $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/$(PLATFORM).bin
-	scp $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/$(PLATFORM).bin vladr@$(REMOTE_SERV):~/exepack/$(PLATFORM).bin
-	ssh -t vladr@$(REMOTE_SERV) "source /home/vladr/.bashrc; ~/exepack/upload.sh; "
-	ssh -f vladr@$(REMOTE_SERV) "nohup ~/exepack/openocd -f ~/exepack/cw310.cfg > foo.log 2> foo.err < /dev/null &"
-	/tools/riscv/bin/riscv32-unknown-elf-gdb $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/$(PLATFORM).elf -ex "target extended-remote $(REMOTE_SERV):3333"
