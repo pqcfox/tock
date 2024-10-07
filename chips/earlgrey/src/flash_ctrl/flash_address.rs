@@ -110,6 +110,7 @@ impl FlashAddress {
     ///
     /// + Ok(incremented_flash_address) if the increment would result in a valid flash address
     /// + Err(()) if the increment would result in an invalid flash address
+    #[allow(unused)]
     pub(super) const fn add(self, difference: usize) -> Result<Self, ()> {
         let new_address = self.to_usize() + difference;
 
@@ -182,6 +183,7 @@ impl FlashAddress {
     }
 }
 
+#[cfg(feature = "test_flash_ctrl")]
 pub(super) mod tests {
     use super::super::tests::{print_test_footer, print_test_header};
     use super::FlashAddress;

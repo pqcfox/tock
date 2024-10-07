@@ -164,6 +164,7 @@ macro_rules! region_disable_magic_value {
     };
 }
 
+#[cfg(feature = "test_flash_ctrl")]
 pub(crate) use region_enable_magic_value;
 
 register_bitfields![u32,
