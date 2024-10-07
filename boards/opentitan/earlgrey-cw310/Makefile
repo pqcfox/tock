@@ -78,7 +78,7 @@ fpga-rom-only:
 	$(Q)$(MAKE) -C ../$(PLATFORM)-rom-only fpga
 
 flash:
-	$(Q)echo '`make flash` has been renamed to `make flash-rom-only`. For ROM_EXT builds, use `make fpga` and then follow the "Owner Firmware With ROM_EXT" guide.'
+	$(error '`make flash` has been renamed to `make flash-rom-only`. For ROM_EXT builds, use `make fpga` and then follow the "Owner Firmware With ROM_EXT" guide.')
 
 flash-rom-only:
 	$(Q)$(MAKE) -C ../$(PLATFORM)-rom-only flash
