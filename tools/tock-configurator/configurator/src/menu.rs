@@ -53,10 +53,12 @@ pub(crate) fn capsules_menu<C: Chip + 'static + serde::ser::Serialize>(
                 items::SupportedCapsule::ALARM.to_menu_item(),
                 items::SupportedCapsule::ALERT_HANDLER.to_menu_item(),
                 items::SupportedCapsule::CONSOLE.to_menu_item(),
+                // À FAIRE: Remove
                 items::SupportedCapsule::FLASH.to_menu_item(),
                 items::SupportedCapsule::GPIO.to_menu_item(),
                 items::SupportedCapsule::HMAC.to_menu_item(),
                 items::SupportedCapsule::I2C.to_menu_item(),
+                items::SupportedCapsule::IPC.to_menu_item(),
                 items::SupportedCapsule::INFO_FLASH.to_menu_item(),
                 items::SupportedCapsule::KV_DRIVER.to_menu_item(),
                 items::SupportedCapsule::LED.to_menu_item(),

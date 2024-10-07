@@ -68,3 +68,7 @@ pub use usb::UsbCapsule;
 // Avoid name conflicts
 mod reset_manager;
 pub use reset_manager::ResetManagerCapsule;
+
+// Avoid name conflicts
+mod ipc;
+pub use ipc::IPC;

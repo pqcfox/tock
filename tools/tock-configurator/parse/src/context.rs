@@ -10,9 +10,9 @@ use std::rc::Rc;
 
 use crate::config::{Capsule, Configuration};
 use crate::{
-    AesCapsule, AlarmDriver, Console, HmacCapsule, I2CMasterDriver, KvDriver, Led, MuxAlarm,
-    MuxUart, RngCapsule, SpiCapsule, TemperatureCapsule, GPIO, AlertHandlerCapsule,
-    SystemResetControllerCapsule, PattgenCapsule, Lldb, InfoFlash, UsbCapsule, ResetManagerCapsule,
+    AesCapsule, AlarmDriver, AlertHandlerCapsule, Console, HmacCapsule, I2CMasterDriver, InfoFlash,
+    KvDriver, Led, Lldb, MuxAlarm, MuxUart, PattgenCapsule, ResetManagerCapsule, RngCapsule,
+    SpiCapsule, SystemResetControllerCapsule, TemperatureCapsule, UsbCapsule, GPIO, IPC,
 };
 use crate::{Chip, DefaultPeripherals, Platform, Scheduler};
 
@@ -88,6 +88,11 @@ impl<C: Chip> Context<C> {
                 }
                 Capsule::ResetManager { reset_manager } => {
                     capsules.push(ResetManagerCapsule::get(reset_manager.clone()) as Rc<dyn crate::Capsule>);
+                }
+                Capsule::IPC { } => {
+                    capsules
+                        .push(IPC::get()
+                            as Rc<dyn crate::Capsule>);
                 }
                 _ => {}
             };
