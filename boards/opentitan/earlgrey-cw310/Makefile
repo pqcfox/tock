@@ -26,12 +26,12 @@ include ../../Makefile.common
 # Pass OpenTitan board configuration option in `BOARD_CONFIGURATION` through
 # Cargo `--features`. Please see `Cargo.toml` for available options.
 ifneq ($(BOARD_CONFIGURATION),)
-	CARGO_FLAGS += --no-default-features --features=$(BOARD_CONFIGURATION)
+	CARGO_FLAGS_TOCK += --no-default-features --features=$(BOARD_CONFIGURATION)
 endif
 
 # Build test crates with the `panic = "abort"` strategy. Tests use `unwind` by
 # default which causes incompatability with `core` built via `-Zbuild-std`.
-CARGO_FLAGS += -Zpanic-abort-tests
+CARGO_FLAGS_TOCK += -Zpanic-abort-tests
 
 .PHONY: ot-check
 ifneq ($(OPENTITAN_TREE),)
@@ -71,7 +71,8 @@ qemu-app: $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/$(PLATFORM).elf
 qemu-app-gdb : $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/$(PLATFORM).elf
 	$(QEMU) -s -S -M opentitan -kernel $^ -device loader,file=$(APP),addr=0x20030000 -nographic -serial mon:stdio -global driver=riscv.lowrisc.ibex.soc,property=resetvec,value=${QEMU_ENTRY_POINT}
 
-fpga: BOARD_CONFIGURATION ?= fpga,sival
+.PHONY: fpga
+fpga: CARGO_FLAGS_TOCK+=--no-default-features --features=fpga,sival
 fpga: $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/$(PLATFORM).bin
 
 fpga-rom-only:

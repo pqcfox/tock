@@ -291,7 +291,7 @@ struct EarlGrey {
     reset_manager: &'static ResetManager<'static, earlgrey::rstmgr::RstMgr>,
     ipc: kernel::ipc::IPC<{ NUM_PROCS as u8 }>,
     #[allow(dead_code)]
-    attestation: Option<&'static Attestation<'static, EarlgreyAttestation<'static>>>,
+    attestation: &'static Attestation<'static, EarlgreyAttestation<'static>>,
 }
 
 /// Mapping of integer syscalls to objects that implement syscalls.
@@ -321,10 +321,7 @@ impl SyscallDriverLookup for EarlGrey {
             capsules_extra::reset_manager::DRIVER_NUM => f(Some(self.reset_manager)),
             #[cfg(not(feature = "qemu"))]
             capsules_extra::opentitan_sysrst::DRIVER_NUM => f(Some(self.opentitan_sysrst)),
-            capsules_extra::opentitan_attestation::DRIVER_NUM => match self.attestation {
-                Some(attestation) => f(Some(attestation)),
-                None => f(None),
-            },
+            capsules_extra::opentitan_attestation::DRIVER_NUM => f(Some(self.attestation)),
             kernel::ipc::DRIVER_NUM => f(Some(&self.ipc)),
             _ => f(None),
         }
@@ -1120,35 +1117,29 @@ unsafe fn setup() -> (
         &memory_allocation_cap,
     );
 
-    let attestation = if let Some(_info_flash) = info_flash {
-        let raw_flash_ctrl_page = static_init!(
-            earlgrey::flash_ctrl::RawFlashCtrlPage,
-            earlgrey::flash_ctrl::RawFlashCtrlPage::default(),
-        );
-        let earlgrey_attestation: &'static EarlgreyAttestation<'static> = static_init!(
-            EarlgreyAttestation<'static>,
-            EarlgreyAttestation::new(&peripherals.flash_ctrl, raw_flash_ctrl_page),
-        );
-        //peripherals
-        //    .flash_ctrl
-        //    .set_secondary_info_client(earlgrey_attestation);
+    let raw_flash_ctrl_page = static_init!(
+        earlgrey::flash_ctrl::RawFlashCtrlPage,
+        earlgrey::flash_ctrl::RawFlashCtrlPage::default(),
+    );
+    let earlgrey_attestation: &'static EarlgreyAttestation<'static> = static_init!(
+        EarlgreyAttestation<'static>,
+        EarlgreyAttestation::new(&peripherals.flash_ctrl, raw_flash_ctrl_page),
+    );
+    //peripherals
+    //    .flash_ctrl
+    //    .set_secondary_info_client(earlgrey_attestation);
 
-        let attestation: &'static Attestation<'static, EarlgreyAttestation<'static>> = static_init!(
-            Attestation<'static, EarlgreyAttestation<'static>>,
-            Attestation::new(
-                earlgrey_attestation,
-                board_kernel.create_grant(
-                    driver::NUM::OpenTitanAttestation as usize,
-                    &memory_allocation_cap
-                ),
-            )
-        );
-        earlgrey_attestation.set_client(attestation);
-
-        Some(attestation)
-    } else {
-        None
-    };
+    let attestation: &'static Attestation<'static, EarlgreyAttestation<'static>> = static_init!(
+        Attestation<'static, EarlgreyAttestation<'static>>,
+        Attestation::new(
+            earlgrey_attestation,
+            board_kernel.create_grant(
+                driver::NUM::OpenTitanAttestation as usize,
+                &memory_allocation_cap
+            ),
+        )
+    );
+    earlgrey_attestation.set_client(attestation);
 
     let earlgrey = static_init!(
         EarlGrey,
