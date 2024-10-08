@@ -8,6 +8,8 @@ use core::marker::PhantomData;
 use core::ptr::addr_of;
 use kernel::platform::chip::{Chip, InterruptService};
 use kernel::utilities::registers::interfaces::{ReadWriteable, Readable, Writeable};
+use kernel::utilities::StaticRef;
+use lowrisc::timer::RvTimer;
 use rv32i::csr::{mcause, mie::mie, mtvec::mtvec, CSR};
 use rv32i::pmp::{PMPUserMPU, TORUserPMP};
 use rv32i::syscall::SysCall;
@@ -22,7 +24,7 @@ use crate::interrupts;
 use crate::pinmux_config::EarlGreyPinmuxConfig;
 use crate::plic::Plic;
 use crate::plic::PLIC;
-use crate::registers::top_earlgrey;
+use crate::registers::top_earlgrey::{self, RV_TIMER_BASE_ADDR};
 use crate::registers::top_earlgrey::AlertId;
 #[cfg(not(feature = "qemu"))]
 use crate::registers::top_earlgrey::SYSRST_CTRL_AON_BASE_ADDR;
@@ -65,7 +67,7 @@ pub struct EarlGreyDefaultPeripherals<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyP
     pub watchdog: lowrisc::aon_timer::AonTimer<'a>,
     #[cfg(not(feature = "qemu"))]
     pub sysreset: lowrisc::sysrst_ctrl::SysRstCtrl<'a>,
-    pub timer: crate::timer::RvTimer<'static, CFG>,
+    pub timer: RvTimer<'static>,
     pub alert_handler: AlertHandler,
     pub pattgen: lowrisc::pattgen::PattGen<'a>,
     pub rst_mgmt: RstMgr,
@@ -108,7 +110,15 @@ impl<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig>
             ),
             #[cfg(not(feature = "qemu"))]
             sysreset: lowrisc::sysrst_ctrl::SysRstCtrl::new(SYSRST_CTRL_AON_BASE_ADDR),
-            timer: crate::timer::RvTimer::new(),
+            timer: RvTimer::new(
+                unsafe {
+                    StaticRef::new(
+                        RV_TIMER_BASE_ADDR
+                            as *const lowrisc::registers::rv_timer_regs::RvTimerRegisters,
+                    )
+                },
+                CFG::PERIPHERAL_FREQ,
+            ),
             alert_handler: AlertHandler::new(),
             pattgen: lowrisc::pattgen::PattGen::new(crate::pattgen::PATTGEN_BASE),
             rst_mgmt: RstMgr::new(),
