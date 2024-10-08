@@ -99,5 +99,6 @@ pub enum NUM {
     ResetManager          = 0x9000A,
     OpenTitanAlertHandler = 0x9000B,
     OpenTitanSysRst       = 0x9000C,
+    OpenTitanAttestation  = 0x9000E,
 }
 }
