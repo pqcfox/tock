@@ -188,6 +188,7 @@ impl<'a> FlashCtrlPage<'a> {
     ///
     /// + `page_position`: the position of the data page
     /// + `raw_page`: the raw flash used to represent the data page content
+    #[allow(unused)]
     pub(super) fn new_data_page(
         page_position: DataPagePosition,
         raw_page: &'a mut RawFlashCtrlPage,
@@ -255,6 +256,7 @@ impl AsMut<[u8; EARLGREY_PAGE_SIZE.get()]> for FlashCtrlPage<'_> {
     }
 }
 
+#[cfg(feature = "test_flash_ctrl")]
 pub(super) mod tests {
     use super::super::bank::{BANK0_STARTING_FLASH_ADDRESS, BANK1_STARTING_FLASH_ADDRESS};
     use super::super::page_index::{DataPageIndex, Info0PageIndex, Info1PageIndex, Info2PageIndex};

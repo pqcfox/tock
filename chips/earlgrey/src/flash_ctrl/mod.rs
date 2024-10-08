@@ -15,6 +15,7 @@ mod memory_protection;
 mod page;
 mod page_index;
 mod page_position;
+#[cfg(feature = "test_flash_ctrl")]
 pub mod tests;
 
 pub use bank::{Bank, DATA_PAGES_PER_BANK};

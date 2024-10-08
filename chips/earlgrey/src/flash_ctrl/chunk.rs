@@ -64,6 +64,7 @@ impl Chunk {
     /// # Return value
     ///
     /// An immutable reference to the `index`th word
+    #[allow(unused)]
     fn get(&self, index: usize) -> Option<&usize> {
         self.0.get(index)
     }
@@ -312,6 +313,7 @@ impl<'a> PageChunkIterator<'a> {
     }
 }
 
+#[cfg(feature = "test_flash_ctrl")]
 pub(in super::super) mod tests {
     use super::super::page::RawFlashCtrlPage;
     use super::super::page_index::DataPageIndex;
