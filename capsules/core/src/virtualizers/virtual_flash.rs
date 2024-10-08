@@ -34,6 +34,7 @@ use core::cell::Cell;
 
 use kernel::collections::list::{List, ListLink, ListNode};
 use kernel::hil;
+use kernel::hil::flash::Error as FlashError;
 use kernel::utilities::cells::{OptionalCell, TakeCell};
 use kernel::ErrorCode;
 
@@ -266,7 +267,13 @@ where
         self.inflight.take().map(move |user| {
             user.info_read_complete(pagebuffer, result);
         });
-        self.do_next_op();
+        // If any of the following operations fail-fast, notify the caller immediately that their
+        // operation failed.
+        while let Err(_) = self.do_next_op() {
+            self.inflight.take().map(move |user| {
+                user.info_erase_complete(Err(FlashError::FlashError));
+            });
+        }
     }
 
     fn info_write_complete(
@@ -277,14 +284,26 @@ where
         self.inflight.take().map(move |user| {
             user.info_write_complete(pagebuffer, result);
         });
-        self.do_next_op();
+        // If any of the following operations fail-fast, notify the caller immediately that their
+        // operation failed.
+        while let Err(_) = self.do_next_op() {
+            self.inflight.take().map(move |user| {
+                user.info_erase_complete(Err(FlashError::FlashError));
+            });
+        }
     }
 
     fn info_erase_complete(&self, result: Result<(), hil::flash::Error>) {
         self.inflight.take().map(move |user| {
             user.info_erase_complete(result);
         });
-        self.do_next_op();
+        // If any of the following operations fail-fast, notify the caller immediately that their
+        // operation failed.
+        while let Err(_) = self.do_next_op() {
+            self.inflight.take().map(move |user| {
+                user.info_erase_complete(Err(FlashError::FlashError));
+            });
+        }
     }
 }
 
@@ -303,59 +322,62 @@ where
 
     /// Scan the list of users and find the first user that has a pending
     /// request, then issue that request to the flash hardware.
-    fn do_next_op(&self) {
+    fn do_next_op(&self) -> Result<(), ErrorCode> {
         if self.inflight.is_none() {
             let mnode = self.users.iter().find(|node| match node.operation.get() {
                 InfoOp::Idle => false,
                 _ => true,
             });
-            mnode.map(|node| {
-                node.buffer.take().map_or_else(
+            mnode.map_or(Ok(()), |node| {
+                let result = node.buffer.take().map_or_else(
                     || {
                         // Don't need a buffer for erase.
                         match node.operation.get() {
-                            InfoOp::Erase(info_type, bank, page_number) => {
-                                let _ =
-                                    self.info_flash
-                                        .erase_info_page(info_type, bank, page_number);
-                            }
-                            _ => {}
-                        };
+                            InfoOp::Erase(info_type, bank, page_number) => self
+                                .info_flash
+                                .erase_info_page(info_type, bank, page_number),
+                            _ => Err(ErrorCode::FAIL),
+                        }
                     },
                     |buf| {
                         match node.operation.get() {
                             InfoOp::Write(info_type, bank, page_number) => {
-                                if let Err((_, buf)) = self.info_flash.write_info_page(
+                                if let Err((err, buf)) = self.info_flash.write_info_page(
                                     info_type,
                                     bank,
                                     page_number,
                                     buf,
                                 ) {
                                     node.buffer.replace(buf);
+                                    return Err(err);
                                 }
+                                Ok(())
                             }
                             InfoOp::Read(info_type, bank, page_number) => {
-                                if let Err((_, buf)) = self.info_flash.read_info_page(
+                                if let Err((err, buf)) = self.info_flash.read_info_page(
                                     info_type,
                                     bank,
                                     page_number,
                                     buf,
                                 ) {
                                     node.buffer.replace(buf);
+                                    return Err(err);
                                 }
+                                Ok(())
                             }
-                            InfoOp::Erase(info_type, bank, page_number) => {
-                                let _ =
-                                    self.info_flash
-                                        .erase_info_page(info_type, bank, page_number);
-                            }
-                            InfoOp::Idle => {} // Can't get here...
+                            InfoOp::Erase(info_type, bank, page_number) => self
+                                .info_flash
+                                .erase_info_page(info_type, bank, page_number),
+                            InfoOp::Idle => Err(ErrorCode::FAIL), // Can't get here...
                         }
                     },
                 );
                 node.operation.set(InfoOp::Idle);
                 self.inflight.set(node);
-            });
+                result
+            })
+        } else {
+            Ok(())
         }
     }
 }
@@ -473,8 +495,11 @@ where
         self.buffer.replace(buf);
         self.operation
             .set(InfoOp::Read(info_type, bank, page_number));
-        self.mux.do_next_op();
-        Ok(())
+        self.mux.do_next_op().map_err(|err| {
+            // PANIC: `self.buffer` cannot be empty because we set it at the beginning of the
+            // function.
+            (err, self.buffer.take().unwrap())
+        })
     }
 
     fn write_info_page(
@@ -487,8 +512,11 @@ where
         self.buffer.replace(buf);
         self.operation
             .set(InfoOp::Write(info_type, bank, page_number));
-        self.mux.do_next_op();
-        Ok(())
+        self.mux.do_next_op().map_err(|err| {
+            // PANIC: `self.buffer` cannot be empty because we set it at the beginning of the
+            // function.
+            (err, self.buffer.take().unwrap())
+        })
     }
 
     fn erase_info_page(
@@ -499,7 +527,6 @@ where
     ) -> Result<(), ErrorCode> {
         self.operation
             .set(InfoOp::Erase(info_type, bank, page_number));
-        self.mux.do_next_op();
-        Ok(())
+        self.mux.do_next_op()
     }
 }
