@@ -24,10 +24,10 @@ use crate::interrupts;
 use crate::pinmux_config::EarlGreyPinmuxConfig;
 use crate::plic::Plic;
 use crate::plic::PLIC;
-use crate::registers::top_earlgrey::{self, RV_TIMER_BASE_ADDR};
 use crate::registers::top_earlgrey::AlertId;
 #[cfg(not(feature = "qemu"))]
 use crate::registers::top_earlgrey::SYSRST_CTRL_AON_BASE_ADDR;
+use crate::registers::top_earlgrey::{self, RV_TIMER_BASE_ADDR};
 use crate::rstmgr::RstMgr;
 
 pub struct EarlGrey<

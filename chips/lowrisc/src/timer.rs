@@ -7,6 +7,7 @@ use crate::registers::rv_timer_regs::{
     RvTimerRegisters, CFG0, COMPARE_LOWER0_0, COMPARE_UPPER0_0, CTRL, INTR_ENABLE0, INTR_STATE0,
     TIMER_V_LOWER0, TIMER_V_UPPER0,
 };
+use core::ptr::from_ref;
 
 use kernel::hil::time::{self, Ticks64};
 use kernel::utilities::cells::OptionalCell;
@@ -60,18 +61,18 @@ impl<'a> RvTimer<'a> {
             overflow_client: OptionalCell::empty(),
             mtimer: unsafe {
                 MachineTimer::new(
-                    &*(&register_base.compare_lower0_0
-                        as *const ReadWrite<u32, COMPARE_LOWER0_0::Register>
-                        as *const ReadWrite<u32>),
-                    &*(&register_base.compare_upper0_0
-                        as *const ReadWrite<u32, COMPARE_UPPER0_0::Register>
-                        as *const ReadWrite<u32>),
-                    &*(&register_base.timer_v_lower0
-                        as *const ReadWrite<u32, TIMER_V_LOWER0::Register>
-                        as *const ReadWrite<u32>),
-                    &*(&register_base.timer_v_upper0
-                        as *const ReadWrite<u32, TIMER_V_UPPER0::Register>
-                        as *const ReadWrite<u32>),
+                    &*(from_ref::<ReadWrite<u32, COMPARE_LOWER0_0::Register>>(
+                        &register_base.compare_lower0_0,
+                    ) as *const ReadWrite<u32>),
+                    &*(from_ref::<ReadWrite<u32, COMPARE_UPPER0_0::Register>>(
+                        &register_base.compare_upper0_0,
+                    ) as *const ReadWrite<u32>),
+                    &*(from_ref::<ReadWrite<u32, TIMER_V_LOWER0::Register>>(
+                        &register_base.timer_v_lower0,
+                    ) as *const ReadWrite<u32>),
+                    &*(from_ref::<ReadWrite<u32, TIMER_V_UPPER0::Register>>(
+                        &register_base.timer_v_upper0,
+                    ) as *const ReadWrite<u32>),
                 )
             },
         }
@@ -91,10 +92,10 @@ impl<'a> RvTimer<'a> {
         } else {
             self.registers
                 .cfg0
-                .write(CFG0::PRESCALE.val(prescaler_target as u32) + CFG0::STEP.val(1u32));
+                .write(CFG0::PRESCALE.val(prescaler_target) + CFG0::STEP.val(1u32));
         }
 
-        return op_return;
+        op_return
     }
 
     pub fn set_now_tick(&self, ticks: u64) {
