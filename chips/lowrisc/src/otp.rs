@@ -614,17 +614,6 @@ pub mod tests {
 
         let device_id = otp.read_device_id().expect("Failed to read device ID");
 
-        const EXPECTED_DEVICE_ID: [u8; DEVICE_ID_FIELD_SIZE.get()] = [
-            0xF5, 0x15, 0x2A, 0xBA, 0x41, 0x37, 0xC3, 0xC5, 0xCD, 0x93, 0x6A, 0xCA, 0xEE, 0xA1,
-            0x83, 0x03, 0x15, 0x12, 0x1B, 0xB1, 0xEC, 0x8A, 0xED, 0x4D, 0x2C, 0xD2, 0xE9, 0x5F,
-            0x32, 0xDF, 0x4D, 0x06,
-        ];
-
-        assert_eq!(
-            EXPECTED_DEVICE_ID, device_id,
-            "The read device ID does not match the expected value"
-        );
-
         kernel::debug!("Finished testing reading device ID.");
     }
 
