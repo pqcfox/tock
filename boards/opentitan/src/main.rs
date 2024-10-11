@@ -1306,7 +1306,7 @@ unsafe fn setup() -> (
         test_aon_timer(peripherals, mux_alarm);
     }
 
-    #[cfg(feature = "test_rv_timer")]
+    #[cfg(all(not(feature = "qemu"), feature = "test_rv_timer"))]
     {
         peripherals.timer.test(
             &peripherals.uart0,
