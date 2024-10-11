@@ -204,9 +204,17 @@ const FAULT_RESPONSE: capsules_system::process_policies::PanicFaultPolicy =
     capsules_system::process_policies::PanicFaultPolicy {};
 
 /// Dummy buffer that causes the linker to reserve enough space for the stack.
+//
+// `sram_ret` tests require extra stack space for calling `forced_safe_init`,
+/// but this is not needed outside of testing
+#[cfg(feature = "test_sram_ret")]
 #[no_mangle]
 #[link_section = ".stack_buffer"]
 pub static mut STACK_MEMORY: [u8; 0x2000] = [0; 0x2000];
+#[cfg(not(feature = "test_sram_ret"))]
+#[no_mangle]
+#[link_section = ".stack_buffer"]
+pub static mut STACK_MEMORY: [u8; 0x1400] = [0; 0x1400];
 
 /// A structure representing this platform that holds references to all
 /// capsules for this platform. We've included an alarm and console.
