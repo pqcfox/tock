@@ -43,6 +43,7 @@ use kernel::component::Component;
 use kernel::hil;
 use kernel::hil::entropy::Entropy32;
 use kernel::hil::flash::HasInfoClient;
+#[cfg(not(feature = "test_flash_ctrl"))]
 use kernel::hil::hasher::Hasher;
 use kernel::hil::i2c::I2CMaster;
 use kernel::hil::led::LedHigh;
@@ -56,8 +57,6 @@ use kernel::platform::{KernelResources, SyscallDriverLookup, TbfHeaderFilterDefa
 use kernel::scheduler::priority::PrioritySched;
 use kernel::utilities::registers::interfaces::ReadWriteable;
 use kernel::{create_capability, debug, static_init};
-#[cfg(feature = "test_aon_timer")]
-use lowrisc::aon_timer;
 #[cfg(not(feature = "qemu"))]
 use lowrisc::sysrst_ctrl::SysRstCtrl;
 use rv32i::csr;
@@ -168,6 +167,7 @@ static mut MAIN_CAP: Option<&dyn kernel::capabilities::MainLoopCapability> = Non
 // Test access to alarm
 static mut ALARM: Option<&'static MuxAlarm<'static, RvTimer<'static>>> = None;
 // Test access to TicKV
+#[cfg(not(feature = "test_flash_ctrl"))]
 static mut TICKV: Option<
     &capsules_extra::tickv::TicKVSystem<
         'static,
@@ -263,6 +263,7 @@ struct EarlGrey {
         >,
     >,
     pattgen: &'static capsules_extra::pattgen::PattGen<'static, lowrisc::pattgen::PattGen<'static>>,
+    #[cfg(not(feature = "test_flash_ctrl"))]
     kv_driver: &'static capsules_extra::kv_driver::KVStoreDriver<
         'static,
         capsules_extra::virtual_kv::VirtualKVPermissions<
@@ -326,6 +327,7 @@ impl SyscallDriverLookup for EarlGrey {
             capsules_core::spi_controller::DRIVER_NUM => f(Some(self.spi_controller)),
             capsules_core::rng::DRIVER_NUM => f(Some(self.rng)),
             capsules_extra::symmetric_encryption::aes::DRIVER_NUM => f(Some(self.aes)),
+            #[cfg(not(feature = "test_flash_ctrl"))]
             capsules_extra::kv_driver::DRIVER_NUM => f(Some(self.kv_driver)),
             capsules_extra::info_flash::DRIVER_NUMBER => f(Some(self.info_flash)),
             capsules_extra::usb::usb_user2::DRIVER_NUM => f(Some(self.usb)),
@@ -859,10 +861,13 @@ unsafe fn setup() -> (
     */
 
     // Flash
+    #[cfg(not(feature = "test_flash_ctrl"))]
     let flash_ctrl_read_buf = static_init!(
         [u8; lowrisc::flash_ctrl::PAGE_SIZE],
         [0; lowrisc::flash_ctrl::PAGE_SIZE]
     );
+
+    #[cfg(not(feature = "test_flash_ctrl"))]
     let page_buffer = static_init!(
         earlgrey::flash_ctrl::RawFlashCtrlPage,
         earlgrey::flash_ctrl::RawFlashCtrlPage::default()
@@ -884,39 +889,32 @@ unsafe fn setup() -> (
     kernel::deferred_call::DeferredCallClient::register(sip_hash);
     SIPHASH = Some(sip_hash);
 
-    // TicKV
-    let tickv = components::tickv::TicKVComponent::new(
-        sip_hash,
-        mux_flash,                                     // Flash controller
-        lowrisc::flash_ctrl::FLASH_PAGES_PER_BANK - 1, // Region offset (End of Bank0/Use Bank1)
-        // Region Size
-        lowrisc::flash_ctrl::FLASH_PAGES_PER_BANK * lowrisc::flash_ctrl::PAGE_SIZE,
-        flash_ctrl_read_buf, // Buffer used internally in TicKV
-        page_buffer,         // Buffer used with the flash controller
-    )
-    .finalize(components::tickv_component_static!(
-        earlgrey::flash_ctrl::FlashCtrl,
-        capsules_extra::sip_hash::SipHasher24,
-        2048
-    ));
-    sip_hash.set_client(tickv);
-    TICKV = Some(tickv);
-    let kv_store = components::kv::TicKVKVStoreComponent::new(tickv).finalize(
-        components::tickv_kv_store_component_static!(
-            capsules_extra::tickv::TicKVSystem<
-                capsules_core::virtualizers::virtual_flash::FlashUser<
-                    earlgrey::flash_ctrl::FlashCtrl,
-                >,
-                capsules_extra::sip_hash::SipHasher24<'static>,
-                2048,
-            >,
-            capsules_extra::tickv::TicKVKeyType,
-        ),
-    );
+    #[cfg(not(feature = "test_flash_ctrl"))]
+    {
+        // TicKV
+        let tickv = components::tickv::TicKVComponent::new(
+            sip_hash,
+            mux_flash,                                     // Flash controller
+            lowrisc::flash_ctrl::FLASH_PAGES_PER_BANK - 1, // Region offset (End of Bank0/Use Bank1)
+            // Region Size
+            lowrisc::flash_ctrl::FLASH_PAGES_PER_BANK * lowrisc::flash_ctrl::PAGE_SIZE,
+            flash_ctrl_read_buf, // Buffer used internally in TicKV
+            page_buffer,         // Buffer used with the flash controller
+        )
+        .finalize(components::tickv_component_static!(
+            earlgrey::flash_ctrl::FlashCtrl,
+            capsules_extra::sip_hash::SipHasher24,
+            2048
+        ));
+        sip_hash.set_client(tickv);
+        TICKV = Some(tickv);
+    }
 
-    let kv_store_permissions = components::kv::KVStorePermissionsComponent::new(kv_store).finalize(
-        components::kv_store_permissions_component_static!(
-            capsules_extra::tickv_kv_store::TicKVKVStore<
+    #[cfg(not(feature = "test_flash_ctrl"))]
+    let kv_driver = {
+        let tickv = TICKV.unwrap();
+        let kv_store = components::kv::TicKVKVStoreComponent::new(tickv).finalize(
+            components::tickv_kv_store_component_static!(
                 capsules_extra::tickv::TicKVSystem<
                     capsules_core::virtualizers::virtual_flash::FlashUser<
                         earlgrey::flash_ctrl::FlashCtrl,
@@ -925,13 +923,11 @@ unsafe fn setup() -> (
                     2048,
                 >,
                 capsules_extra::tickv::TicKVKeyType,
-            >
-        ),
-    );
+            ),
+        );
 
-    let mux_kv = components::kv::KVPermissionsMuxComponent::new(kv_store_permissions).finalize(
-        components::kv_permissions_mux_component_static!(
-            capsules_extra::kv_store_permissions::KVStorePermissions<
+        let kv_store_permissions = components::kv::KVStorePermissionsComponent::new(kv_store)
+            .finalize(components::kv_store_permissions_component_static!(
                 capsules_extra::tickv_kv_store::TicKVKVStore<
                     capsules_extra::tickv::TicKVSystem<
                         capsules_core::virtualizers::virtual_flash::FlashUser<
@@ -941,49 +937,64 @@ unsafe fn setup() -> (
                         2048,
                     >,
                     capsules_extra::tickv::TicKVKeyType,
+                >
+            ));
+
+        let mux_kv = components::kv::KVPermissionsMuxComponent::new(kv_store_permissions).finalize(
+            components::kv_permissions_mux_component_static!(
+                capsules_extra::kv_store_permissions::KVStorePermissions<
+                    capsules_extra::tickv_kv_store::TicKVKVStore<
+                        capsules_extra::tickv::TicKVSystem<
+                            capsules_core::virtualizers::virtual_flash::FlashUser<
+                                earlgrey::flash_ctrl::FlashCtrl,
+                            >,
+                            capsules_extra::sip_hash::SipHasher24<'static>,
+                            2048,
+                        >,
+                        capsules_extra::tickv::TicKVKeyType,
+                    >,
+                >
+            ),
+        );
+
+        let virtual_kv_driver = components::kv::VirtualKVPermissionsComponent::new(mux_kv)
+            .finalize(components::virtual_kv_permissions_component_static!(
+                capsules_extra::kv_store_permissions::KVStorePermissions<
+                    capsules_extra::tickv_kv_store::TicKVKVStore<
+                        capsules_extra::tickv::TicKVSystem<
+                            capsules_core::virtualizers::virtual_flash::FlashUser<
+                                earlgrey::flash_ctrl::FlashCtrl,
+                            >,
+                            capsules_extra::sip_hash::SipHasher24<'static>,
+                            2048,
+                        >,
+                        capsules_extra::tickv::TicKVKeyType,
+                    >,
+                >
+            ));
+
+        components::kv::KVDriverComponent::new(
+            virtual_kv_driver,
+            board_kernel,
+            capsules_extra::kv_driver::DRIVER_NUM,
+        )
+        .finalize(components::kv_driver_component_static!(
+            capsules_extra::virtual_kv::VirtualKVPermissions<
+                capsules_extra::kv_store_permissions::KVStorePermissions<
+                    capsules_extra::tickv_kv_store::TicKVKVStore<
+                        capsules_extra::tickv::TicKVSystem<
+                            capsules_core::virtualizers::virtual_flash::FlashUser<
+                                earlgrey::flash_ctrl::FlashCtrl,
+                            >,
+                            capsules_extra::sip_hash::SipHasher24<'static>,
+                            2048,
+                        >,
+                        capsules_extra::tickv::TicKVKeyType,
+                    >,
                 >,
             >
-        ),
-    );
-
-    let virtual_kv_driver = components::kv::VirtualKVPermissionsComponent::new(mux_kv).finalize(
-        components::virtual_kv_permissions_component_static!(
-            capsules_extra::kv_store_permissions::KVStorePermissions<
-                capsules_extra::tickv_kv_store::TicKVKVStore<
-                    capsules_extra::tickv::TicKVSystem<
-                        capsules_core::virtualizers::virtual_flash::FlashUser<
-                            earlgrey::flash_ctrl::FlashCtrl,
-                        >,
-                        capsules_extra::sip_hash::SipHasher24<'static>,
-                        2048,
-                    >,
-                    capsules_extra::tickv::TicKVKeyType,
-                >,
-            >
-        ),
-    );
-
-    let kv_driver = components::kv::KVDriverComponent::new(
-        virtual_kv_driver,
-        board_kernel,
-        capsules_extra::kv_driver::DRIVER_NUM,
-    )
-    .finalize(components::kv_driver_component_static!(
-        capsules_extra::virtual_kv::VirtualKVPermissions<
-            capsules_extra::kv_store_permissions::KVStorePermissions<
-                capsules_extra::tickv_kv_store::TicKVKVStore<
-                    capsules_extra::tickv::TicKVSystem<
-                        capsules_core::virtualizers::virtual_flash::FlashUser<
-                            earlgrey::flash_ctrl::FlashCtrl,
-                        >,
-                        capsules_extra::sip_hash::SipHasher24<'static>,
-                        2048,
-                    >,
-                    capsules_extra::tickv::TicKVKeyType,
-                >,
-            >,
-        >
-    ));
+        ))
+    };
 
     // Info flash multiplexer user endpoint
     let virtual_info_flash = components::flash::InfoFlashUserComponent::new(mux_info_flash)
@@ -1205,6 +1216,7 @@ unsafe fn setup() -> (
             spi_controller,
             aes,
             usb,
+            #[cfg(not(feature = "test_flash_ctrl"))]
             kv_driver,
             pattgen,
             syscall_filter,
