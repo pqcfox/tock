@@ -19,7 +19,7 @@ QEMU_ENTRY_POINT=0x20000400
 OPENTITAN_SUPPORTED_SHA := edf5e35f5d50a5377641c90a315109a351de7635
 # Disable virtual function elimination
 VFUNC_ELIM=1
-
+FPGA_FLAGS := --features=fpga,sival
 
 include ../../Makefile.common
 
@@ -27,6 +27,8 @@ include ../../Makefile.common
 # Cargo `--features`. Please see `Cargo.toml` for available options.
 ifneq ($(BOARD_CONFIGURATION),)
 	CARGO_FLAGS_TOCK += --no-default-features --features=$(BOARD_CONFIGURATION)
+else
+	FPGA_FLAGS += --no-default-features
 endif
 
 # Build test crates with the `panic = "abort"` strategy. Tests use `unwind` by
@@ -59,8 +61,11 @@ endif
 .PHONY: install
 install: flash
 
-qemu: $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/$(PLATFORM).elf
-	$(QEMU) -M opentitan -kernel $^ -nographic -serial mon:stdio -global driver=riscv.lowrisc.ibex.soc,property=resetvec,value=${QEMU_ENTRY_POINT}
+qemu:
+	$(error '`make qemu` has been renamed to `make qemu-rom-only`. QEMU is currently supported with the test ROM only.')
+
+qemu-rom-only:
+	$(Q)$(MAKE) -C ../$(PLATFORM)-rom-only qemu
 
 qemu-gdb: $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/$(PLATFORM).elf
 	$(QEMU) -s -S -M opentitan -kernel $^ -nographic -serial mon:stdio -global driver=riscv.lowrisc.ibex.soc,property=resetvec,value=${QEMU_ENTRY_POINT}
@@ -72,7 +77,7 @@ qemu-app-gdb : $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/$(PLATFORM).elf
 	$(QEMU) -s -S -M opentitan -kernel $^ -device loader,file=$(APP),addr=0x20030000 -nographic -serial mon:stdio -global driver=riscv.lowrisc.ibex.soc,property=resetvec,value=${QEMU_ENTRY_POINT}
 
 .PHONY: fpga
-fpga: CARGO_FLAGS_TOCK+=--no-default-features --features=fpga,sival
+fpga: CARGO_FLAGS_TOCK += $(FPGA_FLAGS)
 fpga: $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/$(PLATFORM).bin
 
 fpga-rom-only:
