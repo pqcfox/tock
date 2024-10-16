@@ -257,12 +257,15 @@ fn load_processes_from_flash<C: Chip>(
                         break;
                     }
 
-                    ProcessBinaryError::TbfHeaderParseFailure(_)
-                    | ProcessBinaryError::IncompatibleKernelVersion { .. }
-                    | ProcessBinaryError::IncorrectFlashAddress { .. }
-                    | ProcessBinaryError::NotEnabledProcess
-                    | ProcessBinaryError::Padding => {
+                    err @ ProcessBinaryError::TbfHeaderParseFailure(_)
+                    | err @ ProcessBinaryError::IncompatibleKernelVersion { .. }
+                    | err @ ProcessBinaryError::IncorrectFlashAddress { .. }
+                    | err @ ProcessBinaryError::NotEnabledProcess
+                    | err @ ProcessBinaryError::Padding => {
                         // Skip this binary and move to the next one.
+                        if config::CONFIG.debug_load_processes {
+                            debug!("Unable to load process: {:?}.", err);
+                        }
                         continue;
                     }
                 }
