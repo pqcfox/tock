@@ -2333,4 +2333,6 @@ pub fn run_all(
     flash.set_client(test_client);
     flash.set_info_client(test_client);
     test_client.execute_next_test();
+
+    println!("FLASH_CTRL TESTS PASSED");
 }

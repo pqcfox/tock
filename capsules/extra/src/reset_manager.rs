@@ -196,7 +196,7 @@ fn serialize_reset_reason(reason: ResetReason) -> (u16, u16) {
 
 // This test code works only on OpenTitan as it needs a `RetentionRAM`.
 // This test can't be done in `chips/earlgrey/src/rstmgr.rs` because that driver doesn't know the actual ResetReason, as it is obtained by this capsule from RetentionRAM, not from RstMgr registers.
-#[cfg(feature = "test_resetmanager_opentitan")]
+#[cfg(feature = "test_resetmanager")]
 pub mod test {
     use core::panic::Location;
 

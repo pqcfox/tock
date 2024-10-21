@@ -267,10 +267,15 @@ impl<'a> AonTimer<'a> {
             }
             _ => {}
         }
-
-        test_runner
-            .write_str("Ending aon_timer pre-kernel self-test \r\n")
-            .unwrap();
+        if test_runner.is_test_failed {
+            test_runner
+                .write_str("aon_timer pre-kernel self-test FAILED\r\n")
+                .unwrap();
+        } else {
+            test_runner
+                .write_str("aon_timer pre-kernel self-test PASSED\r\n")
+                .unwrap();
+        }
         test_runner.is_test_failed
     }
 }

@@ -1286,7 +1286,7 @@ pub mod tests {
         test_autoblock(sysrst_ctrl, key0_sense, key0_force, pwrb_force);
         test_key0_invertion(sysrst_ctrl, key0_sense, key0_force, pwrb_force);
         test_pin_override(sysrst_ctrl, key0_sense, key0_force, pwrb_force);
-        kernel::debug!("SystemReset_Ctrl tests DONE");
+        kernel::debug!("SystemReset_Ctrl tests PASSED");
     }
 
     pub struct Tests<'a, A: Alarm<'a>> {

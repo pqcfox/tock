@@ -564,6 +564,6 @@ pub mod tests {
         pattgen_test.pattgen.set_client(pattgen_test);
         pattgen_test.start_channel0();
         pattgen_test.start_channel1();
-        kernel::debug!("Finished Pattgen tests. Everything is alright!");
+        kernel::debug!("Finished Pattgen tests... PASSED");
     }
 }

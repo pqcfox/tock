@@ -351,7 +351,11 @@ impl SramCtrl {
             _ => {}
         }
 
-        test_runner.write_str("Ending sram_ret self-test").unwrap();
+        if test_runner.is_test_failed {
+            test_runner.write_str("sram_ret self-test FAILED").unwrap();
+        } else {
+            test_runner.write_str("sram_ret self-test PASSED").unwrap();
+        }
         test_runner.is_test_failed
     }
 }
