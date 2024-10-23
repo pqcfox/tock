@@ -28,6 +28,7 @@ jobs:
         os: [ubuntu-latest]
     # The type of runner that the job will run on
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
 
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
@@ -46,6 +47,7 @@ jobs:
         os: [ubuntu-latest]
     # The type of runner that the job will run on
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
 
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
@@ -58,6 +60,7 @@ jobs:
       matrix:
         os: [ubuntu-latest]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
 
     steps:
       - uses: actions/checkout@v4
@@ -78,6 +81,7 @@ jobs:
       matrix:
         os: [ubuntu-latest]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
 
     steps:
       - name: Update package repositories
@@ -97,6 +101,7 @@ jobs:
         os: [ubuntu-latest]
     # The type of runner that the job will run on
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
 
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
