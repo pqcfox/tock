@@ -217,7 +217,10 @@ impl<'a> RvTimer<'a> {
 
                 test_runner.assert_function("Test set_now_tick!", || {
                     self.set_now_tick(0xFFFF_FFFF_AAAA_AAAA);
-                    self.registers.timer_v_lower0.get() == 0xAAAA_AAAA
+                    // The lowest byte is ignored for the purposes of this test to prevent spurious
+                    // failures because the clock advances by a few ticks between when the register
+                    // is written and read.
+                    self.registers.timer_v_lower0.get() & 0xFFFF_FF00 == 0xAAAA_AA00
                         && self.registers.timer_v_upper0.get() == 0xFFFF_FFFF
                 });
 
