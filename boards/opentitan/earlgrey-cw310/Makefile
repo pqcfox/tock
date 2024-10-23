@@ -126,7 +126,7 @@ endif
 # Not all the tests whose feature flags are listed here will
 # necessarily be run; some are hard-coded to ignore the default "qemu"
 # feature because QEMU cannot emulate them.
-	$(Q)RUSTFLAGS="$(RUSTC_FLAGS_TOCK)" TOCK_ROOT_DIRECTORY=${TOCK_ROOT_DIRECTORY} QEMU_ENTRY_POINT=${QEMU_ENTRY_POINT} TARGET=${TARGET} $(CARGO) test $(CARGO_FLAGS_TOCK) $(NO_RUN) --bin $(PLATFORM) --release --features=test_sram_ret,test_sysrst_ctrl,test_aon_timer,test_alerthandler,test_resetmanager,test_otp,test_pattgen
+	$(Q)RUSTFLAGS="$(RUSTC_FLAGS_TOCK)" TOCK_ROOT_DIRECTORY=${TOCK_ROOT_DIRECTORY} QEMU_ENTRY_POINT=${QEMU_ENTRY_POINT} TARGET=${TARGET} $(CARGO) test $(CARGO_FLAGS_TOCK) $(NO_RUN) --bin $(PLATFORM) --release --features=test_sram_ret,test_sysrst_ctrl,test_aon_timer,test_alerthandler,test_resetmanager,test_otp,test_pattgen,test_rv_timer,test_clkmgr
 
 test-hardware: ot-check
 	mkdir -p $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/deps/
