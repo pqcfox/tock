@@ -1328,6 +1328,11 @@ unsafe fn setup() -> (
         test_rv_timer(mux_alarm);
     }
 
+    #[cfg(all(not(feature = "qemu"), feature = "test_clkmgr"))]
+    {
+        peripherals.clkmgr.run_tests();
+    }
+
     debug!("OpenTitan initialisation complete. Entering main loop");
 
     (board_kernel, earlgrey, chip, peripherals)
