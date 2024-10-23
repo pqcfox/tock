@@ -319,7 +319,9 @@ impl RstMgr {
     pub fn get_rr_from_rram(
         creator_ram: &impl CreatorRetentionRam<Data = u32, ID = usize>,
     ) -> Option<ResetReason> {
-        let raw_value = creator_ram.read(4).ok()?;
+        // Read reset reason from retention SRAM := offset 0 in creator region, overall byte offset
+        // 4 (u32 offset 1).
+        let raw_value = creator_ram.read(1).ok()?;
         match TryInto::<RstMgrReason>::try_into(raw_value) {
             Ok(reason) => reason.into(),
             Err(()) => None,
