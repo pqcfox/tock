@@ -49,9 +49,7 @@ impl parse::Component for Chip {
         Ok(quote::quote!(
             earlgrey::chip::EarlGrey<
                 'static,
-                {
-                    <EPMPDebugConfig as earlgrey::epmp::EPMPDebugConfig>::TOR_USER_REGIONS
-                },
+                { <EPMPDebugConfig as earlgrey::epmp::EPMPDebugConfig>::TOR_USER_REGIONS },
                 earlgrey::chip::EarlGreyDefaultPeripherals<
                     'static,
                     ChipConfig,
@@ -59,10 +57,7 @@ impl parse::Component for Chip {
                 >,
                 ChipConfig,
                 crate::pinmux_layout::BoardPinmuxLayout,
-                earlgrey::epmp::EarlGreyEPMP<
-                    { EPMP_HANDOVER_CONFIG_CHECK },
-                    EPMPDebugConfig,
-                >,
+                earlgrey::epmp::EarlGreyEPMP<{ EPMP_HANDOVER_CONFIG_CHECK }, EPMPDebugConfig>,
             >
         ))
     }

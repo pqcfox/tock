@@ -44,12 +44,8 @@ impl<A: reset_manager::ResetManager> Component for ResetManagerCapsule<A> {
 
     fn after_init(&self) -> Option<proc_macro2::TokenStream> {
         let ident: proc_macro2::TokenStream = self.ident().unwrap().parse().unwrap();
-        let peripheral_ident: proc_macro2::TokenStream = self
-            .peripheral
-            .ident()
-            .unwrap()
-            .parse()
-            .unwrap();
+        let peripheral_ident: proc_macro2::TokenStream =
+            self.peripheral.ident().unwrap().parse().unwrap();
 
         Some(quote::quote!(
             #[cfg(not(feature = "qemu"))]

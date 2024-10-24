@@ -247,10 +247,7 @@ impl<P: DefaultPeripherals> Configuration<P> {
     }
 
     pub fn update_ipc(&mut self) {
-        self.capsules.insert(
-            Index::IPC,
-            Capsule::IPC {},
-        );
+        self.capsules.insert(Index::IPC, Capsule::IPC {});
     }
 
     /// Update the scheduler configuration.

@@ -114,10 +114,8 @@ impl<C: Chip> Context<C> {
                         .push(ResetManagerCapsule::get(reset_manager.clone())
                             as Rc<dyn crate::Capsule>);
                 }
-                Capsule::IPC { } => {
-                    capsules
-                        .push(IPC::get()
-                            as Rc<dyn crate::Capsule>);
+                Capsule::IPC {} => {
+                    capsules.push(IPC::get() as Rc<dyn crate::Capsule>);
                 }
                 _ => {}
             };

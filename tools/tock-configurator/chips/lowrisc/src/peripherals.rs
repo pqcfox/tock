@@ -61,7 +61,11 @@ impl Default for Peripherals {
 impl parse::Component for Peripherals {
     fn ty(&self) -> Result<parse::proc_macro2::TokenStream, parse::Error> {
         Ok(quote::quote!(
-            earlgrey::chip::EarlGreyDefaultPeripherals<'static, ChipConfig, crate::pinmux_layout::BoardPinmuxLayout>
+            earlgrey::chip::EarlGreyDefaultPeripherals<
+                'static,
+                ChipConfig,
+                crate::pinmux_layout::BoardPinmuxLayout,
+            >
         ))
     }
 

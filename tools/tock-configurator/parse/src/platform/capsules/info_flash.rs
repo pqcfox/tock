@@ -14,11 +14,14 @@ struct InfoFlashUser<F: flash::Flash + 'static> {
 impl<F: flash::Flash + 'static> Component for InfoFlashUser<F> {
     fn ty(&self) -> Result<proc_macro2::TokenStream, crate::Error> {
         let peripheral_ty = self.peripheral.ty()?;
-        Ok(quote::quote!(capsules_core::virtualizers::virtual_flash::InfoFlashUser<'static, #peripheral_ty>))
+        Ok(
+            quote::quote!(capsules_core::virtualizers::virtual_flash::InfoFlashUser<'static, #peripheral_ty>),
+        )
     }
 
     fn before_init(&self) -> Option<proc_macro2::TokenStream> {
-        let peripheral_ident: proc_macro2::TokenStream = self.peripheral.ident().unwrap().parse().unwrap();
+        let peripheral_ident: proc_macro2::TokenStream =
+            self.peripheral.ident().unwrap().parse().unwrap();
         let peripheral_ty = self.peripheral.ty().unwrap();
         Some(quote::quote! {
             let mux_info_flash = components::flash::InfoFlashMuxComponent::new(&#peripheral_ident)
@@ -34,7 +37,7 @@ impl<F: flash::Flash + 'static> Component for InfoFlashUser<F> {
         Ok(quote::quote! {
             components::flash::InfoFlashUserComponent::new(mux_info_flash)
                 .finalize(components::info_flash_user_component_static!(
-                    #peripheral_ty   
+                    #peripheral_ty
                 ))
         })
     }
@@ -77,7 +80,8 @@ impl<F: flash::Flash> Component for InfoFlash<F> {
 
     fn init_expr(&self) -> Result<proc_macro2::TokenStream, crate::Error> {
         let ty = self.ty()?;
-        let info_flash_user_identifier: proc_macro2::TokenStream = self.info_flash_user.ident()?.parse().unwrap();
+        let info_flash_user_identifier: proc_macro2::TokenStream =
+            self.info_flash_user.ident()?.parse().unwrap();
         let driver_number = self.driver_num();
 
         Ok(quote::quote!(kernel::static_init!(

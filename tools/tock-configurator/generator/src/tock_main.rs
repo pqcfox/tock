@@ -87,7 +87,7 @@ impl<C: Chip + 'static> TockMain<C> {
     /// function.
     fn main(&self) -> proc_macro2::TokenStream {
         let process_count = Literal::usize_unsuffixed(self.context.process_count);
-        
+
         quote! {
             #[cfg(all(not(feature = "qemu"), feature = "test_sysrst_ctrl"))]
             fn test_sysrst_ctrl(peripherals: &earlgrey::chip::EarlGreyDefaultPeripherals<ChipConfig, crate::pinmux_layout::BoardPinmuxLayout>) {

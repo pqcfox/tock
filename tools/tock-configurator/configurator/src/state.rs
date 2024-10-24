@@ -397,15 +397,10 @@ pub(crate) fn on_capsule_submit<C: Chip + 'static + serde::ser::Serialize>(
         }
         config::Index::IPC => {
             let previous_state = match data.platform.capsule(submit) {
-                Some(config::Capsule::IPC {}) => {
-                    Some(())
-                }
+                Some(config::Capsule::IPC {}) => Some(()),
                 _ => None,
             };
-            push_layer::<_, C>(
-                siv,
-                crate::capsule::ipc::config::<C>(chip, previous_state),
-            )
+            push_layer::<_, C>(siv, crate::capsule::ipc::config::<C>(chip, previous_state))
         }
         _ => unreachable!(),
     }

@@ -16,19 +16,15 @@ const PERIPHERAL: &'static str = "IPC";
 /// Menu for configuring the IPC capsule.
 pub fn config<C: Chip + 'static + serde::Serialize>(
     chip: Rc<C>,
-    previous_state: Option<
-        () 
-    >,
+    previous_state: Option<()>,
 ) -> cursive::views::LinearLayout {
     match previous_state {
         None => config_none(chip),
-        Some(()) => {
-            capsule_popup::<C, _>(crate::views::radio_group_with_null_known(
-                vec![PERIPHERAL],
-                on_ipc_submit::<C>,
-                PERIPHERAL,
-            ))
-        },
+        Some(()) => capsule_popup::<C, _>(crate::views::radio_group_with_null_known(
+            vec![PERIPHERAL],
+            on_ipc_submit::<C>,
+            PERIPHERAL,
+        )),
     }
 }
 
