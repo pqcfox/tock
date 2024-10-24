@@ -3,34 +3,30 @@
 // Copyright Tock Contributors 2022.
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, PartialEq)]
-pub struct Usb {}
+pub struct SpiHost {}
 
-impl Usb {
+impl SpiHost {
     pub(crate) fn new() -> Self {
         Self {}
     }
 }
 
-impl parse::Ident for Usb {
+impl parse::Ident for SpiHost {
     fn ident(&self) -> Result<String, parse::Error> {
-        Ok(String::from("peripherals.usb"))
+        Ok(String::from("peripherals.spi_host0"))
     }
 }
 
-impl parse::Component for Usb {
+impl parse::Component for SpiHost {
     fn ty(&self) -> Result<proc_macro2::TokenStream, parse::Error> {
-        Ok(quote::quote!(lowrisc::usb::Usb<'static>))
+        Ok(quote::quote!(lowrisc::spi_host::SpiHost<'static>))
     }
 }
 
-impl std::fmt::Display for Usb {
+impl std::fmt::Display for SpiHost {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "usb")
+        write!(f, "spi_host0")
     }
 }
 
-impl parse::peripherals::Usb for Usb {
-    fn maximum_packet_size() -> proc_macro2::TokenStream {
-        quote::quote!({ lowrisc::usb::MAXIMUM_PACKET_SIZE.get() })
-    }
-}
+impl parse::peripherals::Spi for SpiHost {}

@@ -75,6 +75,13 @@ impl<C: Chip> Context<C> {
                 Capsule::KvDriver { flash } => {
                     capsules.push(KvDriver::get(flash.clone()) as Rc<dyn crate::Capsule>);
                 }
+                Capsule::InfoFlash { flash } => {
+                    capsules.push(InfoFlash::get(Rc::clone(flash)) as Rc<dyn crate::Capsule>)
+                }
+                Capsule::Lldb { uart, baud_rate } => {
+                    let mux_uart = MuxUart::insert_get(Rc::clone(uart), *baud_rate, &mut visited);
+                    capsules.push(Lldb::get(mux_uart) as Rc<dyn crate::Capsule>);
+                }
                 Capsule::Aes {
                     aes,
                     number_of_blocks,
@@ -83,11 +90,29 @@ impl<C: Chip> Context<C> {
                         .push(AesCapsule::get(aes.clone(), *number_of_blocks)
                             as Rc<dyn crate::Capsule>);
                 }
+                Capsule::Pattgen { pattgen } => {
+                    capsules.push(PattgenCapsule::get(pattgen.clone()) as Rc<dyn crate::Capsule>);
+                }
+                Capsule::SystemResetController {
+                    system_reset_controller,
+                } => {
+                    capsules.push(
+                        SystemResetControllerCapsule::get(system_reset_controller.clone())
+                            as Rc<dyn crate::Capsule>,
+                    );
+                }
+                Capsule::AlertHandler { alert_handler } => {
+                    capsules
+                        .push(AlertHandlerCapsule::get(alert_handler.clone())
+                            as Rc<dyn crate::Capsule>);
+                }
                 Capsule::Usb { usb } => {
                     capsules.push(UsbCapsule::get(usb.clone()) as Rc<dyn crate::Capsule>);
                 }
                 Capsule::ResetManager { reset_manager } => {
-                    capsules.push(ResetManagerCapsule::get(reset_manager.clone()) as Rc<dyn crate::Capsule>);
+                    capsules
+                        .push(ResetManagerCapsule::get(reset_manager.clone())
+                            as Rc<dyn crate::Capsule>);
                 }
                 Capsule::IPC { } => {
                     capsules

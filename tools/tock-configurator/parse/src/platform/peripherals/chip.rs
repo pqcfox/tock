@@ -6,9 +6,9 @@
 // Author: Darius Jipa <darius.jipa@oxidos.io>
 
 use super::{
-    aes::Aes, ble::BleAdvertisement, gpio::Gpio, timer::Timer, uart::Uart, Flash, Hmac, I2c, Rng, Spi,
-    Temperature, alert_handler::AlertHandler, system_reset_controller::SystemResetController, pattgen::Pattgen,
-    usb::Usb, reset_manager::ResetManager,
+    aes::Aes, alert_handler::AlertHandler, ble::BleAdvertisement, gpio::Gpio, pattgen::Pattgen,
+    reset_manager::ResetManager, system_reset_controller::SystemResetController, timer::Timer,
+    uart::Uart, usb::Usb, Flash, Hmac, I2c, Rng, Spi, Temperature,
 };
 use crate::Component;
 use std::rc::Rc;
@@ -44,7 +44,10 @@ pub trait DefaultPeripherals: Component {
     type Hmac: Hmac + for<'de> serde::Deserialize<'de> + serde::Serialize + 'static;
     type Aes: Aes + for<'de> serde::Deserialize<'de> + serde::Serialize + 'static;
     type Pattgen: Pattgen + for<'de> serde::Deserialize<'de> + serde::Serialize + 'static;
-    type SystemResetController: SystemResetController + for<'de> serde::Deserialize<'de> + serde::Serialize + 'static;
+    type SystemResetController: SystemResetController
+        + for<'de> serde::Deserialize<'de>
+        + serde::Serialize
+        + 'static;
     type AlertHandler: AlertHandler + for<'de> serde::Deserialize<'de> + serde::Serialize + 'static;
     type Usb: Usb + for<'de> serde::Deserialize<'de> + serde::Serialize + 'static;
     type ResetManager: ResetManager + for<'de> serde::Deserialize<'de> + serde::Serialize + 'static;

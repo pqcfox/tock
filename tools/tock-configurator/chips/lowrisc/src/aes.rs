@@ -3,34 +3,30 @@
 // Copyright Tock Contributors 2022.
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, PartialEq)]
-pub struct Usb {}
+pub struct Aes {}
 
-impl Usb {
+impl Aes {
     pub(crate) fn new() -> Self {
         Self {}
     }
 }
 
-impl parse::Ident for Usb {
+impl parse::Ident for Aes {
     fn ident(&self) -> Result<String, parse::Error> {
-        Ok(String::from("peripherals.usb"))
+        Ok(String::from("peripherals.aes"))
     }
 }
 
-impl parse::Component for Usb {
+impl parse::Component for Aes {
     fn ty(&self) -> Result<proc_macro2::TokenStream, parse::Error> {
-        Ok(quote::quote!(lowrisc::usb::Usb<'static>))
+        Ok(quote::quote!(earlgrey::aes::Aes<'static>))
     }
 }
 
-impl std::fmt::Display for Usb {
+impl std::fmt::Display for Aes {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "usb")
+        write!(f, "aes")
     }
 }
 
-impl parse::peripherals::Usb for Usb {
-    fn maximum_packet_size() -> proc_macro2::TokenStream {
-        quote::quote!({ lowrisc::usb::MAXIMUM_PACKET_SIZE.get() })
-    }
-}
+impl parse::peripherals::Aes for Aes {}

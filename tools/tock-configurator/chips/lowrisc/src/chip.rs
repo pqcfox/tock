@@ -1,3 +1,7 @@
+// Licensed under the Apache License, Version 2.0 or the MIT License.
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+// Copyright Tock Contributors 2022.
+
 use parse::Chip as _;
 use parse::DefaultPeripherals as _;
 use parse::Ident as _;
@@ -79,12 +83,10 @@ impl parse::Component for Chip {
         let peripherals = self.peripherals();
         let peripherals_identifier = quote::format_ident!("{}", peripherals.ident()?);
 
-        Ok(quote::quote!(
-            kernel::static_init!(
-                #ty,
-                earlgrey::chip::EarlGrey::new(#peripherals_identifier, earlgrey_epmp),
-            )
-        ))
+        Ok(quote::quote!(kernel::static_init!(
+            #ty,
+            earlgrey::chip::EarlGrey::new(#peripherals_identifier, earlgrey_epmp),
+        )))
     }
 
     fn after_init(&self) -> Option<parse::proc_macro2::TokenStream> {
@@ -100,7 +102,6 @@ impl parse::Component for Chip {
             rv32i::csr::CSR.mstatus.modify(rv32i::csr::mstatus::mstatus::mie::SET);
         })
     }
-
 }
 
 impl parse::Chip for Chip {

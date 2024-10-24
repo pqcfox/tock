@@ -14,9 +14,7 @@ use parse::peripherals::{Chip, DefaultPeripherals};
 /// Menu for configuring the Usb capsule.
 pub fn config<C: Chip + 'static + serde::Serialize>(
     chip: Rc<C>,
-    choice: Option<
-        Rc<<<C as parse::peripherals::Chip>::Peripherals as DefaultPeripherals>::Usb>,
-    >,
+    choice: Option<Rc<<<C as parse::peripherals::Chip>::Peripherals as DefaultPeripherals>::Usb>>,
 ) -> cursive::views::LinearLayout {
     match choice {
         None => config_unknown(chip),

@@ -331,27 +331,38 @@ pub(crate) fn on_capsule_submit<C: Chip + 'static + serde::ser::Serialize>(
         config::Index::HMAC => {
             push_layer::<_, C>(siv, crate::capsule::hmac::HmacConfig::config(chip))
         }
+        config::Index::INFO_FLASH => push_layer::<_, C>(
+            siv,
+            crate::capsule::info_flash::InfoFlashConfig::config(chip),
+        ),
+        config::Index::LLDB => {
+            push_layer::<_, C>(siv, crate::capsule::lldb::LldbConfig::config(chip))
+        }
         config::Index::AES => push_layer::<_, C>(siv, crate::capsule::aes::AesConfig::config(chip)),
         config::Index::KV_DRIVER => {
             push_layer::<_, C>(siv, crate::capsule::kv_driver::KvDriverConfig::config(chip))
         }
         config::Index::PATTGEN => {
             let previous_state = match data.platform.capsule(submit) {
-                Some(config::Capsule::Pattgen { pattgen }) => {
-                    Some(pattgen.clone())
-                }
+                Some(config::Capsule::Pattgen { pattgen }) => Some(pattgen.clone()),
                 _ => None,
             };
-            push_layer::<_, C>(siv, crate::capsule::pattgen::config::<C>(chip, previous_state))
+            push_layer::<_, C>(
+                siv,
+                crate::capsule::pattgen::config::<C>(chip, previous_state),
+            )
         }
         config::Index::SYSTEM_RESET_CONTROLLER => {
             let previous_state = match data.platform.capsule(submit) {
-                Some(config::Capsule::SystemResetController { system_reset_controller }) => {
-                    Some(system_reset_controller.clone())
-                }
+                Some(config::Capsule::SystemResetController {
+                    system_reset_controller,
+                }) => Some(system_reset_controller.clone()),
                 _ => None,
             };
-            push_layer::<_, C>(siv, crate::capsule::system_reset_controller::config::<C>(chip, previous_state))
+            push_layer::<_, C>(
+                siv,
+                crate::capsule::system_reset_controller::config::<C>(chip, previous_state),
+            )
         }
         config::Index::ALERT_HANDLER => {
             let previous_state = match data.platform.capsule(submit) {
@@ -360,13 +371,14 @@ pub(crate) fn on_capsule_submit<C: Chip + 'static + serde::ser::Serialize>(
                 }
                 _ => None,
             };
-            push_layer::<_, C>(siv, crate::capsule::alert_handler::config::<C>(chip, previous_state))
+            push_layer::<_, C>(
+                siv,
+                crate::capsule::alert_handler::config::<C>(chip, previous_state),
+            )
         }
         config::Index::USB => {
             let previous_state = match data.platform.capsule(submit) {
-                Some(config::Capsule::Usb { usb }) => {
-                    Some(usb.clone())
-                }
+                Some(config::Capsule::Usb { usb }) => Some(usb.clone()),
                 _ => None,
             };
             push_layer::<_, C>(siv, crate::capsule::usb::config::<C>(chip, previous_state))
@@ -378,7 +390,10 @@ pub(crate) fn on_capsule_submit<C: Chip + 'static + serde::ser::Serialize>(
                 }
                 _ => None,
             };
-            push_layer::<_, C>(siv, crate::capsule::reset_manager::config::<C>(chip, previous_state))
+            push_layer::<_, C>(
+                siv,
+                crate::capsule::reset_manager::config::<C>(chip, previous_state),
+            )
         }
         config::Index::IPC => {
             let previous_state = match data.platform.capsule(submit) {

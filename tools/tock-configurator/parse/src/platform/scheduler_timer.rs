@@ -22,9 +22,7 @@ impl<T: timer::Timer + 'static> crate::Ident for SchedulerTimer<T> {
 
 impl<T: timer::Timer + 'static> SchedulerTimer<T> {
     pub fn new(virtual_mux_alarm: Rc<timer::VirtualMuxAlarm<T>>) -> Rc<Self> {
-        Rc::new(Self {
-            virtual_mux_alarm
-        })
+        Rc::new(Self { virtual_mux_alarm })
     }
 }
 
@@ -43,13 +41,12 @@ impl<T: timer::Timer + 'static> Component for SchedulerTimer<T> {
 
     fn init_expr(&self) -> Result<proc_macro2::TokenStream, crate::Error> {
         let ty = self.ty()?;
-        let virtual_mux_alarm: proc_macro2::TokenStream = self.virtual_mux_alarm.ident()?.parse().unwrap();
-        Ok(quote::quote!(
-            kernel::static_init!(
-                #ty,
-                kernel::platform::scheduler_timer::VirtualSchedulerTimer::new(#virtual_mux_alarm),
-            )
-        ))
+        let virtual_mux_alarm: proc_macro2::TokenStream =
+            self.virtual_mux_alarm.ident()?.parse().unwrap();
+        Ok(quote::quote!(kernel::static_init!(
+            #ty,
+            kernel::platform::scheduler_timer::VirtualSchedulerTimer::new(#virtual_mux_alarm),
+        )))
     }
 }
 

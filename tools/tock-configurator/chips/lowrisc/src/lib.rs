@@ -1,9 +1,13 @@
+// Licensed under the Apache License, Version 2.0 or the MIT License.
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+// Copyright Tock Contributors 2022.
+
 mod aes;
 mod alert_handler;
 mod chip;
 mod epmp;
-mod flash_memory_protection;
 mod flash;
+mod flash_memory_protection;
 mod gpio;
 mod hmac;
 mod i2c;

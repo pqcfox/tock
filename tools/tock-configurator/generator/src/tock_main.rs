@@ -303,6 +303,7 @@ impl<C: Chip + 'static> TockMain<C> {
             pub type EPMPDebugConfig = earlgrey::epmp::EPMPDebugEnable;
 
             pub const EPMP_HANDOVER_CONFIG_CHECK: bool = false;
+
             pub const NUM_PROCS: usize = #process_count;
             const FAULT_RESPONSE: capsules_system::process_policies::PanicFaultPolicy = capsules_system::process_policies::PanicFaultPolicy {};
             static mut PROCESSES: [Option<&'static dyn kernel::process::Process>; NUM_PROCS] = [None; NUM_PROCS];

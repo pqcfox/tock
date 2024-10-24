@@ -25,7 +25,6 @@ impl<U: usb::Usb + 'static> UsbClient<U> {
 }
 
 impl<U: usb::Usb> Component for UsbClient<U> {
-
     fn ty(&self) -> Result<proc_macro2::TokenStream, crate::Error> {
         let peripheral_ty = self.peripheral.ty()?;
         let maximum_packet_size = U::maximum_packet_size();
@@ -53,7 +52,8 @@ impl<U: usb::Usb> Component for UsbClient<U> {
     }
 
     fn after_init(&self) -> Option<proc_macro2::TokenStream> {
-        let peripheral_ident: proc_macro2::TokenStream = self.peripheral.ident().unwrap().parse().unwrap();
+        let peripheral_ident: proc_macro2::TokenStream =
+            self.peripheral.ident().unwrap().parse().unwrap();
         let ident: proc_macro2::TokenStream = self.ident().unwrap().parse().unwrap();
 
         Some(quote::quote! {
@@ -98,18 +98,16 @@ impl<U: usb::Usb> Component for UsbCapsule<U> {
         let driver_num = self.driver_num();
         let usb_client_ident: proc_macro2::TokenStream = self.usb_client.ident()?.parse().unwrap();
 
-        Ok(quote::quote!(
-            kernel::static_init!(
-                #ty,
-                capsules_extra::usb::usb_user2::UsbSyscallDriver::new(
-                    #usb_client_ident,
-                    board_kernel.create_grant(
-                        #driver_num,
-                        &memory_allocation_cap,
-                    )
+        Ok(quote::quote!(kernel::static_init!(
+            #ty,
+            capsules_extra::usb::usb_user2::UsbSyscallDriver::new(
+                #usb_client_ident,
+                board_kernel.create_grant(
+                    #driver_num,
+                    &memory_allocation_cap,
                 )
             )
-        ))
+        )))
     }
 
     fn after_init(&self) -> Option<proc_macro2::TokenStream> {

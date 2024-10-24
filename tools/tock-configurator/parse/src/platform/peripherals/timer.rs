@@ -68,12 +68,10 @@ impl<T: Timer + 'static> Component for VirtualMuxAlarm<T> {
     fn init_expr(&self) -> Result<proc_macro2::TokenStream, crate::Error> {
         let ty = self.ty()?;
         let mux_alarm_ident: proc_macro2::TokenStream = self.mux_alarm.ident()?.parse().unwrap();
-        Ok(quote::quote!(
-            kernel::static_init!(
-                #ty,
-                capsules_core::virtualizers::virtual_alarm::VirtualMuxAlarm::new(#mux_alarm_ident)
-            )
-        ))
+        Ok(quote::quote!(kernel::static_init!(
+            #ty,
+            capsules_core::virtualizers::virtual_alarm::VirtualMuxAlarm::new(#mux_alarm_ident)
+        )))
     }
 
     fn after_init(&self) -> Option<proc_macro2::TokenStream> {
@@ -99,9 +97,7 @@ impl<T: Timer> MuxAlarm<T> {
 
 impl<T: Timer + 'static> MuxAlarm<T> {
     pub fn new(peripheral: Rc<T>) -> Self {
-        Self {
-            peripheral
-        }
+        Self { peripheral }
     }
 
     pub fn insert_get(peripheral: Rc<T>, visited: &mut Vec<Rc<dyn Component>>) -> Rc<Self> {

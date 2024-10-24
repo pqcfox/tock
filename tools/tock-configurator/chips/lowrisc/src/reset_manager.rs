@@ -1,5 +1,8 @@
-#[derive(serde::Serialize, serde::Deserialize, Debug)]
-#[derive(PartialEq)]
+// Licensed under the Apache License, Version 2.0 or the MIT License.
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+// Copyright Tock Contributors 2022.
+
+#[derive(serde::Serialize, serde::Deserialize, Debug, PartialEq)]
 pub struct ResetManager {}
 
 impl ResetManager {
@@ -18,7 +21,6 @@ impl parse::Component for ResetManager {
     fn ty(&self) -> Result<proc_macro2::TokenStream, parse::Error> {
         Ok(quote::quote!(earlgrey::rstmgr::RstMgr))
     }
-
 }
 
 impl std::fmt::Display for ResetManager {

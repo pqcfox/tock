@@ -27,17 +27,9 @@ use state::PinFunction;
 /// Select menu of supported chips.
 pub(crate) fn chip_select() -> cursive::views::SelectView<items::SupportedChip> {
     views::select_menu::<items::SupportedChip, (), String, _>(
-<<<<<<< HEAD
         vec![items::ToMenuItem::to_menu_item(
-            items::SupportedChip::MicroBit,
+            items::SupportedChip::EarlgreyCw310,
         )],
-=======
-        vec![
-            items::ToMenuItem::to_menu_item(
-                items::SupportedChip::EarlgreyCw310
-            ),
-        ],
->>>>>>> 4d3ccefc5 (Removed non-OpenTitan-related code)
         crate::state::on_chip_submit,
     )
 }
