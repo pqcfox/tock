@@ -55,6 +55,10 @@ test_clkmgr = ["earlgrey/clkmgr_tests"]
 fpga = []
 qemu = ["earlgrey/qemu"]
 silicon = ["sival"]
+# This feature should be included when linking with dependents of
+# opentitan:sw/device/lib/base/math so the `/` operator
+# does not insert calls to black-holed libgcc functions. 
+rom_math = []
 sim_verilator = []
 unlock_dice_info_pages = ["earlgrey/unlock_dice_info_pages"]
 
