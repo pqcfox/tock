@@ -26,22 +26,28 @@ use {
     },
 };
 
+// Note that, when comparing to upstream Tock, the named lifetime of this
+// struct has been replaced everywhere with 'static.
 pub struct AonTimer<'a> {
     registers: StaticRef<AonTimerRegisters>,
     wakeup_notification: OptionalCell<&'a dyn Fn()>,
     bark_notification: OptionalCell<&'a dyn Fn()>,
-    aon_clk_freq: u32, //Hz, this differs for FPGA/Verilator
+    aon_clk_freq: OptionalCell<u32>, //Hz, this differs for FPGA/Verilator
 }
 
 impl<'a> AonTimer<'a> {
-    pub const fn new(register_base: usize, aon_clk_freq: u32) -> AonTimer<'a> {
+    pub const fn new(register_base: usize) -> AonTimer<'a> {
         AonTimer {
-            // SAFETY: We keed a reference here to the register base.
+            // SAFETY: We need a reference here to the register base.
             registers: unsafe { StaticRef::new(register_base as *const AonTimerRegisters) },
             wakeup_notification: OptionalCell::empty(),
             bark_notification: OptionalCell::empty(),
-            aon_clk_freq,
+            aon_clk_freq: OptionalCell::empty(),
         }
+    }
+
+    pub fn set_clk_freq(&self, freq: u32) {
+        self.aon_clk_freq.insert(Some(freq));
     }
 
     fn wakeup_set_prescaler_and_enable(&self, prescaler: u32) -> Result<(), ErrorCode> {
@@ -60,7 +66,7 @@ impl<'a> AonTimer<'a> {
 
     // Enable wakeup after a number of milliseconds. This can fail if the ms number is out of range.
     pub fn wakeup_enable_after_ms(&self, ms: u32) -> Result<(), ErrorCode> {
-        let wakeup_cycles = self.ms_to_cycles(ms);
+        let wakeup_cycles = self.ms_to_cycles(ms)?;
 
         self.wakeup_disable();
 
@@ -79,7 +85,10 @@ impl<'a> AonTimer<'a> {
     }
 
     /// Get the ms remaining until wakeup will happen.
-    pub fn get_ms_to_wkup(&self) -> u32 {
+    ///
+    /// Returns Ok(ms) if aon_clk_freq has been set via set_clk_freq,
+    /// otherwise returns Err(ErrorCode::FAIL).
+    pub fn get_ms_to_wkup(&self) -> Result<u32, ErrorCode> {
         self.cycles_to_ms(
             // The wakeup register addition can not overflow because of the possible range of the prescaler register.
             self.registers
@@ -120,27 +129,31 @@ impl<'a> AonTimer<'a> {
     }
 
     /// Program the desired thresholds in WKUP_THOLD, WDOG_BARK_THOLD and WDOG_BITE_THOLD
-    pub fn set_wdog_bite_thresh_ms(&self, ms: u32) {
+    pub fn set_wdog_bite_thresh_ms(&self, ms: u32) -> Result<(), ErrorCode> {
         // Watchdog period may need to be revised with kernel changes/updates
         // since the watchdog is `tickled()` at the start of every kernel loop
         // see: https://github.com/tock/tock/blob/eb3f7ce59434b7ac1b77ef1ab7dd2afad1a62ac5/kernel/src/kernel.rs#L448
-        let bite_cycles = self.ms_to_cycles(ms);
+        let bite_cycles = self.ms_to_cycles(ms)?;
 
         self.registers
             .wdog_bite_thold
             .write(WDOG_BITE_THOLD::THRESHOLD.val(bite_cycles));
+
+        Ok(())
     }
 
     /// Program the desired thresholds in WKUP_THOLD, WDOG_BARK_THOLD and WDOG_BITE_THOLD
-    pub fn set_wdog_bark_thresh_ms(&self, ms: u32) {
+    pub fn set_wdog_bark_thresh_ms(&self, ms: u32) -> Result<(), ErrorCode> {
         // Watchdog period may need to be revised with kernel changes/updates
         // since the watchdog is `tickled()` at the start of every kernel loop
         // see: https://github.com/tock/tock/blob/eb3f7ce59434b7ac1b77ef1ab7dd2afad1a62ac5/kernel/src/kernel.rs#L448
-        let bark_cycles = self.ms_to_cycles(ms);
+        let bark_cycles = self.ms_to_cycles(ms)?;
 
         self.registers
             .wdog_bark_thold
             .write(WDOG_BARK_THOLD::THRESHOLD.val(bark_cycles));
+
+        Ok(())
     }
 
     /// Function to register a callback for the watchdog bark event.
@@ -169,15 +182,25 @@ impl<'a> AonTimer<'a> {
     }
 
     /// Convert miliseconds to clock cycles
-    fn ms_to_cycles(&self, ms: u32) -> u32 {
+    ///
+    /// Returns Ok(cycles) if aon_clk_freq has been set via set_clk_freq,
+    /// otherwise returns Err(ErrorCode::FAIL).
+    fn ms_to_cycles(&self, ms: u32) -> Result<u32, ErrorCode> {
         // 250kHZ CW310 or 125kHz Verilator (as specified in chip config)
-        ms.saturating_mul(self.aon_clk_freq).saturating_div(1000)
+        self.aon_clk_freq
+            .map(|freq| ms.saturating_mul(freq).saturating_div(1000))
+            .ok_or(ErrorCode::FAIL)
     }
 
     /// Convert clock cycles to miliseconds
-    fn cycles_to_ms(&self, ms: u32) -> u32 {
+    ///
+    /// Returns Ok(ms) if aon_clk_freq has been set via set_clk_freq,
+    /// otherwise returns Err(ErrorCode::FAIL).
+    fn cycles_to_ms(&self, cycles: u32) -> Result<u32, ErrorCode> {
         // 250kHZ CW310 or 125kHz Verilator (as specified in chip config)
-        ms.saturating_mul(1000).saturating_div(self.aon_clk_freq)
+        self.aon_clk_freq
+            .map(|freq| cycles.saturating_mul(1000).saturating_div(freq))
+            .ok_or(ErrorCode::FAIL)
     }
 
     /// Function for handling interrupts related to wakeup and watchdog barks.
@@ -297,7 +320,6 @@ pub mod tests {
         unsafe {
             WAKEUP_CALLED = true;
         }
-        debug!("Wakeup callback!!!");
     }
 
     fn bark_callback() {
@@ -331,7 +353,10 @@ pub mod tests {
                         BARK_CALLED = false;
                     }
                     self.aon_timer.reset_wdog();
-                    self.aon_timer.set_wdog_bark_thresh_ms(99);
+                    let _ = self.aon_timer.set_wdog_bark_thresh_ms(99);
+                    // Bite threshold must be set here when not using test ROM,
+                    // otherwise the chip will reset when the count starts.
+                    let _ = self.aon_timer.set_wdog_bite_thresh_ms(1000);
                     self.aon_timer.wdog_start_count(true);
                     self.start_alarm(100);
                 }
@@ -341,7 +366,10 @@ pub mod tests {
                     }
                     debug!("Set bark interval at 110ms and see that we do NOT get the bark before 100ms ");
                     self.aon_timer.reset_wdog();
-                    self.aon_timer.set_wdog_bark_thresh_ms(110);
+                    let _ = self.aon_timer.set_wdog_bark_thresh_ms(110);
+                    // Bite threshold must be set here when not using test ROM,
+                    // otherwise the chip will reset when the count starts.
+                    let _ = self.aon_timer.set_wdog_bite_thresh_ms(1000);
                     unsafe {
                         BARK_CALLED = false;
                     }
@@ -354,7 +382,7 @@ pub mod tests {
                     debug!("Cleanup wdog bark settings ");
                     self.aon_timer.reset_wdog();
                     self.aon_timer.register_watchdog_bark_callback(None);
-                    self.aon_timer.set_wdog_bark_thresh_ms(500);
+                    let _ = self.aon_timer.set_wdog_bark_thresh_ms(500);
                     debug!(
                         "Set wakeup interval at 90 ms and see that we get the wakeup before 100ms "
                     );
@@ -431,8 +459,8 @@ impl<'a> platform::watchdog::WatchDog for AonTimer<'a> {
         self.reset_wdog();
 
         // 2. Set thresholds.
-        self.set_wdog_bark_thresh_ms(500);
-        self.set_wdog_bite_thresh_ms(1000);
+        let _ = self.set_wdog_bark_thresh_ms(500);
+        let _ = self.set_wdog_bite_thresh_ms(1000);
 
         // 3. Commence guard duty and don't count it in sleep.
         self.wdog_start_count(false);

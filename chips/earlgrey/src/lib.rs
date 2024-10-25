@@ -18,6 +18,7 @@ mod interrupts;
 
 pub mod aes;
 pub mod alert_handler;
+pub mod aon_timer;
 pub mod attestation;
 pub mod chip;
 pub mod clkmgr;
@@ -35,6 +36,7 @@ pub mod plic;
 pub mod pwrmgr;
 pub mod registers;
 pub mod rstmgr;
+pub mod rv_core_ibex;
 pub mod spi_host;
 pub mod sram_ret;
 pub mod uart;

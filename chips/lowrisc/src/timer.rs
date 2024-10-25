@@ -292,7 +292,7 @@ impl<'a> time::Alarm<'a> for RvTimer<'a> {
 
     fn set_alarm(&self, reference: Self::Ticks, dt: Self::Ticks) {
         self.isr_enable();
-        self.mtimer.set_alarm(reference, dt)
+        self.mtimer.set_alarm(reference, dt);
     }
 
     fn get_alarm(&self) -> Self::Ticks {
