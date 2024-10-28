@@ -21,6 +21,7 @@ pub mod pattgen;
 pub mod pwrmgr;
 pub mod registers;
 pub mod rsa;
+pub mod rv_core_ibex;
 pub mod spi_host;
 pub mod sysrst_ctrl;
 pub mod timer;

@@ -19,16 +19,18 @@ use {core::num::NonZeroU32, kernel::utilities::helpers::create_non_zero_u32};
 
 use crate::alert_handler::{AlertClass, LocalAlertFlags};
 use crate::alert_handler::{AlertFlags, AlertHandler};
+use crate::aon_timer::AON_TIMER;
 use crate::chip_config::EarlGreyConfig;
 use crate::interrupts;
 use crate::pinmux_config::EarlGreyPinmuxConfig;
 use crate::plic::Plic;
 use crate::plic::PLIC;
 use crate::registers::top_earlgrey::AlertId;
+use crate::registers::top_earlgrey::RV_TIMER_BASE_ADDR;
 #[cfg(not(feature = "qemu"))]
 use crate::registers::top_earlgrey::SYSRST_CTRL_AON_BASE_ADDR;
-use crate::registers::top_earlgrey::{self, RV_TIMER_BASE_ADDR};
 use crate::rstmgr::RstMgr;
+use crate::rv_core_ibex::{IBEX_EXTERNAL_NMI_MCAUSE, RV_CORE_IBEX};
 
 pub struct EarlGrey<
     'a,
@@ -64,7 +66,7 @@ pub struct EarlGreyDefaultPeripherals<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyP
     pub spi_host1: lowrisc::spi_host::SpiHost<'a>,
     pub flash_ctrl: crate::flash_ctrl::FlashCtrl<'a>,
     pub rng: lowrisc::csrng::CsRng<'a>,
-    pub watchdog: lowrisc::aon_timer::AonTimer<'a>,
+    pub watchdog: &'a lowrisc::aon_timer::AonTimer<'static>,
     #[cfg(not(feature = "qemu"))]
     pub sysreset: lowrisc::sysrst_ctrl::SysRstCtrl<'a>,
     pub timer: RvTimer<'static>,
@@ -78,9 +80,10 @@ pub struct EarlGreyDefaultPeripherals<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyP
 impl<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig>
     EarlGreyDefaultPeripherals<'a, CFG, PINMUX>
 {
-    pub fn new(
+    pub unsafe fn new(
         flash_memory_protection_configuration: crate::flash_ctrl::MemoryProtectionConfiguration,
     ) -> Self {
+        AON_TIMER.set_clk_freq(CFG::AON_TIMER_FREQ);
         Self {
             #[cfg(not(feature = "qemu"))]
             sram_ret: crate::sram_ret::SramCtrl::new(),
@@ -104,10 +107,7 @@ impl<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig>
             ),
             flash_ctrl: crate::flash_ctrl::FlashCtrl::new(flash_memory_protection_configuration),
             rng: lowrisc::csrng::CsRng::new(crate::csrng::CSRNG_BASE),
-            watchdog: lowrisc::aon_timer::AonTimer::new(
-                top_earlgrey::AON_TIMER_AON_BASE_ADDR,
-                CFG::AON_TIMER_FREQ,
-            ),
+            watchdog: &*addr_of!(AON_TIMER),
             #[cfg(not(feature = "qemu"))]
             sysreset: lowrisc::sysrst_ctrl::SysRstCtrl::new(SYSRST_CTRL_AON_BASE_ADDR),
             timer: RvTimer::new(
@@ -548,7 +548,16 @@ unsafe fn handle_interrupt(intr: mcause::Interrupt) {
         }
 
         mcause::Interrupt::Unknown => {
-            panic!("interrupt of unknown cause");
+            match CSR.mcause.get() {
+                // Both external NMI sourcess for Earl Grey are from the AON
+                // timer, and in the production ROM in upstream OpenTitan's
+                // rom.c, only the watchdog NMI is enabled.
+                IBEX_EXTERNAL_NMI_MCAUSE => {
+                    AON_TIMER.handle_interrupt();
+                    RV_CORE_IBEX.clear_wdog_nmi();
+                }
+                _ => panic!("interrupt of unknown cause"),
+            }
         }
     }
 }
