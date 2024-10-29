@@ -80,6 +80,12 @@ qemu-app-gdb : $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/$(PLATFORM).elf
 fpga: CARGO_FLAGS_TOCK += $(FPGA_FLAGS)
 fpga: $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/$(PLATFORM).bin
 
+.PHONY: fpga-app
+fpga-app: CARGO_FLAGS_TOCK += $(FPGA_FLAGS)
+fpga-app: $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/$(PLATFORM).elf
+	$(RISC_PREFIX)-objcopy --update-section .apps=$(APP) $^ $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/$(PLATFORM)-app.elf
+	$(RISC_PREFIX)-objcopy --output-target=binary $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/$(PLATFORM)-app.elf $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/$(PLATFORM)-app.bin
+
 fpga-rom-only:
 	$(Q)$(MAKE) -C ../$(PLATFORM)-rom-only fpga
 
