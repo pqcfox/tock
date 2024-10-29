@@ -52,8 +52,13 @@ jobs:
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: 'zerorisc/opentitan'
+          ssh-key: ${{ secrets.OPENTITAN_DEPLOY_KEY }}
+          path: opentitan
       - name:      ci-job-clippy
-        run:  make ci-job-clippy
+        run:  REPO_TOP=$(realpath opentitan) make ci-job-clippy
 
   ci-build:
     strategy:
@@ -64,10 +69,15 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: 'zerorisc/opentitan'
+          ssh-key: ${{ secrets.OPENTITAN_DEPLOY_KEY }}
+          path: opentitan
       - name:      ci-job-ot-syntax
-        run:  make ci-job-ot-syntax
+        run:  REPO_TOP=$(realpath opentitan) make ci-job-ot-syntax
       - name:      ci-job-ot-compilation
-        run:  make ci-job-ot-compilation
+        run:  REPO_TOP=$(realpath opentitan) make ci-job-ot-compilation
       - name:      ci-job-ot-collect-artifacts
         run:  make ci-job-ot-collect-artifacts
       - name: upload-build-artifacts
@@ -92,8 +102,13 @@ jobs:
         run: |
           sudo apt install meson
       - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: 'zerorisc/opentitan'
+          ssh-key: ${{ secrets.OPENTITAN_DEPLOY_KEY }}
+          path: opentitan
       - name:      Run kernel driver tests in QEMU (ci-job-qemu)
-        run:  make ci-job-qemu
+        run:  REPO_TOP=$(realpath opentitan) make ci-job-qemu
 
   ci-license-comatibility-check:
     strategy:

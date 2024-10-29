@@ -18,4 +18,4 @@ tickv = { path = "../../libraries/tickv" }
 capsules-core = { path = "../core" }
 
 [features]
-test_resetmanager_opentitan = []
+test_resetmanager = []

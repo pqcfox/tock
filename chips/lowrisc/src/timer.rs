@@ -247,9 +247,17 @@ impl<'a> RvTimer<'a> {
             _ => {}
         }
 
-        test_runner
-            .write_str("Ending rv_timer pre-kernel self-test \r\n")
-            .unwrap();
+        if test_runner.is_test_failed {
+            test_runner
+                .write_str("rv_timer pre-kernel self-test FAILED\r\n")
+                .unwrap();
+        } else {
+            // For `opentitan_test`'s sake, we don't print "PASSED" here because we still have the
+            // post-setup tests to run.
+            test_runner
+                .write_str("Ending rv_timer pre-kernel self-test \r\n")
+                .unwrap();
+        }
         self.setup();
         test_runner.is_test_failed
     }
@@ -377,6 +385,7 @@ pub mod tests {
                         "Now time is: {} and no next alarm will be triggered",
                         ms_time
                     );
+                    debug!("rv_timer tests PASSED")
                 }
                 _ => panic!("We shoud have stopped alarms by now !"),
             }
