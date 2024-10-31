@@ -14,6 +14,8 @@ rv32i = { path = "../../arch/rv32i" }
 kernel = { path = "../../kernel" }
 
 [features]
+# Enable when linking with OpenTitan FFI dependencies
+ffi = []
 test_alerthandler = []
 test_sysrst_ctrl = []
 test_sram_ret = []
