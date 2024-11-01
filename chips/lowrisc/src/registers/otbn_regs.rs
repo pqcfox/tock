@@ -66,7 +66,14 @@ register_bitfields![u32,
         SOFTWARE_ERRS_FATAL OFFSET(0) NUMBITS(1) [],
     ],
     pub(crate) STATUS [
-        STATUS OFFSET(0) NUMBITS(8) [],
+        STATUS OFFSET(0) NUMBITS(8) [
+            IDLE = 0x00,
+            BUSY_EXECUTE = 0x01,
+            BUSY_SEC_WIPE_DMEM = 0x02,
+            BUSY_SEC_WIPE_IMEM = 0x03,
+            BUSY_SEC_WIPE_INT = 0x04,
+            LOCKED = 0xFF,
+        ],
     ],
     pub(crate) ERR_BITS [
         BAD_DATA_ADDR OFFSET(0) NUMBITS(1) [],
