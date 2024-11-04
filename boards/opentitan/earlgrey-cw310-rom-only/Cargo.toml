@@ -65,6 +65,9 @@ unlock_dice_info_pages = ["earlgrey/unlock_dice_info_pages"]
 # validation execution environment.
 sival = ["earlgrey/sival"]
 
+# Enable when linking with OpenTitan FFI dependencies
+ffi = []
+
 # This is used to indicate that we should include tests that only pass on
 # hardware.
 hardware_tests = []
