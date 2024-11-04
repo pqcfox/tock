@@ -10,7 +10,7 @@ impl parse::Component for Systick {
     fn ty(&self) -> Result<parse::proc_macro2::TokenStream, parse::Error> {
         Ok(quote::quote!(
             kernel::platform::scheduler_timer::VirtualSchedulerTimer<
-                capsules_core::virtualizers::virtual_alarm::VirtualMuxAlarm<'static, earlgrey::timer::RvTimer<'static, ChipConfig>>,
+                capsules_core::virtualizers::virtual_alarm::VirtualMuxAlarm<'static, lowrisc::timer::RvTimer<'static>>,
             >
         ))
     }

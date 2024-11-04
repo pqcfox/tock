@@ -21,7 +21,7 @@ impl parse::Ident for RvTimer {
 
 impl parse::Component for RvTimer {
     fn ty(&self) -> Result<proc_macro2::TokenStream, parse::Error> {
-        Ok(quote::quote!(earlgrey::timer::RvTimer<'static, ChipConfig>))
+        Ok(quote::quote!(lowrisc::timer::RvTimer<'static>))
     }
 
     fn after_init(&self) -> Option<parse::proc_macro2::TokenStream> {

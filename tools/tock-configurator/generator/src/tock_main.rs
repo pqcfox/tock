@@ -147,18 +147,18 @@ impl<C: Chip + 'static> TockMain<C> {
             #[cfg(feature = "test_alerthandler")]
             unsafe fn test_alerthandler(
                 peripherals: &'static earlgrey::chip::EarlGreyDefaultPeripherals<ChipConfig, crate::pinmux_layout::BoardPinmuxLayout>,
-                mux_alarm: &'static capsules_core::virtualizers::virtual_alarm::MuxAlarm<'static, earlgrey::timer::RvTimer<ChipConfig>>,
+                mux_alarm: &'static capsules_core::virtualizers::virtual_alarm::MuxAlarm<'static, lowrisc::timer::RvTimer>,
             ) {
                 kernel::debug!("Starting AlertHandler test...");
                 // an Alarm is needed for some of the tests as alert handling works using interrupts
                 let virtual_alarm_tests = kernel::static_init!(
-                    capsules_core::virtualizers::virtual_alarm::VirtualMuxAlarm<'static, earlgrey::timer::RvTimer<ChipConfig>>,
+                    capsules_core::virtualizers::virtual_alarm::VirtualMuxAlarm<'static, lowrisc::timer::RvTimer>,
                     capsules_core::virtualizers::virtual_alarm::VirtualMuxAlarm::new(mux_alarm)
                 );
                 virtual_alarm_tests.setup();
 
                 let alert_handler_tests = kernel::static_init!(
-                    earlgrey::alert_handler::tests::Tests<capsules_core::virtualizers::virtual_alarm::VirtualMuxAlarm<'static, earlgrey::timer::RvTimer<ChipConfig>>>,
+                    earlgrey::alert_handler::tests::Tests<capsules_core::virtualizers::virtual_alarm::VirtualMuxAlarm<'static, lowrisc::timer::RvTimer>>,
                     earlgrey::alert_handler::tests::Tests::new(
                         &peripherals.alert_handler,
                         virtual_alarm_tests,
@@ -175,19 +175,19 @@ impl<C: Chip + 'static> TockMain<C> {
             #[cfg(feature = "test_aon_timer")]
             unsafe fn test_aon_timer(
                 peripherals: &'static EarlGreyDefaultPeripherals<ChipConfig, BoardPinmuxLayout>,
-                mux_alarm: &'static MuxAlarm<'static, RvTimer<ChipConfig>>,
+                mux_alarm: &'static MuxAlarm<'static, RvTimer>,
             ) {
                 debug!("Start aon_timer kernel runtime tests!");
 
                 // an Alarm is needed for some of the tests as alert handling works using interrupts
                 let virtual_alarm_tests = static_init!(
-                    VirtualMuxAlarm<'static, earlgrey::timer::RvTimer<ChipConfig>>,
+                    VirtualMuxAlarm<'static, lowrisc::timer::RvTimer>,
                     VirtualMuxAlarm::new(mux_alarm)
                 );
                 virtual_alarm_tests.setup();
 
                 let aon_timer_tests = static_init!(
-                    aon_timer::tests::Tests<VirtualMuxAlarm<'static, RvTimer<ChipConfig>>>,
+                    aon_timer::tests::Tests<VirtualMuxAlarm<'static, RvTimer>>,
                     aon_timer::tests::Tests::new(&peripherals.watchdog, virtual_alarm_tests,)
                 );
 
@@ -328,7 +328,7 @@ impl<C: Chip + 'static> TockMain<C> {
             // Test access to alarm
             #[cfg(test)]
             static mut ALARM: Option<
-                &'static capsules_core::virtualizers::virtual_alarm::MuxAlarm<'static, earlgrey::timer::RvTimer<'static, ChipConfig>>,
+                &'static capsules_core::virtualizers::virtual_alarm::MuxAlarm<'static, lowrisc::timer::RvTimer<'static >>,
             > = None;
             // Test access to TicKV
             #[cfg(test)]
