@@ -29,7 +29,7 @@ register_structs! {
         (0x0C => alert_test: WriteOnly<u32, ALERT_TEST::Register>),
         (0x10 => cmd: ReadWrite<u32, CMD::Register>),
         (0x14 => ctrl: ReadWrite<u32, CTRL::Register>),
-        (0x18 => status: ReadOnly<u32, STATUS::Register>),
+        (0x18 => pub(crate) status: ReadOnly<u32, STATUS::Register>),
         (0x1C => err_bits: ReadOnly<u32, ERR_BITS::Register>),
         (0x20 => fatal_alert_cause: ReadOnly<u32, FATAL_ALERT_CAUSE::Register>),
         (0x24 => insn_cnt: ReadWrite<u32>),
@@ -60,7 +60,7 @@ register_bitfields![u32,
     CTRL [
         SOFTWARE_ERRS_FATAL OFFSET(0) NUMBITS(1) [],
     ],
-    STATUS [
+    pub(crate) STATUS [
         STATUS OFFSET(0) NUMBITS(8) [
             IDLE = 0x00,
             BUSY_EXECUTE = 0x01,

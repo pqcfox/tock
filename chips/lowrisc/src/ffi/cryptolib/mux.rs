@@ -6,23 +6,28 @@
 // Confidential information of zeroRISC Inc. All rights reserved.
 
 use crate::ffi::cryptolib::ecc::ecdsa::EcdsaVerifyP256Job;
-use crate::registers::otbn_regs::{OtbnRegisters, STATUS};
+use crate::otbn::{OtbnRegisters, STATUS};
 use capsules_core::virtualizers::timeout_mux::{Job, TimeoutMux};
 use kernel::hil::time::Alarm;
+use kernel::hil::time::Ticks64;
 use kernel::utilities::registers::interfaces::Readable;
 use kernel::utilities::StaticRef;
 use kernel::ErrorCode;
 
+/// Check frequency for `capsules_core::virtualizers::TimeoutMux` for OTBN
+/// scheduling. 1 tick_freq = 10000 cycles at 100 MHz = 100 μs.
+pub const OTBN_TIMEOUT_MUX_CHECK_FREQ: kernel::hil::time::Ticks64 = Ticks64::new(2);
+
 /// Multiplexer over cryptolib asynchronous cryptolib operations.
 pub struct CryptolibMux<'a, A: Alarm<'a>> {
     otbn_registers: StaticRef<OtbnRegisters>,
-    otbn_mux: TimeoutMux<'a, A, OtbnOperation<'a, A>>,
+    otbn_mux: &'a TimeoutMux<'a, A, OtbnOperation<'a, A>>,
 }
 
 impl<'a, A: Alarm<'a>> CryptolibMux<'a, A> {
     pub fn new(
         otbn_registers: StaticRef<OtbnRegisters>,
-        otbn_mux: TimeoutMux<'a, A, OtbnOperation<'a, A>>,
+        otbn_mux: &'a TimeoutMux<'a, A, OtbnOperation<'a, A>>,
     ) -> Self {
         CryptolibMux {
             otbn_registers,

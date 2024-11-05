@@ -5,8 +5,7 @@
 // Copyright zeroRISC Inc.
 // Confidential information of zeroRISC Inc. All rights reserved.
 
-use core::ptr::from_ref;
-
+use core::ptr::addr_of;
 use cryptolib_integrity::integrity_unblinded_checksum;
 
 /// Trait to avoid name collisions between checksum functions on
@@ -14,6 +13,9 @@ use cryptolib_integrity::integrity_unblinded_checksum;
 pub trait IntegrityUnblindedChecksum {
     /// Convert the bindgen type into a unified type.
     fn as_unified(&self) -> cryptolib_integrity::otcrypto_unblinded_key;
+
+    /// Set the checksum of the original type to the calculated value.
+    fn set_checksum(&mut self, checksum: u32);
 
     /// Computes and populates the checksum on an `otcrypto_unblinded_key`.
     ///
@@ -24,7 +26,7 @@ pub trait IntegrityUnblindedChecksum {
     /// `ceil_div(self.key_length / 4)` 32-bit words long.
     unsafe fn populate_checksum(&mut self) {
         let unified = self.as_unified();
-        integrity_unblinded_checksum(from_ref(&unified));
+        self.set_checksum(integrity_unblinded_checksum(addr_of!(unified)));
     }
 }
 
@@ -42,6 +44,10 @@ macro_rules! integrity_unblinded_checksum {
                     key: self.key,
                     checksum: self.checksum,
                 }
+            }
+
+            fn set_checksum(&mut self, checksum: u32) {
+                self.checksum = checksum;
             }
         }
     };

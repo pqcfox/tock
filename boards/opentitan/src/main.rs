@@ -65,7 +65,7 @@ use kernel::{create_capability, debug, static_init};
 #[cfg(feature = "ffi")]
 use lowrisc::ffi::cryptolib::{
     ecc::ecdsa::OtCryptoEcdsaP256,
-    mux::{CryptolibMux, OtbnOperation},
+    mux::{CryptolibMux, OtbnOperation, OTBN_TIMEOUT_MUX_CHECK_FREQ},
     timeouts::ECDSA_P256_VERIFY_TIMEOUT,
 };
 #[cfg(not(feature = "qemu"))]
@@ -321,7 +321,12 @@ struct EarlGrey {
         >,
     >,
     #[cfg(feature = "ffi")]
-    ecdsa_p256: AsymmetricCrypto<'static, OtCryptoEcdsaP256<'a>>,
+    ecdsa_p256: &'static capsules_extra::public_key_crypto::asymmetric_crypto::AsymmetricCrypto<
+        'static,
+        { P256::HASH_LEN },
+        { P256::SIG_LEN },
+        OtCryptoEcdsaP256<'static, RvTimer<'static>>,
+    >,
 }
 
 /// Mapping of integer syscalls to objects that implement syscalls.
@@ -1230,7 +1235,8 @@ unsafe fn setup() -> (
         MuxTimer::new(virtual_alarm_user)
     );
     hil::time::Alarm::set_alarm_client(virtual_alarm_user, mux_timer);
-    let otbn_timer = static_init!(VirtualTimer<'static, RvTimer>, VirtualTimer::new(mux_timer),);
+    let otbn_timer: &'static VirtualTimer<'static, RvTimer> =
+        static_init!(VirtualTimer<'static, RvTimer>, VirtualTimer::new(mux_timer),);
     otbn_timer.setup();
 
     // Asymmetric crypto
@@ -1238,32 +1244,38 @@ unsafe fn setup() -> (
     let ecdsa_p256 = {
         let timeout_mux = static_init!(
             TimeoutMux<'static, RvTimer, OtbnOperation<'static, RvTimer>>,
-            TimeoutMux::new(&otbn_timer),
+            TimeoutMux::new(&otbn_timer, OTBN_TIMEOUT_MUX_CHECK_FREQ),
         );
-        otbn_timer.set_timer_client(timeout_mux);
+        kernel::hil::time::Timer::set_timer_client(otbn_timer, timeout_mux);
+        timeout_mux.setup();
         let cryptolib_mux = static_init!(
             CryptolibMux<'static, RvTimer>,
-            CryptolibMux::new(earlgrey::otbn::OTBN_BASE, &timeout_mux),
+            CryptolibMux::new(earlgrey::otbn::OTBN_BASE, timeout_mux),
         );
 
         // ECDSA P-256
-        let cryptolib_ecdsa_p256 = static_init!(
-            OtCryptoEcdsaP256<'a, RvTimer>,
-            OtCryptoEcdsaP256::new(cryptolib_mux, ECDSA_P256_VERIFY_TIMEOUT),
+        let cryptolib_ecdsa_p256: &'static OtCryptoEcdsaP256<'static, RvTimer<'static>> = static_init!(
+            OtCryptoEcdsaP256<'static, RvTimer<'static>>,
+            OtCryptoEcdsaP256::new(cryptolib_mux, ECDSA_P256_VERIFY_TIMEOUT.into()),
         );
-        cryptolib_ecdsa_p256.setup();
+        cryptolib_ecdsa_p256.set_self_ref();
         let hash_buf: &'static mut [u8; P256::HASH_LEN] =
             static_init!([u8; P256::HASH_LEN], [0u8; P256::HASH_LEN],);
         let signature_buf: &'static mut [u8; P256::SIG_LEN] =
             static_init!([u8; P256::SIG_LEN], [0u8; P256::SIG_LEN],);
-        let ecdsa_p256 = static_init!(
-            AsymmetricCrypto<
+        let ecdsa_p256: &'static capsules_extra::public_key_crypto::asymmetric_crypto::AsymmetricCrypto<
+                    'static,
+                { P256::HASH_LEN },
+                { P256::SIG_LEN },
+                OtCryptoEcdsaP256<'static, RvTimer>,
+                > = static_init!(
+            capsules_extra::public_key_crypto::asymmetric_crypto::AsymmetricCrypto<
                 'static,
-                P256::HASH_LEN,
-                P256::SIG_LEN,
+            { P256::HASH_LEN },
+            { P256::SIG_LEN },
                 OtCryptoEcdsaP256<'static, RvTimer>,
             >,
-            AsymmetricCrypto::new(
+            capsules_extra::public_key_crypto::asymmetric_crypto::AsymmetricCrypto::new(
                 &cryptolib_ecdsa_p256,
                 hash_buf,
                 signature_buf,
@@ -1273,7 +1285,38 @@ unsafe fn setup() -> (
                 ),
             ),
         );
-        cryptolib_ecdsa_p256.set_verify_client(ecdsa_p256);
+        // This must be set before the test block, not after, otherwise it
+        // interferes with the test.
+        kernel::hil::public_key_crypto::ecc::EcdsaP256::set_verify_client(
+            cryptolib_ecdsa_p256,
+            ecdsa_p256,
+        );
+        #[cfg(feature = "test_cryptolib")]
+        {
+            let hash_buf: &'static mut [u8; P256::HASH_LEN] =
+                static_init!([u8; P256::HASH_LEN], [0u8; P256::HASH_LEN],);
+            let signature_buf: &'static mut [u8; P256::SIG_LEN] =
+                static_init!([u8; P256::SIG_LEN], [0u8; P256::SIG_LEN],);
+            let hash_buf_2: &'static mut [u8; P256::HASH_LEN] =
+                static_init!([u8; P256::HASH_LEN], [0u8; P256::HASH_LEN],);
+            let signature_buf_2: &'static mut [u8; P256::SIG_LEN] =
+                static_init!([u8; P256::SIG_LEN], [0u8; P256::SIG_LEN],);
+            let ecdsa_p256_test_client: &'static lowrisc::ffi::cryptolib::ecc::ecdsa::tests::EcdsaP256TestClient = static_init!(
+                lowrisc::ffi::cryptolib::ecc::ecdsa::tests::EcdsaP256TestClient ,
+                lowrisc::ffi::cryptolib::ecc::ecdsa::tests::EcdsaP256TestClient::new(hash_buf, signature_buf, hash_buf_2, signature_buf_2),
+            );
+            kernel::hil::public_key_crypto::ecc::EcdsaP256::set_verify_client(
+                cryptolib_ecdsa_p256,
+                ecdsa_p256_test_client,
+            );
+            let pub_key_buf: &'static mut [u8; 2 * P256::COORD_LEN] =
+                static_init!([u8; 2 * P256::COORD_LEN], [0u8; 2 * P256::COORD_LEN],);
+            lowrisc::ffi::cryptolib::ecc::ecdsa::tests::test_ecdsa_p256_verify(
+                cryptolib_ecdsa_p256,
+                ecdsa_p256_test_client,
+                pub_key_buf,
+            );
+        }
         ecdsa_p256
     };
 

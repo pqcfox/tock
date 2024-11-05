@@ -23,7 +23,7 @@ pub trait Status {
         if ok {
             Ok(status)
         } else {
-            // Bits 16-31: module identifier
+            // Bits 16-30: module identifier
             let mod_ident = (status >> 16) & 0x7FFF;
             // Bits 5-15: line number
             let line_num = (status >> 5) & 0x7FF;
@@ -107,6 +107,7 @@ impl StatusAsBoolError {
 }
 
 /// A decoded OpenTitan error status.
+#[derive(Debug)]
 pub struct OpenTitanError {
     /// Module identifier
     pub mod_identifier: [char; 3],
@@ -160,6 +161,7 @@ impl From<OpenTitanError> for Result<(), ErrorCode> {
 /// OpenTitan status codes. See
 /// opentitan:sw/device/lib/base/internal/absl_status.h for a description of
 /// each status code.
+#[derive(Debug)]
 pub enum StatusCode {
     Ok,
     Cancelled,

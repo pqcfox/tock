@@ -36,6 +36,7 @@ test_otp = ["lowrisc/test_otp"]
 test_pattgen = ["lowrisc/test_pattgen"]
 test_flash_ctrl = ["earlgrey/test_flash_ctrl"]
 test_clkmgr = ["earlgrey/clkmgr_tests"]
+test_cryptolib = ["ffi", "lowrisc/test_cryptolib"]
 
 # OpenTitan SoC design can be synthesized or compiled for different targets. A
 # target can be a specific FPGA board, an ASIC technology, or a simulation tool.

@@ -15,10 +15,10 @@ use cryptolib_ecc::{
     otcrypto_const_word32_buf_t as OtCryptoConstWord32Buf,
     otcrypto_ecc_curve_t as OtCryptoEccCurve,
     otcrypto_ecc_curve_type_kOtcryptoEccCurveTypeNistP256 as CURVE_TYPE_P256,
-    otcrypto_ecc_key_mode_kOtcryptoEccKeyModeEcdsa as KEY_MODE_ECDSA,
     otcrypto_ecdsa_verify_async_finalize, otcrypto_ecdsa_verify_async_start,
     otcrypto_hash_digest_t as OtCryptoHashDigest,
     otcrypto_hash_mode_kOtcryptoHashModeSha256 as HASH_MODE_SHA256,
+    otcrypto_key_mode_kOtcryptoKeyModeEcdsa as KEY_MODE_ECDSA,
     otcrypto_unblinded_key_t as OtCryptoUnblindedKey,
 };
 use kernel::hil::public_key_crypto::ecc::EcdsaP256;
@@ -40,7 +40,7 @@ pub const WDR_SIZE: usize = 32;
 // TODO: when #![feature(generic_const_exprs)] is stabilized, we can
 // make the curve a generic parameter to this type.
 pub struct OtCryptoEcdsaP256<'a, A: Alarm<'a>> {
-    cryptolib_mux: CryptolibMux<'a, A>,
+    cryptolib_mux: &'a CryptolibMux<'a, A>,
     verify_client: OptionalCell<&'a dyn ClientVerify<{ P256::HASH_LEN }, { P256::SIG_LEN }>>,
     /// Public key [x | y]
     public_key_buf: TakeCell<'static, [u8]>,
@@ -52,7 +52,7 @@ pub struct OtCryptoEcdsaP256<'a, A: Alarm<'a>> {
 
 impl<'a, A: Alarm<'a>> OtCryptoEcdsaP256<'a, A> {
     pub fn new(
-        cryptolib_mux: CryptolibMux<'a, A>,
+        cryptolib_mux: &'a CryptolibMux<'a, A>,
         ecdsa_verify_p256_timeout: A::Ticks,
     ) -> OtCryptoEcdsaP256<'a, A> {
         OtCryptoEcdsaP256 {
@@ -86,7 +86,7 @@ impl<'a, A: Alarm<'a>> OtCryptoEcdsaP256<'a, A> {
     /// This is a workaround so that `submit_otbn_job` understands the correct
     /// "outlives" relationship between `self` and the `CryptolibMux`, which the
     /// lifetimes on `self` in the HIL traits are too weak to communicate.
-    pub fn setup(&'a self) {
+    pub fn set_self_ref(&'a self) {
         self.self_reference.set(self);
     }
 }
@@ -118,21 +118,20 @@ impl<'a, A: Alarm<'a>> OtbnJob<'a, A> for EcdsaVerifyP256Job<'a, A> {
         unsafe {
             let mut public_key = OtCryptoUnblindedKey {
                 key_mode: KEY_MODE_ECDSA,
-                key_length: P256::COORD_LEN * 2,
+                key_length: self.public_key.len() * size_of::<u32>(),
                 key: self.public_key.as_mut_ptr(),
-                checksum: 0, // placeholder value
+                checksum: 0xFFFF, // placeholder value
             };
             let message_digest = OtCryptoHashDigest {
                 mode: HASH_MODE_SHA256,
                 data: self.hash.as_mut_ptr(),
                 // Hash length in 32-bit words
-                len: self.hash.len() / size_of::<u32>(),
+                len: self.hash.len(),
             };
             let signature = OtCryptoConstWord32Buf {
                 data: self.signature.as_ptr(),
-                len: self.signature.len() / size_of::<u32>(),
+                len: self.signature.len(),
             };
-
             public_key.populate_checksum();
             let elliptic_curve = OtCryptoEccCurve {
                 curve_type: CURVE_TYPE_P256,
@@ -181,7 +180,7 @@ impl<'a, A: Alarm<'a>> OtbnJob<'a, A> for EcdsaVerifyP256Job<'a, A> {
                     unsafe {
                         let signature = OtCryptoConstWord32Buf {
                             data: self.signature.as_ptr(),
-                            len: self.signature.len() / size_of::<u32>(),
+                            len: self.signature.len(),
                         };
                         let elliptic_curve = OtCryptoEccCurve {
                             curve_type: CURVE_TYPE_P256,
@@ -193,9 +192,17 @@ impl<'a, A: Alarm<'a>> OtbnJob<'a, A> for EcdsaVerifyP256Job<'a, A> {
                             signature,
                             addr_of_mut!(verification_result),
                         )
-                        .decode_to_bool()
+                        .check()
                     }
-                    .map_err(|e| e.to_tock_err()),
+                    .map_err(|e| e.to_tock_err())
+                    .and_then(|()| {
+                        // No error; check the verification result.
+                        HardenedBool::from(verification_result)
+                            .try_into()
+                            // This branch occurs if the `HardendedBool` was an
+                            // invalid value.
+                            .map_err(|_| ErrorCode::FAIL)
+                    }),
                     hash,
                     signature,
                 );
@@ -370,5 +377,169 @@ fn memcpy_u8_u32(src: &[u8], dest: &mut [u32]) {
             *src.get(i + 3).unwrap_or(&0),
         ]);
         i += 4;
+    }
+}
+
+/// Tests for ECDSA with cryptolib
+#[cfg(feature = "test_cryptolib")]
+pub mod tests {
+    use super::*;
+    use core::cell::Cell;
+
+    // Project wycheproof ECDSA secp256r1 SHA-256, test case #1
+    // (https://github.com/C2SP/wycheproof/blob/master/testvectors/ecdsa_secp256r1_sha256_test.json#L32)
+
+    /// Public value `X` from the test vector (little-endian).
+    const X: [u8; 32] = [
+        0x38, 0x28, 0x73, 0x6c, 0xdf, 0xc4, 0xc8, 0x69, 0x60, 0x8, 0xf7, 0x19, 0x99, 0x26, 0x3,
+        0x29, 0xad, 0x8b, 0x12, 0x28, 0x78, 0x46, 0xfe, 0xdc, 0xed, 0xe3, 0xba, 0x12, 0x5, 0xb1,
+        0x27, 0x29,
+    ];
+    /// Public value `Y` from the test vector (little-endian).
+    const Y: [u8; 32] = [
+        0x3e, 0x51, 0x41, 0x73, 0x4e, 0x97, 0x1a, 0x8d, 0x55, 0x1, 0x50, 0x68, 0xd9, 0xb3, 0x66,
+        0x67, 0x60, 0xf4, 0x60, 0x8a, 0x49, 0xb1, 0x1f, 0x92, 0xe5, 0x0, 0xac, 0xea, 0x64, 0x79,
+        0x78, 0xc7,
+    ];
+
+    /// SHA-256 hash of the hex byte string `313233343030`, from the test vector.
+    const DIGEST: [u8; 32] = [
+        0xbb, 0x5a, 0x52, 0xf4, 0x2f, 0x9c, 0x92, 0x61, 0xed, 0x43, 0x61, 0xf5, 0x94, 0x22, 0xa1,
+        0xe3, 0x00, 0x36, 0xe7, 0xc3, 0x2b, 0x27, 0x0c, 0x88, 0x07, 0xa4, 0x19, 0xfe, 0xca, 0x60,
+        0x50, 0x23,
+    ];
+
+    /// Signuature value `R`, decoded from the DER sequence in the test vector (little-endian).
+    const R: [u8; 32] = [
+        0x18, 0x2e, 0x5c, 0xbd, 0xf9, 0x6a, 0xcc, 0xb8, 0x59, 0xe8, 0xee, 0xa1, 0x85, 0xd, 0xe5,
+        0xff, 0x6e, 0x43, 0xa, 0x19, 0xd1, 0xd9, 0xa6, 0x80, 0xec, 0xd5, 0x94, 0x6b, 0xbe, 0xa8,
+        0xa3, 0x2b,
+    ];
+    /// Signuature value `S`, decoded from the DER sequence in the test vector (little-endian).
+    const S: [u8; 32] = [
+        0x76, 0xdd, 0xfa, 0xe6, 0x79, 0x7f, 0xa6, 0x77, 0x7c, 0xaa, 0xb9, 0xfa, 0x10, 0xe7, 0x5f,
+        0x52, 0xe7, 0xa, 0x4e, 0x6c, 0xeb, 0x11, 0x7b, 0x3c, 0x5b, 0x2f, 0x44, 0x5d, 0x85, 0xb,
+        0xd6, 0x4c,
+    ];
+
+    pub struct EcdsaP256TestClient {
+        expected: Cell<bool>,
+        hash_buf: TakeCell<'static, [u8; P256::HASH_LEN]>,
+        sig_buf: TakeCell<'static, [u8; P256::SIG_LEN]>,
+        hash_buf_2: TakeCell<'static, [u8; P256::HASH_LEN]>,
+        sig_buf_2: TakeCell<'static, [u8; P256::SIG_LEN]>,
+    }
+
+    impl EcdsaP256TestClient {
+        pub fn new(
+            hash_buf: &'static mut [u8; P256::HASH_LEN],
+            sig_buf: &'static mut [u8; P256::SIG_LEN],
+            hash_buf_2: &'static mut [u8; P256::HASH_LEN],
+            sig_buf_2: &'static mut [u8; P256::SIG_LEN],
+        ) -> Self {
+            Self {
+                expected: Cell::new(true),
+                hash_buf: TakeCell::new(hash_buf),
+                sig_buf: TakeCell::new(sig_buf),
+                hash_buf_2: TakeCell::new(hash_buf_2),
+                sig_buf_2: TakeCell::new(sig_buf_2),
+            }
+        }
+    }
+
+    impl ClientVerify<{ P256::HASH_LEN }, { P256::SIG_LEN }> for EcdsaP256TestClient {
+        fn verification_done(
+            &self,
+            result: Result<bool, ErrorCode>,
+            _hash: &'static mut [u8; P256::HASH_LEN],
+            _signature: &'static mut [u8; P256::SIG_LEN],
+        ) {
+            // Check the verification outcome
+            assert_eq!(
+                self.expected.get(),
+                result.expect("ECDSA P-256 verification failed due to an error."),
+                "ECDSA P-256 verification failed with incorrect validation result.",
+            );
+            if self.expected.get() {
+                // Postitive test done; reset for negative test.
+                self.expected.set(false);
+                kernel::debug!("Testing invalid signature.");
+            } else {
+                // Negative test done; tests complete.
+                kernel::debug!("ECDSA P-256 verification test PASSED.");
+            }
+        }
+    }
+
+    pub fn test_ecdsa_p256_verify<'a, A: Alarm<'a>>(
+        driver: &'a OtCryptoEcdsaP256<'a, A>,
+        test_client: &'a EcdsaP256TestClient,
+        pub_key_buf: &'static mut [u8; 2 * P256::COORD_LEN],
+    ) {
+        kernel::debug!(
+            "Starting ECDSA kernel test.\n\
+             Testing valid signature."
+        );
+
+        // ** Positive test: check verification succeeds. **
+
+        let hash_buf = test_client
+            .hash_buf
+            .take()
+            .expect("Failed to take `hash_buf`");
+        let sig_buf = test_client
+            .sig_buf
+            .take()
+            .expect("Failed to take `sig_buf`");
+
+        // Set the digest value.
+        hash_buf[..].clone_from_slice(&DIGEST);
+
+        // Set the signature.
+        let len = sig_buf.len();
+        sig_buf[..len / 2].clone_from_slice(&R);
+        sig_buf[len / 2..].clone_from_slice(&S);
+
+        // Set the public key ([x | y]).
+        let len = pub_key_buf.len();
+        pub_key_buf[..len / 2].clone_from_slice(&X);
+        pub_key_buf[len / 2..].clone_from_slice(&Y);
+        driver
+            .import_public_key(pub_key_buf)
+            .expect("Failed to import public key");
+
+        // Run ECDSA.
+        driver
+            .verify(hash_buf, sig_buf)
+            .expect("ECDSA P-256 verification failed-fast with an error");
+
+        // ** Negative test: use invalid signature, check verification fails. **
+
+        let hash_buf = test_client
+            .hash_buf_2
+            .take()
+            .expect("Failed to take `hash_buf_2`");
+        let sig_buf = test_client
+            .sig_buf_2
+            .take()
+            .expect("Failed to take `sig_buf_2`");
+
+        // Set the digest value.
+        hash_buf[..].clone_from_slice(&DIGEST);
+
+        // Set the signature, changing one byte.
+        let len = sig_buf.len();
+        sig_buf[..len / 2].clone_from_slice(&R);
+        sig_buf[len / 2..].clone_from_slice(&S);
+        // Index was arbitrarily chosen.
+        sig_buf[22] = sig_buf[22].wrapping_add(1);
+
+        // Run ECDSA.
+        //
+        // At this point, both jobs are scheduled, but we do not expect the
+        // first job is complete at this time.
+        driver
+            .verify(hash_buf, sig_buf)
+            .expect("ECDSA P-256 verification failed-fast with an error");
     }
 }
