@@ -24,7 +24,7 @@
 //!
 //! Read an attestation certificate from the hardware. A data chunk
 //! equal to the size of an *entire flash page* is written to
-//! read-write Allow 1, which must have size equal to a flash
+//! read-write Allow 0, which must have size equal to a flash
 //! page. The caller is responsible for determining the certificate
 //! length (e.g. by running an x509 parser).
 //!
