@@ -1259,6 +1259,17 @@ unsafe fn setup() -> (
             OtCryptoEcdsaP256::new(cryptolib_mux, ECDSA_P256_VERIFY_TIMEOUT.into()),
         );
         cryptolib_ecdsa_p256.set_self_ref();
+        let public_key_buf: &'static mut [u8; 2 * P256::COORD_LEN] =
+            static_init!([u8; 2 * P256::COORD_LEN], [0u8; 2 * P256::COORD_LEN],);
+        // Initialize the public key buffer for ECDSA P-256 driver.
+        //
+        // PANIC: The implementation of `import_public_key` for
+        // `OtCryptoEcdsaP256` never returns `Err`.
+        kernel::hil::public_key_crypto::keys::PubKeyMut::import_public_key(
+            cryptolib_ecdsa_p256,
+            public_key_buf,
+        )
+        .unwrap();
         let hash_buf: &'static mut [u8; P256::HASH_LEN] =
             static_init!([u8; P256::HASH_LEN], [0u8; P256::HASH_LEN],);
         let signature_buf: &'static mut [u8; P256::SIG_LEN] =
