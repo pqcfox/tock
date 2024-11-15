@@ -36,6 +36,7 @@ test_otp = ["lowrisc/test_otp"]
 test_pattgen = ["lowrisc/test_pattgen"]
 test_flash_ctrl = ["earlgrey/test_flash_ctrl"]
 test_clkmgr = ["earlgrey/clkmgr_tests"]
+test_cryptolib = ["ffi", "lowrisc/test_cryptolib"]
 
 # OpenTitan SoC design can be synthesized or compiled for different targets. A
 # target can be a specific FPGA board, an ASIC technology, or a simulation tool.
@@ -65,6 +66,9 @@ unlock_dice_info_pages = ["earlgrey/unlock_dice_info_pages"]
 # This is used to indicate that we intend to use this kernel with a silicon
 # validation execution environment.
 sival = ["earlgrey/sival"]
+
+# Enable when linking with OpenTitan FFI dependencies
+ffi = []
 
 # This is used to indicate that we should include tests that only pass on
 # hardware.

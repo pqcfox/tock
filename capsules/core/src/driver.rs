@@ -52,6 +52,7 @@ pub enum NUM {
     CtapHid               = 0x40004,
     Sha                   = 0x40005,
     Aes                   = 0x40006,
+    EcdsaP256             = 0x40007,
 
     // Storage
     AppFlash              = 0x50000,

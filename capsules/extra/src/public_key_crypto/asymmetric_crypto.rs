@@ -26,11 +26,7 @@
 //! in little-endian encoding.
 //!
 //! Arguments:
-//! + The signature algorithm to use
-//!   + 0: ECDSA
-//! + Signature algorithm parameter, if applicable
-//!   + If algorithm = ECDSA, the curve type:
-//!     + 0: P-256
+//! None
 //!
 //! Read-only allow inputs:
 //! + 0: Message digest
@@ -67,25 +63,24 @@
 //! 3. Always 0
 
 use kernel::grant::{AllowRoCount, AllowRwCount, Grant, UpcallCount};
-use kernel::hil::public_key_crypto::ecc::{
-    CurveParams, EcdsaP256 as EcdsaP256Trait, EcdsaP256Client, EllipticCurve, P256,
-};
 use kernel::hil::public_key_crypto::keys::PubKeyMut;
-use kernel::hil::public_key_crypto::signature::SignatureVerify;
+use kernel::hil::public_key_crypto::signature::{ClientVerify, SignatureVerify};
 use kernel::processbuffer::ReadableProcessBuffer;
 use kernel::syscall::{CommandReturn, SyscallDriver};
 use kernel::utilities::cells::{OptionalCell, TakeCell};
 use kernel::ErrorCode;
 use kernel::ProcessId;
 
-/// The maximum digest length for any supported curve
-const HASH_LEN: usize = 32;
-/// The maximum signature length for any supported curve
-const SIG_LEN: usize = 64;
+/// ECDSA P-256 driver number
+pub const DRIVER_NUM_ECDSA_P256: usize = capsules_core::driver::NUM::EcdsaP256 as usize;
 
-pub struct AsymmetricCrypto<'a, PubKey, EcdsaP256> {
-    public_key: &'a PubKey,
-    p256_ecdsa: &'a EcdsaP256,
+pub struct AsymmetricCrypto<
+    'a,
+    const HASH_LEN: usize,
+    const SIG_LEN: usize,
+    SigVerify: PubKeyMut + SignatureVerify<'a, HASH_LEN, SIG_LEN>,
+> {
+    verifier: &'a SigVerify,
     hash_buf: TakeCell<'static, [u8; HASH_LEN]>,
     signature_buf: TakeCell<'static, [u8; SIG_LEN]>,
     grant: Grant<
@@ -97,65 +92,16 @@ pub struct AsymmetricCrypto<'a, PubKey, EcdsaP256> {
     owning_process: OptionalCell<ProcessId>,
 }
 
-// Algorithm identifiers
-
-/// Identifier for ECDSA as an asymmetric algorithm.
-const ALG_ECDSA: usize = 0;
-
-// Algorithm parameter identifiers
-
-const ECDSA_PARAM_P256: usize = 0;
-
-pub enum Algorithm {
-    Ecdsa(CurveParams),
-}
-
-impl Algorithm {
-    /// Constructs an `Algorithm` identifier from its components
-    fn from_raw_parts(algorithm_id: usize, param_id: usize) -> Option<Algorithm> {
-        match algorithm_id {
-            ALG_ECDSA => match param_id {
-                ECDSA_PARAM_P256 => Some(Algorithm::Ecdsa(P256::curve_params())),
-                _ => None,
-            },
-            _ => None,
-        }
-    }
-
-    /// Checks that the paramters to a `verify` operation are the
-    /// correct lengths for this `Algorithm`.
-    fn check_verify_lengths(
-        &self,
-        hash_len: usize,
-        signature_len: usize,
-        pub_key_len: usize,
-    ) -> Result<(), ErrorCode> {
-        if match self {
-            // OVERFLOW: We need to check the public key is twice the
-            // length of a curve coordinate. To prevent a rogue
-            // implementation of `EllipticCurve` causing an overflow
-            // when multiplying `COORD_LEN` by 2, we instead check the
-            // lowest-order bit separately and check the rest by
-            // bit-shift.
-            Algorithm::Ecdsa(curve) => {
-                curve.hash_len == hash_len
-                    && curve.sig_len == signature_len
-                    && pub_key_len & 1 == 0
-                    && curve.coord_len == pub_key_len >> 1
-            }
-        } {
-            Ok(())
-        } else {
-            Err(ErrorCode::SIZE)
-        }
-    }
-}
-
-impl<'a, PubKey, EcdsaP256> AsymmetricCrypto<'a, PubKey, EcdsaP256> {
+impl<
+        'a,
+        const HASH_LEN: usize,
+        const SIG_LEN: usize,
+        SigVerify: PubKeyMut + SignatureVerify<'a, HASH_LEN, SIG_LEN>,
+    > AsymmetricCrypto<'a, HASH_LEN, SIG_LEN, SigVerify>
+{
     /// Creates a new `AsymmetricCrypto` capsule
     pub fn new(
-        public_key: &'a PubKey,
-        p256_ecdsa: &'a EcdsaP256,
+        verifier: &'a SigVerify,
         hash_buf: &'static mut [u8; HASH_LEN],
         signature_buf: &'static mut [u8; SIG_LEN],
         grant: Grant<
@@ -164,31 +110,19 @@ impl<'a, PubKey, EcdsaP256> AsymmetricCrypto<'a, PubKey, EcdsaP256> {
             AllowRoCount<{ RO_ALLOW_COUNT }>,
             AllowRwCount<{ RW_ALLOW_COUNT }>,
         >,
-    ) -> AsymmetricCrypto<'a, PubKey, EcdsaP256> {
+    ) -> AsymmetricCrypto<'a, HASH_LEN, SIG_LEN, SigVerify> {
         AsymmetricCrypto {
-            public_key,
-            p256_ecdsa,
+            verifier,
             hash_buf: TakeCell::new(hash_buf),
             signature_buf: TakeCell::new(signature_buf),
             owning_process: OptionalCell::empty(),
             grant,
         }
     }
-}
 
-impl<'a, PubKey, P256Verifier> AsymmetricCrypto<'a, PubKey, P256Verifier>
-where
-    PubKey: PubKeyMut,
-    P256Verifier: SignatureVerify<'a, { P256::HASH_LEN }, { P256::SIG_LEN }>,
-{
     /// Verify the provided signature on the provided digest. Uses the
     /// grant owned by this capsule as the source of the arguments.
-    fn command_verify(
-        &self,
-        algorithm_id: usize,
-        param_id: usize,
-        calling_process: ProcessId,
-    ) -> Result<(), ErrorCode> {
+    fn command_verify(&self, calling_process: ProcessId) -> Result<(), ErrorCode> {
         // Get hash buffer
         let hash_buf = match self.hash_buf.take() {
             Some(hash_buf) => hash_buf,
@@ -282,24 +216,20 @@ where
             Ok(()) => {
                 // Everything is good; pass the buffers down to the underlying driver.
                 self.owning_process.set(calling_process);
-                self.verify(
-                    Algorithm::from_raw_parts(algorithm_id, param_id).ok_or(ErrorCode::INVAL)?,
-                    hash_buf,
-                    signature_buf,
-                    pub_key_buf,
+                self.verify(hash_buf, signature_buf, pub_key_buf).map_err(
+                    |(err, hash, sig, pub_key)| {
+                        // Verify operation failed to start; reset the state
+                        self.hash_buf.put(Some(hash));
+                        self.signature_buf.put(Some(sig));
+                        // Ignore errors here; there's no way we can recover if we are unable to return
+                        // the public key buffer to the underlying implementation during
+                        // error-handling.
+                        let _ = pub_key.map(|pub_key| {
+                            let _ = self.verifier.import_public_key(pub_key);
+                        });
+                        err
+                    },
                 )
-                .map_err(|(err, hash, sig, pub_key)| {
-                    // Verify operation failed to start; reset the state
-                    self.hash_buf.put(Some(hash));
-                    self.signature_buf.put(Some(sig));
-                    // Ignore errors here; there's no way we can recover if we are unable to return
-                    // the public key buffer to the underlying implementation during
-                    // error-handling.
-                    let _ = pub_key.map(|pub_key| {
-                        let _ = self.public_key.import_public_key(pub_key);
-                    });
-                    err
-                })
             }
         }
     }
@@ -307,7 +237,6 @@ where
     /// Verify the provided signature on the provided digest.
     pub fn verify(
         &self,
-        algorithm: Algorithm,
         hash_buf: &'static mut [u8; HASH_LEN],
         signature_buf: &'static mut [u8; SIG_LEN],
         pub_key_buf: &'static mut [u8],
@@ -317,55 +246,54 @@ where
             ErrorCode,
             &'static mut [u8; HASH_LEN],
             &'static mut [u8; SIG_LEN],
-            // This error is set if extracting the public key after an operation failure itself
-            // fails.
+            // This error is set if extracting the public key after an operation
+            // failure itself fails.
             Result<&'static mut [u8], ErrorCode>,
         ),
     > {
-        match algorithm.check_verify_lengths(hash_buf.len(), signature_buf.len(), pub_key_buf.len())
-        {
-            Err(err) => Err((err, hash_buf, signature_buf, Ok(pub_key_buf))),
-            Ok(()) => {
-                // Import the public key
-                if let Err((err, pub_key_buf)) = self.public_key.import_public_key(pub_key_buf) {
-                    return Err((err, hash_buf, signature_buf, Ok(pub_key_buf)));
-                }
-                // Verify the signature
-                match algorithm {
-                    Algorithm::Ecdsa(curve) => match curve.oid {
-                        P256::OID => self.p256_ecdsa.verify(hash_buf, signature_buf).map_err(
-                            |(err, hash_buf, sig_buf)| {
-                                // If initializing the verify
-                                // operation fails, export the public
-                                // key to return the buffer to the
-                                // caller.
-                                (err, hash_buf, sig_buf, self.public_key.pub_key())
-                            },
-                        ),
-                        _ => Err((
-                            ErrorCode::INVAL,
-                            hash_buf,
-                            signature_buf,
-                            self.public_key.pub_key(),
-                        )),
-                    },
-                }
-            }
+        // Import the public key
+        if let Err((err, pub_key_buf)) = self.verifier.import_public_key(pub_key_buf) {
+            return Err((err, hash_buf, signature_buf, Ok(pub_key_buf)));
         }
+        // Verify the signature
+        self.verifier
+            .verify(hash_buf, signature_buf)
+            .map_err(|(err, hash_buf, sig_buf)| {
+                // If initializing the verify operation fails, export the public
+                // key to return the buffer to the caller.
+                (err, hash_buf, sig_buf, self.verifier.pub_key())
+            })
     }
-}
 
-impl<'a, PubKey, P256Verifier> AsymmetricCrypto<'a, PubKey, P256Verifier>
-where
-    PubKey: PubKeyMut,
-{
     /// Extract the public key buffer from the underlying
     /// implementation. If calling this API from another capsule, you
     /// should call this function to obtain the public key buffer,
     /// write the public key material to it, and then pass it back to
     /// this capsule via one of the other APIs (e.g. `verify`).
     pub fn export_raw_public_key(&self) -> Result<&'static mut [u8], ErrorCode> {
-        self.public_key.pub_key()
+        self.verifier.pub_key()
+    }
+
+    /// Called when a signature verification operation completes
+    fn schedule_verify_done_upcall(&self, process_id: ProcessId, status: Result<bool, ErrorCode>) {
+        // Grant errors are ignored, since there is no reasonable way
+        // to handle them.
+        let args = match status {
+            Ok(true) => {
+                // Verification succeeded
+                (0, 0, 0)
+            }
+            Ok(false) => {
+                // Verification failed
+                (ErrorCode::FAIL as usize, 1, 0)
+            }
+            // CAST: `ErrorCode` defines the value conversion explicitly
+            Err(e) => (e as usize, 2, 0),
+        };
+        let _ = self.grant.enter(process_id, |_, kernel_data| {
+            // Scheduling errors are ignored, since there is no reasonable way to handle them.
+            let _ = kernel_data.schedule_upcall(upcall::UpcallId::VerifyDone.to_usize(), args);
+        });
     }
 }
 
@@ -423,22 +351,24 @@ impl TryFrom<usize> for Command {
     }
 }
 
-impl<'a, PubKey, EcdsaP256> SyscallDriver for AsymmetricCrypto<'a, PubKey, EcdsaP256>
-where
-    PubKey: PubKeyMut,
-    EcdsaP256: EcdsaP256Trait<'a>,
+impl<
+        'a,
+        const HASH_LEN: usize,
+        const SIG_LEN: usize,
+        SigVerify: PubKeyMut + SignatureVerify<'a, HASH_LEN, SIG_LEN>,
+    > SyscallDriver for AsymmetricCrypto<'a, HASH_LEN, SIG_LEN, SigVerify>
 {
     fn command(
         &self,
         command_num: usize,
-        data1: usize,
-        data2: usize,
+        _data1: usize,
+        _data2: usize,
         calling_process: ProcessId,
     ) -> CommandReturn {
         let cmd = Command::try_from(command_num);
         CommandReturn::from(match cmd {
             Ok(Command::DriverExistence) => Ok(()),
-            Ok(Command::Verify) => self.command_verify(data1, data2, calling_process),
+            Ok(Command::Verify) => self.command_verify(calling_process),
             Err(()) => Err(ErrorCode::NOSUPPORT),
         })
     }
@@ -450,7 +380,13 @@ where
 
 // Interrupt handler for completion of signature verification
 // operations.
-impl<'a, PubKey, EcdsaP256> EcdsaP256Client for AsymmetricCrypto<'a, PubKey, EcdsaP256> {
+impl<
+        'a,
+        const HASH_LEN: usize,
+        const SIG_LEN: usize,
+        SigVerify: PubKeyMut + SignatureVerify<'a, HASH_LEN, SIG_LEN>,
+    > ClientVerify<HASH_LEN, SIG_LEN> for AsymmetricCrypto<'a, HASH_LEN, SIG_LEN, SigVerify>
+{
     fn verification_done(
         &self,
         result: Result<bool, ErrorCode>,
@@ -461,29 +397,5 @@ impl<'a, PubKey, EcdsaP256> EcdsaP256Client for AsymmetricCrypto<'a, PubKey, Ecd
             .map(|owner_id| self.schedule_verify_done_upcall(owner_id, result));
         self.hash_buf.put(Some(hash));
         self.signature_buf.put(Some(signature));
-    }
-}
-
-impl<'a, PubKey, EcdsaP256> AsymmetricCrypto<'a, PubKey, EcdsaP256> {
-    /// Called when a signature verification operation completes
-    fn schedule_verify_done_upcall(&self, process_id: ProcessId, status: Result<bool, ErrorCode>) {
-        // Grant errors are ignored, since there is no reasonable way
-        // to handle them.
-        let args = match status {
-            Ok(true) => {
-                // Verification succeeded
-                (0, 0, 0)
-            }
-            Ok(false) => {
-                // Verification failed
-                (ErrorCode::FAIL as usize, 1, 0)
-            }
-            // CAST: `ErrorCode` defines the value conversion explicitly
-            Err(e) => (e as usize, 2, 0),
-        };
-        let _ = self.grant.enter(process_id, |_, kernel_data| {
-            // Scheduling errors are ignored, since there is no reasonable way to handle them.
-            let _ = kernel_data.schedule_upcall(upcall::UpcallId::VerifyDone.to_usize(), args);
-        });
     }
 }
