@@ -556,20 +556,13 @@ impl<'a> hil::spi::SpiMaster<'a> for SpiHost<'a> {
     type ChipSelect = u32;
 
     fn init(&self) -> Result<(), ErrorCode> {
-        let regs = self.registers;
-        self.event_enable();
         self.err_enable();
 
-        self.enable_interrupts();
+        // Disable interrupts explicitly in case they were left enabled by ROM.
+        self.disable_interrupts();
 
         self.enable_spi_host();
 
-        //TODO: I think this is bug in OT, where the `first` word written
-        // (while TXEMPTY) to TX_DATA is dropped/ignored and not added to TX_FIFO (TXQD = 0).
-        // The following write (0x00), works around this `bug`.
-        // Could be Verilator specific
-        regs.tx_data.write(tx_data::DATA.val(0x00));
-        assert_eq!(regs.status.read(status::TXQD), 0);
         Ok(())
     }
 
