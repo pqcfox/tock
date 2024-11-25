@@ -8,5 +8,3 @@
 pub mod ecc;
 pub mod mux;
 pub mod timeouts;
-
-mod integrity;
