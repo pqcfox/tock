@@ -75,7 +75,6 @@ use rv32i::csr;
 pub mod io;
 mod otbn;
 pub mod pinmux_layout;
-pub mod polyfill;
 #[cfg(test)]
 mod tests;
 /// The `earlgrey` chip crate supports multiple targets with slightly different
@@ -276,6 +275,7 @@ struct EarlGrey {
     >,
     pattgen: &'static capsules_extra::pattgen::PattGen<'static, lowrisc::pattgen::PattGen<'static>>,
     #[cfg(not(feature = "test_flash_ctrl"))]
+    #[allow(clippy::type_complexity)]
     kv_driver: &'static capsules_extra::kv_driver::KVStoreDriver<
         'static,
         capsules_extra::virtual_kv::VirtualKVPermissions<
@@ -1244,7 +1244,7 @@ unsafe fn setup() -> (
     let ecdsa_p256 = {
         let timeout_mux = static_init!(
             TimeoutMux<'static, RvTimer, OtbnOperation<'static, RvTimer>>,
-            TimeoutMux::new(&otbn_timer, OTBN_TIMEOUT_MUX_CHECK_FREQ),
+            TimeoutMux::new(otbn_timer, OTBN_TIMEOUT_MUX_CHECK_FREQ),
         );
         kernel::hil::time::Timer::set_timer_client(otbn_timer, timeout_mux);
         timeout_mux.setup();
@@ -1287,7 +1287,7 @@ unsafe fn setup() -> (
                 OtCryptoEcdsaP256<'static, RvTimer>,
             >,
             capsules_extra::public_key_crypto::asymmetric_crypto::AsymmetricCrypto::new(
-                &cryptolib_ecdsa_p256,
+                cryptolib_ecdsa_p256,
                 hash_buf,
                 signature_buf,
                 board_kernel.create_grant(
@@ -1341,7 +1341,7 @@ unsafe fn setup() -> (
             hmac,
             info_flash,
             rng,
-            lldb: lldb,
+            lldb,
             i2c_master,
             spi_controller,
             aes,
@@ -1607,6 +1607,7 @@ unsafe fn test_rv_timer(mux_alarm: &'static MuxAlarm<'static, RvTimer>) {
 /// This function is called from the arch crate after some very basic RISC-V
 /// setup and RAM initialization.
 #[no_mangle]
+#[allow(clippy::missing_safety_doc)]
 pub unsafe fn main() {
     #[cfg(test)]
     test_main();

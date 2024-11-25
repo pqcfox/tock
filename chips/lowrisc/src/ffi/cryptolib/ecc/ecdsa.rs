@@ -5,22 +5,11 @@
 // Copyright zeroRISC Inc.
 // Confidential information of zeroRISC Inc. All rights reserved.
 
-use crate::ffi::cryptolib::integrity::IntegrityUnblindedChecksum;
 use crate::ffi::cryptolib::mux::{CryptolibMux, OtbnJob, OtbnOperation};
 use crate::ffi::hardened::HardenedBool;
 use crate::ffi::status::Status;
 use core::mem::size_of;
 use core::ptr::{addr_of, addr_of_mut};
-use cryptolib_ecc::{
-    otcrypto_const_word32_buf_t as OtCryptoConstWord32Buf,
-    otcrypto_ecc_curve_t as OtCryptoEccCurve,
-    otcrypto_ecc_curve_type_kOtcryptoEccCurveTypeNistP256 as CURVE_TYPE_P256,
-    otcrypto_ecdsa_verify_async_finalize, otcrypto_ecdsa_verify_async_start,
-    otcrypto_hash_digest_t as OtCryptoHashDigest,
-    otcrypto_hash_mode_kOtcryptoHashModeSha256 as HASH_MODE_SHA256,
-    otcrypto_key_mode_kOtcryptoKeyModeEcdsa as KEY_MODE_ECDSA,
-    otcrypto_unblinded_key_t as OtCryptoUnblindedKey,
-};
 use kernel::hil::public_key_crypto::ecc::EcdsaP256;
 use kernel::hil::public_key_crypto::ecc::EllipticCurve;
 use kernel::hil::public_key_crypto::ecc::P256;
@@ -29,6 +18,16 @@ use kernel::hil::public_key_crypto::signature::ClientVerify;
 use kernel::hil::time::Alarm;
 use kernel::utilities::cells::{OptionalCell, TakeCell};
 use kernel::ErrorCode;
+use otbindgen::{
+    integrity_unblinded_checksum, otcrypto_const_word32_buf_t as OtCryptoConstWord32Buf,
+    otcrypto_ecc_curve_t as OtCryptoEccCurve,
+    otcrypto_ecc_curve_type_kOtcryptoEccCurveTypeNistP256 as CURVE_TYPE_P256,
+    otcrypto_ecdsa_verify_async_finalize, otcrypto_ecdsa_verify_async_start,
+    otcrypto_hash_digest_t as OtCryptoHashDigest,
+    otcrypto_hash_mode_kOtcryptoHashModeSha256 as HASH_MODE_SHA256,
+    otcrypto_key_mode_kOtcryptoKeyModeEcdsa as KEY_MODE_ECDSA,
+    otcrypto_unblinded_key_t as OtCryptoUnblindedKey,
+};
 
 /// Size in bytes of an OTBN wide data register
 pub const WDR_SIZE: usize = 32;
@@ -132,7 +131,8 @@ impl<'a, A: Alarm<'a>> OtbnJob<'a, A> for EcdsaVerifyP256Job<'a, A> {
                 data: self.signature.as_ptr(),
                 len: self.signature.len(),
             };
-            public_key.populate_checksum();
+            // Populate the checksum
+            public_key.checksum = integrity_unblinded_checksum(addr_of!(public_key));
             let elliptic_curve = OtCryptoEccCurve {
                 curve_type: CURVE_TYPE_P256,
                 // NULL, because we use a named curve.

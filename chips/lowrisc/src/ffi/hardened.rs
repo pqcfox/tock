@@ -5,8 +5,8 @@
 // Copyright zeroRISC Inc.
 // Confidential information of zeroRISC Inc. All rights reserved.
 
-use base_hardened::hardened_bool_t as NativeHardenedBool;
-use base_hardened::{
+use otbindgen::hardened_bool_t as NativeHardenedBool;
+use otbindgen::{
     hardened_bool_kHardenedBoolFalse as NATIVE_HARDENED_BOOL_FALSE,
     hardened_bool_kHardenedBoolTrue as NATIVE_HARDENED_BOOL_TRUE,
 };

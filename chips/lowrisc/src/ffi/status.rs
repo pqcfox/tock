@@ -60,23 +60,11 @@ pub trait Status {
     }
 }
 
-// Macro to automatically generate decoders for all `..Status` types from
-// different bindgen libraries, which are all equivalent on the C side but the
-// Rust compiler treats them as separate types.
-#[macro_export]
-macro_rules! status_type {
-    ($status_type:ty) => {
-        impl $crate::ffi::status::Status for $status_type {
-            fn value(&self) -> u32 {
-                // CAST: casting `i32` as `u32` is a no-op here because no
-                // integer comparison is done when parsing error codes.
-                self.value as u32
-            }
-        }
-    };
+impl Status for otbindgen::status {
+    fn value(&self) -> u32 {
+        self.value as u32
+    }
 }
-
-status_type!(base_status::status_t);
 
 pub enum StatusAsBoolError {
     // FFI code reported an error.
@@ -187,22 +175,22 @@ pub enum StatusCode {
 impl From<u32> for StatusCode {
     fn from(val: u32) -> StatusCode {
         match val {
-            base_status::absl_status_code_kOk => StatusCode::Ok,
-            base_status::absl_status_code_kCancelled => StatusCode::Cancelled,
-            base_status::absl_status_code_kUnknown => StatusCode::Unknown,
-            base_status::absl_status_code_kInvalidArgument => StatusCode::InvalidArgument,
-            base_status::absl_status_code_kDeadlineExceeded => StatusCode::DeadlineExceeded,
-            base_status::absl_status_code_kNotFound => StatusCode::NotFound,
-            base_status::absl_status_code_kAlreadyExists => StatusCode::AlreadyExists,
-            base_status::absl_status_code_kPermissionDenied => StatusCode::PermissionDenied,
-            base_status::absl_status_code_kResourceExhausted => StatusCode::ResourceExhausted,
-            base_status::absl_status_code_kFailedPrecondition => StatusCode::FailedPrecondition,
-            base_status::absl_status_code_kAborted => StatusCode::Aborted,
-            base_status::absl_status_code_kOutOfRange => StatusCode::OutOfRange,
-            base_status::absl_status_code_kUnimplemented => StatusCode::Unimplemented,
-            base_status::absl_status_code_kInternal => StatusCode::Internal,
-            base_status::absl_status_code_kUnavailable => StatusCode::Unavailable,
-            base_status::absl_status_code_kDataLoss => StatusCode::DataLoss,
+            otbindgen::absl_status_code_kOk => StatusCode::Ok,
+            otbindgen::absl_status_code_kCancelled => StatusCode::Cancelled,
+            otbindgen::absl_status_code_kUnknown => StatusCode::Unknown,
+            otbindgen::absl_status_code_kInvalidArgument => StatusCode::InvalidArgument,
+            otbindgen::absl_status_code_kDeadlineExceeded => StatusCode::DeadlineExceeded,
+            otbindgen::absl_status_code_kNotFound => StatusCode::NotFound,
+            otbindgen::absl_status_code_kAlreadyExists => StatusCode::AlreadyExists,
+            otbindgen::absl_status_code_kPermissionDenied => StatusCode::PermissionDenied,
+            otbindgen::absl_status_code_kResourceExhausted => StatusCode::ResourceExhausted,
+            otbindgen::absl_status_code_kFailedPrecondition => StatusCode::FailedPrecondition,
+            otbindgen::absl_status_code_kAborted => StatusCode::Aborted,
+            otbindgen::absl_status_code_kOutOfRange => StatusCode::OutOfRange,
+            otbindgen::absl_status_code_kUnimplemented => StatusCode::Unimplemented,
+            otbindgen::absl_status_code_kInternal => StatusCode::Internal,
+            otbindgen::absl_status_code_kUnavailable => StatusCode::Unavailable,
+            otbindgen::absl_status_code_kDataLoss => StatusCode::DataLoss,
             val => StatusCode::InvalidErrorCode(val),
         }
     }
