@@ -6,5 +6,6 @@
 // Copyright Tock Contributors 2022.
 
 pub mod ecc;
+pub mod key_transport;
 pub mod mux;
 pub mod timeouts;
