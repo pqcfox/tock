@@ -54,6 +54,7 @@ pub enum NUM {
     Aes                   = 0x40006,
     EcdsaP256             = 0x40007,
     EcdsaP384             = 0x40008,
+    OneshotDigest         = 0x40009,
 
     // Storage
     AppFlash              = 0x50000,

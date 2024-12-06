@@ -94,6 +94,8 @@ Protocol stacks and other libraries.
   encryption.
 - **[Public Key Cryptography](src/public_key_crypto)**: Asymmetric
   encryption.
+- **[Oneshot Digest](src/oneshot_digest.rs)**: Digest operations that operate
+  directly on allow parameters.
 
 
 MCU Peripherals for Userspace
