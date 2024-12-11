@@ -395,8 +395,8 @@ impl AlertHandler {
     /// * `config` - Some(): -  alerts of this class should trigger escalation and escalation should behave according to these parameters:
     ///     - accumulation_threshold - (CLASSx_ACCUM_THRESH_SHADOWED) once this many alerts of this class are triggered the escalation should start
     ///     - timeout - (CLASSx_TIMEOUT_CYC_SHADOWED) if the interrupt corresponding to this class is not handled within the specified amount of cycles, escalation will be triggered. can be deactivated by setting this parameter to None
-    ///     - phase[0,1,2,3]_length - (CLASSx_PHASEx_CYC_SHADOWED) duration of escalation phase X for this class
-    ///     - signal[0,1,2,3]_phase - (CLASSx_CTRL_SHADOWED::{MAP_ENx,ENx})  controls during which phase should signal X be triggered. Signal can be configured to not trigger by setting this paramter to None
+    ///     - phase{0,1,2,3}_length - (CLASSx_PHASEx_CYC_SHADOWED) duration of escalation phase X for this class
+    ///     - signal{0,1,2,3}_phase - (CLASSx_CTRL_SHADOWED::{MAP_ENx,ENx})  controls during which phase should signal X be triggered. Signal can be configured to not trigger by setting this paramter to None
     ///     - crashdump_phase - (CLASSx_CRASHDUMP_TRIGGER_SHADOWED) controls during which phase should the crashdump information be recorded
     ///     - lock_escalation_counter - if this is true, there is no way to stop the escalation protocol for this class once it has been triggered
     pub fn configure_class(
