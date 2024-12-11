@@ -307,10 +307,12 @@ impl Otp {
     ///
     /// # Parameters
     ///
-    /// + `integrity_check_period`: the maximum period for integrity checks. See
-    /// [set_integrity_check_period] for more details.
-    /// + `consistency_check_period`: the maximum period for consistency checks. See
-    /// [set_consistency_check_period] for more details.
+    /// + `integrity_check_period`: the maximum period for integrity checks, in
+    /// units of multiples of 256 clock cycles. 255 is added to this number to
+    /// determine the actual maximum.
+    /// + `consistency_check_period`: the maximum period for consistency checks, in
+    /// units of multiples of 256 clock cycles. 255 is added to this number to
+    /// determine the actual maximum.
     ///
     /// # Return value
     ///

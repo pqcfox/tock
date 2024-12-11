@@ -33,7 +33,7 @@ pub trait EllipticCurve {
 }
 
 /// NIST curve P-256 (OID 1.2.840.10045.3.1)
-/// Source: https://oidref.com/1.2.840.10045.3.1
+/// Source: `<https://oidref.com/1.2.840.10045.3.1>`
 pub struct P256;
 impl EllipticCurve for P256 {
     const OID: &'static str = "1.2.840.10045.3.1";

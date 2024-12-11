@@ -342,17 +342,20 @@ impl ResetManagment for RstMgr {
 
     /// return the concatenation of `cpu_reset_info` and `alert_info`. The content of this array is not ment for the MCU to interpret during runtime but rather to be store and displayed for later interpretation by a human. Actual content might change.
     /// According to <https://opentitan.org/book/hw/ip/rv_core_ibex/doc/theory_of_operation.html#crash-dump-collection> the content of this data is:
-    /// [0] - size of the following section (reset_info)
-    /// [1] -   The last exception address (mtval)
-    /// [2] -   The last exception PC (mepc)
-    /// [3] -   The last data access address
-    /// [4] -   The next PC
-    /// [5] -   The current PC
-    /// [6] -   The previous exception address (mtval)
-    /// [7] -   The previous exception PC (mepc)
-    /// [8] -   (MSB) Previous state valid indication
-    /// [9] - size of the following section (alert_info)
-    /// [10..18] - ?
+    ///
+    /// | bits | description |
+    /// | ----- | -- |
+    /// | \[0\] | size of the following section (reset_info) |
+    /// | \[1\] |   The last exception address (mtval) |
+    /// | \[2\] |   The last exception PC (mepc) |
+    /// | \[3\] |   The last data access address |
+    /// | \[4\] |   The next PC |
+    /// | \[5\] |   The current PC |
+    /// | \[6\] |   The previous exception address (mtval) |
+    /// | \[7\] |   The previous exception PC (mepc) |
+    /// | \[8\] |   (MSB) Previous state valid indication |
+    /// | \[9\] | size of the following section (alert_info) |
+    /// | \[10..18\] | ? |
     fn get_reset_info_dump(&self) -> Option<Self::ResetInfo> {
         let reset_info = self.dump_cpu_reset_info();
         let alert_info = self.dump_alert_info();
