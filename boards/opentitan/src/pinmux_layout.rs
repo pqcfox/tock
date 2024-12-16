@@ -184,7 +184,7 @@ pub fn prepare_wiring_sysrst_ctrl_tests() {
             PinmuxPeripheralIn::GpioGpio2,
             PinmuxOutsel::GpioGpio2,
         ),
-        lowrisc::gpio::pins::pin2,
+        2,
     );
 
     let pwrb_force_gpio = GpioPin::new(
@@ -194,7 +194,7 @@ pub fn prepare_wiring_sysrst_ctrl_tests() {
             PinmuxPeripheralIn::GpioGpio20,
             PinmuxOutsel::GpioGpio20,
         ),
-        lowrisc::gpio::pins::pin20,
+        20,
     );
 
     key0_force_gpio.make_output();

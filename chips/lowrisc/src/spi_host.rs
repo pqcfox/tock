@@ -3,6 +3,10 @@
 // Copyright Tock Contributors 2022.
 
 //! Serial Peripheral Interface (SPI) Host Driver
+use crate::registers::spi_host_regs::{
+    SpiHostRegisters, COMMAND, CONFIGOPTS, CONTROL, CSID, ERROR_ENABLE, ERROR_STATUS, EVENT_ENABLE,
+    INTR, STATUS,
+};
 use core::cell::Cell;
 use core::cmp;
 use kernel::hil;
@@ -11,9 +15,6 @@ use kernel::hil::spi::{ClockPhase, ClockPolarity};
 use kernel::utilities::cells::OptionalCell;
 use kernel::utilities::cells::TakeCell;
 use kernel::utilities::registers::interfaces::{ReadWriteable, Readable, Writeable};
-use kernel::utilities::registers::{
-    register_bitfields, register_structs, ReadOnly, ReadWrite, WriteOnly,
-};
 use kernel::utilities::StaticRef;
 use kernel::ErrorCode;
 
@@ -22,122 +23,6 @@ pub enum SpiHostStatus {
     SpiTransferCmplt,
     SpiTransferInprog,
 }
-
-register_structs! {
-    pub SpiHostRegisters {
-        //SPI: Interrupt State Register, type rw1c
-        (0x000 => intr_state: ReadWrite<u32, intr::Register>),
-        //SPI: Interrupt Enable Register
-        (0x004 => intr_enable: ReadWrite<u32, intr::Register>),
-        //SPI: Interrupt Test Register
-        (0x008 => intr_test: WriteOnly<u32, intr::Register>),
-        //SPI: Alert Test Register
-        (0x00c => alert_test: WriteOnly<u32, alert_test::Register>),
-        //SPI: Control register
-        (0x010 => ctrl: ReadWrite<u32, ctrl::Register>),
-        //SPI: Status register
-        (0x014 => status: ReadOnly<u32, status::Register>),
-        //SPI: Configuration options register.
-        (0x018 => config_opts: ReadWrite<u32, conf_opts::Register>),
-        //SPI: Chip-Select ID
-        (0x01c => csid: ReadWrite<u32, csid_ctrl::Register>),
-        //SPI: Command Register
-        (0x020 => command: WriteOnly<u32, command::Register>),
-        //SPI: Received Data
-        (0x024 => rx_data: ReadWrite<u32, rx_data::Register>),
-        //SPI: Transmit Data
-        (0x028 => tx_data: WriteOnly<u32, tx_data::Register>),
-        //SPI: Controls which classes of errors raise an interrupt.
-        (0x02c => err_en: ReadWrite<u32, err_en::Register>),
-        //SPI: Indicates that any errors that have occurred, type rw1c
-        (0x030 => err_status: ReadWrite<u32, err_status::Register>),
-        //SPI: Controls which classes of SPI events raise an interrupt
-        (0x034 => event_en: ReadWrite<u32, event_en::Register>),
-        (0x38 => @END),
-    }
-}
-
-register_bitfields![u32,
-    intr [
-        ERROR OFFSET(0) NUMBITS(1) [],
-        SPI_EVENT OFFSET(1) NUMBITS(1) [],
-    ],
-    alert_test [
-        FETAL_FAULT OFFSET(0) NUMBITS(1) [],
-    ],
-    ctrl [
-        RX_WATERMARK OFFSET(0) NUMBITS(8) [],
-        TX_WATERMARK OFFSET(8) NUMBITS(8) [],
-        //28:16 RESERVED
-        OUTPUT_EN OFFSET(29) NUMBITS(1) [],
-        SW_RST OFFSET(30) NUMBITS(1) [],
-        SPIEN OFFSET(31) NUMBITS(1) []
-    ],
-    status [
-        TXQD OFFSET(0) NUMBITS(8) [],
-        RXQD OFFSET(15) NUMBITS(8) [],
-        CMDQD OFFSET(16) NUMBITS(1) [],
-        RXWM OFFSET(20) NUMBITS(1) [],
-        BYTEORDER OFFSET(22) NUMBITS(1) [],
-        RXSTALL OFFSET(23) NUMBITS(1) [],
-        RXEMPTY OFFSET(24) NUMBITS(1) [],
-        RXFULL OFFSET(25) NUMBITS(1) [],
-        TXWM OFFSET(26) NUMBITS(1) [],
-        TXSTALL OFFSET(27) NUMBITS(1) [],
-        TXEMPTY OFFSET(28) NUMBITS(1) [],
-        TXFULL OFFSET(29) NUMBITS(1) [],
-        ACTIVE OFFSET(30) NUMBITS(1) [],
-        READY OFFSET(31) NUMBITS(1) [],
-    ],
-    conf_opts [
-        CLKDIV_0 OFFSET(0) NUMBITS(16) [],
-        CSNIDLE_0 OFFSET(16) NUMBITS(3) [],
-        CSNTRAIL_0 OFFSET(20) NUMBITS(3) [],
-        CSNLEAD_0 OFFSET(24) NUMBITS(3) [],
-        //28 Reserved
-        FULLCYC_0 OFFSET(29) NUMBITS(1) [],
-        CPHA_0 OFFSET(30) NUMBITS(1) [],
-        CPOL_0 OFFSET(31) NUMBITS(1) [],
-    ],
-    csid_ctrl [
-        CSID OFFSET(0) NUMBITS(32) [],
-    ],
-    command [
-        LEN OFFSET(0) NUMBITS(8) [],
-        CSAAT OFFSET(9) NUMBITS(1) [],
-        SPEED OFFSET(10) NUMBITS(2) [],
-        DIRECTION OFFSET(12) NUMBITS(2) [],
-    ],
-    rx_data [
-        DATA OFFSET(0) NUMBITS(32) [],
-    ],
-    tx_data [
-        DATA OFFSET(0) NUMBITS(32) [],
-    ],
-    err_en [
-        CMDBUSY OFFSET(0) NUMBITS(1) [],
-        OVERFLOW OFFSET(1) NUMBITS(1) [],
-        UNDERFLOW OFFSET(2) NUMBITS(1) [],
-        CMDINVAL OFFSET(3) NUMBITS(1) [],
-        CSIDINVAL OFFSET(4) NUMBITS(1) [],
-    ],
-    err_status [
-        CMDBUSY OFFSET(0) NUMBITS(1) [],
-        OVERFLOW OFFSET(1) NUMBITS(1) [],
-        UNDERFLOW OFFSET(2) NUMBITS(1) [],
-        CMDINVAL OFFSET(3) NUMBITS(1) [],
-        CSIDINVAL OFFSET(4) NUMBITS(1) [],
-        ACCESSINVAL OFFSET(5) NUMBITS(1) [],
-    ],
-    event_en [
-        RXFULL OFFSET(0) NUMBITS(1) [],
-        TXEMPTY OFFSET(1) NUMBITS(1) [],
-        RXWM OFFSET(2) NUMBITS(1) [],
-        TXWM OFFSET(3) NUMBITS(1) [],
-        READY OFFSET(4) NUMBITS(1) [],
-        IDLE OFFSET(5) NUMBITS(1) [],
-    ],
-];
 
 pub struct SpiHost<'a> {
     registers: StaticRef<SpiHostRegisters>,
@@ -181,7 +66,7 @@ impl<'a> SpiHost<'a> {
         let irq = regs.intr_state.extract();
         self.disable_interrupts();
 
-        if irq.is_set(intr::ERROR) {
+        if irq.is_set(INTR::ERROR) {
             //Clear all pending errors.
             self.clear_err_interrupt();
             //Something went wrong, reset IP and clear buffers
@@ -200,13 +85,13 @@ impl<'a> SpiHost<'a> {
             return;
         }
 
-        if irq.is_set(intr::SPI_EVENT) {
+        if irq.is_set(INTR::SPI_EVENT) {
             let status = regs.status.extract();
             self.clear_event_interrupt();
 
             //This could be set at init, so only follow through
             //once a transfer has started (is_busy())
-            if status.is_set(status::TXEMPTY) && self.is_busy() {
+            if status.is_set(STATUS::TXEMPTY) && self.is_busy() {
                 match self.continue_transfer() {
                     Ok(SpiHostStatus::SpiTransferCmplt) => {
                         // Transfer success
@@ -264,7 +149,7 @@ impl<'a> SpiHost<'a> {
 
                 //Receive rx_data (Only 4byte reads are supported)
                 for _n in 0..read_cycles {
-                    val32 = regs.rx_data.read(rx_data::DATA);
+                    val32 = regs.rxdata[0].get();
                     shift_mask = 0xFF;
                     for i in 0..4 {
                         if self.rx_offset.get() >= self.rx_len.get() {
@@ -307,12 +192,12 @@ impl<'a> SpiHost<'a> {
                 let mut t_byte: u32;
                 let mut tx_slice: [u8; 4];
 
-                if regs.status.read(status::TXQD) != 0 || regs.status.read(status::ACTIVE) != 0 {
+                if regs.status.read(STATUS::TXQD) != 0 || regs.status.read(STATUS::ACTIVE) != 0 {
                     self.tx_buf.replace(tx_buf);
                     return Err(ErrorCode::BUSY);
                 }
 
-                while !regs.status.is_set(status::TXFULL) && regs.status.read(status::TXQD) < 64 {
+                while !regs.status.is_set(STATUS::TXFULL) && regs.status.read(STATUS::TXQD) < 64 {
                     tx_slice = [0, 0, 0, 0];
                     for elem in tx_slice.iter_mut() {
                         if self.tx_offset.get() >= self.tx_len.get() {
@@ -327,7 +212,7 @@ impl<'a> SpiHost<'a> {
                         }
                     }
                     t_byte = u32::from_le_bytes(tx_slice);
-                    regs.tx_data.write(tx_data::DATA.val(t_byte));
+                    regs.txdata[0].set(t_byte);
 
                     //Transfer Complete in one-shot
                     if self.tx_offset.get() >= self.tx_len.get() {
@@ -361,7 +246,7 @@ impl<'a> SpiHost<'a> {
     fn start_transceive(&self) {
         let regs = self.registers;
         //TXQD holds number of 32bit words
-        let txfifo_num_bytes = regs.status.read(status::TXQD) * 4;
+        let txfifo_num_bytes = regs.status.read(STATUS::TXQD) * 4;
 
         //8-bits that describe command transfer len (cannot exceed 255)
         let num_transfer_bytes: u32 = if txfifo_num_bytes > u8::MAX as u32 {
@@ -377,17 +262,17 @@ impl<'a> SpiHost<'a> {
         // but the last transfer segment.
         if self.tx_offset.get() >= self.tx_len.get() {
             regs.command.write(
-                command::LEN.val(num_transfer_bytes)
-                    + command::DIRECTION.val(SPI_HOST_CMD_BIDIRECTIONAL)
-                    + command::CSAAT::CLEAR
-                    + command::SPEED.val(SPI_HOST_CMD_STANDARD_SPI),
+                COMMAND::LEN.val(num_transfer_bytes)
+                    + COMMAND::DIRECTION.val(SPI_HOST_CMD_BIDIRECTIONAL)
+                    + COMMAND::CSAAT::CLEAR
+                    + COMMAND::SPEED.val(SPI_HOST_CMD_STANDARD_SPI),
             );
         } else {
             regs.command.write(
-                command::LEN.val(num_transfer_bytes)
-                    + command::DIRECTION.val(SPI_HOST_CMD_BIDIRECTIONAL)
-                    + command::CSAAT::SET
-                    + command::SPEED.val(SPI_HOST_CMD_STANDARD_SPI),
+                COMMAND::LEN.val(num_transfer_bytes)
+                    + COMMAND::DIRECTION.val(SPI_HOST_CMD_BIDIRECTIONAL)
+                    + COMMAND::CSAAT::SET
+                    + COMMAND::SPEED.val(SPI_HOST_CMD_STANDARD_SPI),
             );
         }
     }
@@ -411,65 +296,66 @@ impl<'a> SpiHost<'a> {
     fn enable_spi_host(&self) {
         let regs = self.registers;
         //Enables the SPI host
-        regs.ctrl.modify(ctrl::SPIEN::SET + ctrl::OUTPUT_EN::SET);
+        regs.control
+            .modify(CONTROL::SPIEN::SET + CONTROL::OUTPUT_EN::SET);
     }
 
     /// Reset SPI Host
     fn reset_spi_ip(&self) {
         let regs = self.registers;
         //IP to reset state
-        regs.ctrl.modify(ctrl::SW_RST::SET);
+        regs.control.modify(CONTROL::SW_RST::SET);
 
         //Wait for status ready to be set before continuing
-        while regs.status.is_set(status::ACTIVE) {}
+        while regs.status.is_set(STATUS::ACTIVE) {}
         //Wait for both FIFOs to completely drain
-        while regs.status.read(status::TXQD) != 0 && regs.status.read(status::RXQD) != 0 {}
+        while regs.status.read(STATUS::TXQD) != 0 && regs.status.read(STATUS::RXQD) != 0 {}
         //Clear Reset
-        regs.ctrl.modify(ctrl::SW_RST::CLEAR);
+        regs.control.modify(CONTROL::SW_RST::CLEAR);
     }
 
     /// Enable both event/err IRQ
     fn enable_interrupts(&self) {
         self.registers
             .intr_state
-            .write(intr::ERROR::SET + intr::SPI_EVENT::SET);
+            .write(INTR::ERROR::SET + INTR::SPI_EVENT::SET);
         self.registers
             .intr_enable
-            .modify(intr::ERROR::SET + intr::SPI_EVENT::SET);
+            .modify(INTR::ERROR::SET + INTR::SPI_EVENT::SET);
     }
 
     /// Disable both event/err IRQ
     fn disable_interrupts(&self) {
         let regs = self.registers;
         regs.intr_enable
-            .write(intr::ERROR::CLEAR + intr::SPI_EVENT::CLEAR);
+            .write(INTR::ERROR::CLEAR + INTR::SPI_EVENT::CLEAR);
     }
 
     /// Clear the error IRQ
     fn clear_err_interrupt(&self) {
         let regs = self.registers;
         //Clear Error Masks (rw1c)
-        regs.err_status.modify(err_status::CMDBUSY::SET);
-        regs.err_status.modify(err_status::OVERFLOW::SET);
-        regs.err_status.modify(err_status::UNDERFLOW::SET);
-        regs.err_status.modify(err_status::CMDINVAL::SET);
-        regs.err_status.modify(err_status::CSIDINVAL::SET);
-        regs.err_status.modify(err_status::ACCESSINVAL::SET);
+        regs.error_status.modify(ERROR_STATUS::CMDBUSY::SET);
+        regs.error_status.modify(ERROR_STATUS::OVERFLOW::SET);
+        regs.error_status.modify(ERROR_STATUS::UNDERFLOW::SET);
+        regs.error_status.modify(ERROR_STATUS::CMDINVAL::SET);
+        regs.error_status.modify(ERROR_STATUS::CSIDINVAL::SET);
+        regs.error_status.modify(ERROR_STATUS::ACCESSINVAL::SET);
         //Clear Error IRQ
-        regs.intr_state.modify(intr::ERROR::SET);
+        regs.intr_state.modify(INTR::ERROR::SET);
     }
 
     /// Clear the event IRQ
     fn clear_event_interrupt(&self) {
         let regs = self.registers;
-        regs.intr_state.modify(intr::SPI_EVENT::SET);
+        regs.intr_state.modify(INTR::SPI_EVENT::SET);
     }
     /// Will generate a `test` interrupt on the error irq
     /// Note: Left to allow debug accessibility
     #[allow(dead_code)]
     fn test_error_interrupt(&self) {
         let regs = self.registers;
-        regs.intr_test.write(intr::ERROR::SET);
+        regs.intr_test.write(INTR::ERROR::SET);
     }
     /// Clear test interrupts
     /// Note: Left to allow debug accessibility
@@ -477,7 +363,7 @@ impl<'a> SpiHost<'a> {
     fn clear_tests(&self) {
         let regs = self.registers;
         regs.intr_test
-            .write(intr::ERROR::CLEAR + intr::SPI_EVENT::CLEAR);
+            .write(INTR::ERROR::CLEAR + INTR::SPI_EVENT::CLEAR);
     }
 
     /// Will generate a `test` interrupt on the event irq
@@ -485,7 +371,7 @@ impl<'a> SpiHost<'a> {
     #[allow(dead_code)]
     fn test_event_interrupt(&self) {
         let regs = self.registers;
-        regs.intr_test.write(intr::SPI_EVENT::SET);
+        regs.intr_test.write(INTR::SPI_EVENT::SET);
     }
 
     /// Enable required `event interrupts`
@@ -493,17 +379,17 @@ impl<'a> SpiHost<'a> {
     #[allow(dead_code)]
     fn event_enable(&self) {
         let regs = self.registers;
-        regs.event_en.write(event_en::TXEMPTY::SET);
+        regs.event_enable.write(EVENT_ENABLE::TXEMPTY::SET);
     }
 
     fn disable_tx_interrupt(&self) {
         let regs = self.registers;
-        regs.event_en.modify(event_en::TXEMPTY::CLEAR);
+        regs.event_enable.modify(EVENT_ENABLE::TXEMPTY::CLEAR);
     }
 
     fn enable_tx_interrupt(&self) {
         let regs = self.registers;
-        regs.event_en.modify(event_en::TXEMPTY::SET);
+        regs.event_enable.modify(EVENT_ENABLE::TXEMPTY::SET);
     }
 
     /// Enable required error interrupts
@@ -511,12 +397,12 @@ impl<'a> SpiHost<'a> {
     #[allow(dead_code)]
     fn err_enable(&self) {
         let regs = self.registers;
-        regs.err_en.modify(
-            err_en::CMDBUSY::SET
-                + err_en::CMDINVAL::SET
-                + err_en::CSIDINVAL::SET
-                + err_en::OVERFLOW::SET
-                + err_en::UNDERFLOW::SET,
+        regs.error_enable.modify(
+            ERROR_ENABLE::CMDBUSY::SET
+                + ERROR_ENABLE::CMDINVAL::SET
+                + ERROR_ENABLE::CSIDINVAL::SET
+                + ERROR_ENABLE::OVERFLOW::SET
+                + ERROR_ENABLE::UNDERFLOW::SET,
         );
     }
 
@@ -585,7 +471,7 @@ impl<'a> hil::spi::SpiMaster<'a> for SpiHost<'a> {
         debug_assert!(self.rx_buf.is_none());
         let regs = self.registers;
 
-        if self.is_busy() || regs.status.is_set(status::TXFULL) {
+        if self.is_busy() || regs.status.is_set(STATUS::TXFULL) {
             return Err((ErrorCode::BUSY, tx_buf, rx_buf));
         }
 
@@ -600,7 +486,7 @@ impl<'a> hil::spi::SpiMaster<'a> for SpiHost<'a> {
         //We are committing to the transfer now
         self.set_spi_busy();
 
-        while !regs.status.is_set(status::TXFULL) && regs.status.read(status::TXQD) < 64 {
+        while !regs.status.is_set(STATUS::TXFULL) && regs.status.read(STATUS::TXQD) < 64 {
             tx_slice = [0, 0, 0, 0];
             for elem in tx_slice.iter_mut() {
                 if self.tx_offset.get() >= self.tx_len.get() {
@@ -610,7 +496,7 @@ impl<'a> hil::spi::SpiMaster<'a> for SpiHost<'a> {
                 self.tx_offset.set(self.tx_offset.get() + 1);
             }
             t_byte = u32::from_le_bytes(tx_slice);
-            regs.tx_data.write(tx_data::DATA.val(t_byte));
+            regs.txdata[0].set(t_byte);
 
             //Transfer Complete in one-shot
             if self.tx_offset.get() >= self.tx_len.get() {
@@ -653,7 +539,7 @@ impl<'a> hil::spi::SpiMaster<'a> for SpiHost<'a> {
         let regs = self.registers;
 
         //CSID will index the CONFIGOPTS multi-register
-        regs.csid.write(csid_ctrl::CSID.val(cs));
+        regs.csid.write(CSID::CSID.val(cs));
         self.chip_select.set(cs);
 
         Ok(())
@@ -664,8 +550,7 @@ impl<'a> hil::spi::SpiMaster<'a> for SpiHost<'a> {
 
         match self.calculate_tsck_scaler(rate) {
             Ok(scaler) => {
-                regs.config_opts
-                    .modify(conf_opts::CLKDIV_0.val(scaler as u32));
+                regs.configopts[0].modify(CONFIGOPTS::CLKDIV_0.val(scaler as u32));
                 self.tsclk.set(rate);
                 Ok(rate)
             }
@@ -680,8 +565,8 @@ impl<'a> hil::spi::SpiMaster<'a> for SpiHost<'a> {
     fn set_polarity(&self, polarity: ClockPolarity) -> Result<(), ErrorCode> {
         let regs = self.registers;
         match polarity {
-            ClockPolarity::IdleLow => regs.config_opts.modify(conf_opts::CPOL_0::CLEAR),
-            ClockPolarity::IdleHigh => regs.config_opts.modify(conf_opts::CPOL_0::SET),
+            ClockPolarity::IdleLow => regs.configopts[0].modify(CONFIGOPTS::CPOL_0::CLEAR),
+            ClockPolarity::IdleHigh => regs.configopts[0].modify(CONFIGOPTS::CPOL_0::SET),
         };
         Ok(())
     }
@@ -689,7 +574,7 @@ impl<'a> hil::spi::SpiMaster<'a> for SpiHost<'a> {
     fn get_polarity(&self) -> ClockPolarity {
         let regs = self.registers;
 
-        match regs.config_opts.read(conf_opts::CPOL_0) {
+        match regs.configopts[0].read(CONFIGOPTS::CPOL_0) {
             0 => ClockPolarity::IdleLow,
             1 => ClockPolarity::IdleHigh,
             _ => unreachable!(),
@@ -699,8 +584,8 @@ impl<'a> hil::spi::SpiMaster<'a> for SpiHost<'a> {
     fn set_phase(&self, phase: ClockPhase) -> Result<(), ErrorCode> {
         let regs = self.registers;
         match phase {
-            ClockPhase::SampleLeading => regs.config_opts.modify(conf_opts::CPHA_0::CLEAR),
-            ClockPhase::SampleTrailing => regs.config_opts.modify(conf_opts::CPHA_0::SET),
+            ClockPhase::SampleLeading => regs.configopts[0].modify(CONFIGOPTS::CPHA_0::CLEAR),
+            ClockPhase::SampleTrailing => regs.configopts[0].modify(CONFIGOPTS::CPHA_0::SET),
         };
         Ok(())
     }
@@ -708,7 +593,7 @@ impl<'a> hil::spi::SpiMaster<'a> for SpiHost<'a> {
     fn get_phase(&self) -> ClockPhase {
         let regs = self.registers;
 
-        match regs.config_opts.read(conf_opts::CPHA_0) {
+        match regs.configopts[0].read(CONFIGOPTS::CPHA_0) {
             1 => ClockPhase::SampleTrailing,
             0 => ClockPhase::SampleLeading,
             _ => unreachable!(),

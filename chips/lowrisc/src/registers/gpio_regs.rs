@@ -56,7 +56,7 @@ register_structs! {
 
 register_bitfields![u32,
     /// Common Interrupt Offsets
-    pub(crate) INTR [
+    pub INTR [
         GPIO_0 OFFSET(0) NUMBITS(1) [],
         GPIO_1 OFFSET(1) NUMBITS(1) [],
         GPIO_2 OFFSET(2) NUMBITS(1) [],

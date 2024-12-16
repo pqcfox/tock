@@ -7,12 +7,12 @@
 use kernel::hil::gpio;
 use kernel::hil::gpio::{Configuration, Configure, FloatingState};
 use kernel::utilities::registers::interfaces::{Readable, Writeable};
-use kernel::utilities::registers::{register_bitfields, FieldValue, LocalRegisterCopy};
+use kernel::utilities::registers::{FieldValue, LocalRegisterCopy};
 use kernel::utilities::StaticRef;
 
 use crate::registers::pinmux_regs::{
-    PinmuxRegisters, DIO_PAD_ATTR_REGWEN, MIO_OUTSEL_REGWEN, MIO_PAD_ATTR_REGWEN,
-    MIO_PERIPH_INSEL_REGWEN,
+    PinmuxRegisters, DIO_PAD_ATTR, DIO_PAD_ATTR_REGWEN, MIO_OUTSEL_REGWEN, MIO_PAD_ATTR,
+    MIO_PAD_ATTR_REGWEN, MIO_PERIPH_INSEL_REGWEN,
 };
 use crate::registers::top_earlgrey::{
     DirectPads, MuxedPads, PinmuxInsel, PinmuxOutsel, PinmuxPeripheralIn, PINMUX_AON_BASE_ADDR,
@@ -22,30 +22,10 @@ use crate::registers::top_earlgrey::{
 pub const PINMUX_BASE: StaticRef<PinmuxRegisters> =
     unsafe { StaticRef::new(PINMUX_AON_BASE_ADDR as *const PinmuxRegisters) };
 
-// To avoid code duplication for MIO/DIO we introduce
-// one register layout for both types of IO. In the future this code
-// should be replaced by official improved auto generated definitions.
-// OpenTitan documentation reference:
-// <https://opentitan.org/book/hw/ip/pinmux/doc/registers.html#fields-6>
-// <https://opentitan.org/book/hw/ip/pinmux/doc/registers.html#fields-8>
-register_bitfields![u32,
-    pub(crate) PAD_ATTR [
-        INVERT OFFSET(0) NUMBITS(1) [],
-        VIRTUAL_OPEN_DRAIN_EN OFFSET(1) NUMBITS(1) [],
-        PULL_EN OFFSET(2) NUMBITS(1) [],
-        PULL OFFSET(3) NUMBITS(1) [
-            DOWN = 0,
-            UP = 1,
-        ],
-        KEEPER_EN OFFSET(4) NUMBITS(1) [],
-        SCHMITT_EN OFFSET(5) NUMBITS(1) [],
-        OPEN_DRAIN_EN OFFSET(6) NUMBITS(1) [],
-        SLEW_RATE OFFSET(16) NUMBITS(2) [],
-        DRIVE_STRENGTH OFFSET(20) NUMBITS(4) [],
-    ],
-];
-
-type PadAttribute = LocalRegisterCopy<u32, PAD_ATTR::Register>;
+enum PadAttribute {
+    Mio(LocalRegisterCopy<u32, MIO_PAD_ATTR::Register>),
+    Dio(LocalRegisterCopy<u32, DIO_PAD_ATTR::Register>),
+}
 
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub enum Pad {
@@ -56,51 +36,97 @@ pub enum Pad {
 impl Pad {
     /// Extract value of attributes using common layout
     fn pad_attr(&self) -> PadAttribute {
-        PadAttribute::new(match *self {
-            Self::Mio(mio) => PINMUX_BASE.mio_pad_attr[mio as usize].get(),
-            Self::Dio(dio) => PINMUX_BASE.dio_pad_attr[dio as usize].get(),
-        })
-    }
-
-    /// Modify value of pad attribute using common MIO/DIO register layout
-    fn modify_pad_attr(&self, flags: FieldValue<u32, PAD_ATTR::Register>) {
-        let mut attr = self.pad_attr();
-        attr.modify(flags);
         match *self {
-            Self::Mio(mio) => &PINMUX_BASE.mio_pad_attr[mio as usize].set(attr.get()),
-            Self::Dio(dio) => &PINMUX_BASE.dio_pad_attr[dio as usize].set(attr.get()),
-        };
+            Self::Mio(mio) => PadAttribute::Mio(mio_pad_attr(&mio)),
+            Self::Dio(dio) => PadAttribute::Dio(dio_pad_attr(&dio)),
+        }
     }
 
     pub fn set_floating_state(&self, mode: gpio::FloatingState) {
-        self.modify_pad_attr(match mode {
-            gpio::FloatingState::PullUp => PAD_ATTR::PULL_EN::SET + PAD_ATTR::PULL::UP,
-            gpio::FloatingState::PullDown => PAD_ATTR::PULL_EN::SET + PAD_ATTR::PULL::DOWN,
-            gpio::FloatingState::PullNone => PAD_ATTR::PULL_EN::CLEAR + PAD_ATTR::PULL::CLEAR,
-        });
+        match *self {
+            Self::Mio(mio) => {
+                modify_mio_pad_attr(
+                    &mio,
+                    match mode {
+                        gpio::FloatingState::PullUp => {
+                            MIO_PAD_ATTR::PULL_EN_0::SET + MIO_PAD_ATTR::PULL_SELECT_0::PULL_UP
+                        }
+                        gpio::FloatingState::PullDown => {
+                            MIO_PAD_ATTR::PULL_EN_0::SET + MIO_PAD_ATTR::PULL_SELECT_0::PULL_DOWN
+                        }
+                        gpio::FloatingState::PullNone => {
+                            MIO_PAD_ATTR::PULL_EN_0::CLEAR + MIO_PAD_ATTR::PULL_SELECT_0::PULL_UP
+                        }
+                    },
+                );
+            }
+            Self::Dio(dio) => {
+                modify_dio_pad_attr(
+                    &dio,
+                    match mode {
+                        gpio::FloatingState::PullUp => {
+                            DIO_PAD_ATTR::PULL_EN_0::SET + DIO_PAD_ATTR::PULL_SELECT_0::PULL_UP
+                        }
+                        gpio::FloatingState::PullDown => {
+                            DIO_PAD_ATTR::PULL_EN_0::SET + DIO_PAD_ATTR::PULL_SELECT_0::PULL_DOWN
+                        }
+                        gpio::FloatingState::PullNone => {
+                            DIO_PAD_ATTR::PULL_EN_0::CLEAR + DIO_PAD_ATTR::PULL_SELECT_0::PULL_UP
+                        }
+                    },
+                );
+            }
+        }
     }
 
     pub fn set_output_open_drain(&self) {
-        self.modify_pad_attr(PAD_ATTR::OPEN_DRAIN_EN::SET);
+        match *self {
+            Self::Mio(mio) => modify_mio_pad_attr(&mio, MIO_PAD_ATTR::OD_EN_0::SET),
+            Self::Dio(dio) => modify_dio_pad_attr(&dio, DIO_PAD_ATTR::OD_EN_0::SET),
+        }
     }
 
     pub fn set_output_push_pull(&self) {
-        self.modify_pad_attr(PAD_ATTR::OPEN_DRAIN_EN::CLEAR);
+        match *self {
+            Self::Mio(mio) => modify_mio_pad_attr(&mio, MIO_PAD_ATTR::OD_EN_0::CLEAR),
+            Self::Dio(dio) => modify_dio_pad_attr(&dio, DIO_PAD_ATTR::OD_EN_0::CLEAR),
+        }
     }
 
     pub fn set_invert_sense(&self, invert: bool) {
-        if invert {
-            self.modify_pad_attr(PAD_ATTR::INVERT::SET)
-        } else {
-            self.modify_pad_attr(PAD_ATTR::INVERT::CLEAR)
+        match *self {
+            Self::Mio(mio) => {
+                if invert {
+                    modify_mio_pad_attr(&mio, MIO_PAD_ATTR::INVERT_0::SET)
+                } else {
+                    modify_mio_pad_attr(&mio, MIO_PAD_ATTR::INVERT_0::CLEAR)
+                }
+            }
+            Self::Dio(dio) => {
+                if invert {
+                    modify_dio_pad_attr(&dio, DIO_PAD_ATTR::INVERT_0::SET)
+                } else {
+                    modify_dio_pad_attr(&dio, DIO_PAD_ATTR::INVERT_0::CLEAR)
+                }
+            }
         }
     }
 
     pub fn floating_state(&self) -> gpio::FloatingState {
         let pad_attr: PadAttribute = self.pad_attr();
-        if pad_attr.matches_all(PAD_ATTR::PULL::UP + PAD_ATTR::PULL_EN::SET) {
+        if match pad_attr {
+            PadAttribute::Mio(attr) => attr
+                .matches_all(MIO_PAD_ATTR::PULL_SELECT_0::PULL_UP + MIO_PAD_ATTR::PULL_EN_0::SET),
+            PadAttribute::Dio(attr) => attr
+                .matches_all(DIO_PAD_ATTR::PULL_SELECT_0::PULL_UP + DIO_PAD_ATTR::PULL_EN_0::SET),
+        } {
             gpio::FloatingState::PullUp
-        } else if pad_attr.matches_all(PAD_ATTR::PULL::DOWN + PAD_ATTR::PULL_EN::SET) {
+        } else if match pad_attr {
+            PadAttribute::Mio(attr) => attr
+                .matches_all(MIO_PAD_ATTR::PULL_SELECT_0::PULL_DOWN + MIO_PAD_ATTR::PULL_EN_0::SET),
+            PadAttribute::Dio(attr) => attr
+                .matches_all(DIO_PAD_ATTR::PULL_SELECT_0::PULL_DOWN + DIO_PAD_ATTR::PULL_EN_0::SET),
+        } {
             gpio::FloatingState::PullDown
         } else {
             gpio::FloatingState::PullNone
@@ -116,6 +142,30 @@ impl Pad {
                 .write(DIO_PAD_ATTR_REGWEN::EN_0::CLEAR),
         };
     }
+}
+
+/// Extract value of MIO pad attributes.
+fn mio_pad_attr(mio: &MuxedPads) -> LocalRegisterCopy<u32, MIO_PAD_ATTR::Register> {
+    LocalRegisterCopy::new(PINMUX_BASE.mio_pad_attr[*mio as usize].get())
+}
+
+/// Extract value of DIO pad attributes.
+fn dio_pad_attr(dio: &DirectPads) -> LocalRegisterCopy<u32, DIO_PAD_ATTR::Register> {
+    LocalRegisterCopy::new(PINMUX_BASE.dio_pad_attr[*dio as usize].get())
+}
+
+/// Modify value of MIO pad attribute.
+fn modify_mio_pad_attr(mio: &MuxedPads, flags: FieldValue<u32, MIO_PAD_ATTR::Register>) {
+    let mut attr = mio_pad_attr(mio);
+    attr.modify(flags);
+    PINMUX_BASE.mio_pad_attr[*mio as usize].set(attr.get())
+}
+
+/// Modify value of DIO pad attribute.
+fn modify_dio_pad_attr(dio: &DirectPads, flags: FieldValue<u32, DIO_PAD_ATTR::Register>) {
+    let mut attr = dio_pad_attr(dio);
+    attr.modify(flags);
+    PINMUX_BASE.dio_pad_attr[*dio as usize].set(attr.get())
 }
 
 // Configuration of PINMUX multiplexers for I/O

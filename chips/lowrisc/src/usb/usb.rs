@@ -261,9 +261,7 @@ impl<'a> Usb<'a> {
         endpoint_index: EndpointIndex,
     ) {
         self.initialize_endpoint_state(transfer_type, endpoint_index);
-        self.registers
-            .ep_in_enable
-            .modify(endpoint_index.to_set_ep_in_enable_field_value());
+        self.registers.ep_in_enable[0].modify(endpoint_index.to_set_ep_in_enable_field_value());
     }
 
     /// Enable OUT endpoint
@@ -277,9 +275,7 @@ impl<'a> Usb<'a> {
         endpoint_index: EndpointIndex,
     ) {
         self.initialize_endpoint_state(transfer_type, endpoint_index);
-        self.registers
-            .ep_out_enable
-            .modify(endpoint_index.to_set_ep_out_enable_field_value());
+        self.registers.ep_out_enable[0].modify(endpoint_index.to_set_ep_out_enable_field_value());
     }
 
     /// Enable OUT packet reception
@@ -288,9 +284,7 @@ impl<'a> Usb<'a> {
     ///
     /// + `endpoint_index`: the index of the OUT endpoint interface that must receive OUT packets.
     fn internal_endpoint_rxenable_out(&self, endpoint_index: EndpointIndex) {
-        self.registers
-            .rxenable_out
-            .modify(endpoint_index.to_set_rxenable_out_field_value());
+        self.registers.rxenable_out[0].modify(endpoint_index.to_set_rxenable_out_field_value());
     }
 
     /// Disable OUT packet reception
@@ -299,9 +293,7 @@ impl<'a> Usb<'a> {
     ///
     /// + `endpoint_index`: the index of the OUT endpoint interface that must be disabled.
     fn internal_endpoint_rxdisable_out(&self, endpoint_index: EndpointIndex) {
-        self.registers
-            .rxenable_out
-            .modify(endpoint_index.to_clear_rxenable_out_field_value());
+        self.registers.rxenable_out[0].modify(endpoint_index.to_clear_rxenable_out_field_value());
     }
 
     /// Enable SETUP packet reception
@@ -310,21 +302,15 @@ impl<'a> Usb<'a> {
     ///
     /// + `endpoint_index`: the index of the OUT endpoint interface that must receive SETUP packets.
     fn internal_endpoint_rxenable_setup(&self, endpoint_index: EndpointIndex) {
-        self.registers
-            .rxenable_setup
-            .modify(endpoint_index.to_set_rxenable_setup_field_value());
+        self.registers.rxenable_setup[0].modify(endpoint_index.to_set_rxenable_setup_field_value());
     }
 
     fn internal_enable_in_isochronous(&self, endpoint_index: EndpointIndex) {
-        self.registers
-            .in_iso
-            .modify(endpoint_index.to_set_in_iso_field_value());
+        self.registers.in_iso[0].modify(endpoint_index.to_set_in_iso_field_value());
     }
 
     fn internal_enable_out_isochronous(&self, endpoint_index: EndpointIndex) {
-        self.registers
-            .out_iso
-            .modify(endpoint_index.to_set_out_iso_field_value());
+        self.registers.out_iso[0].modify(endpoint_index.to_set_out_iso_field_value());
     }
 
     /// Get a chunk from the controller's buffer
@@ -1047,41 +1033,41 @@ impl<'a> Usb<'a> {
     /// + Some: the index of the endpoint that received a packet
     /// + None: no index received a packet
     fn get_and_clear_endpoint_index_packet_sent(&self) -> Option<EndpointIndex> {
-        if self.registers.in_sent.is_set(IN_SENT::SENT_0) {
-            self.registers.in_sent.modify(IN_SENT::SENT_0::SET);
+        if self.registers.in_sent[0].is_set(IN_SENT::SENT_0) {
+            self.registers.in_sent[0].modify(IN_SENT::SENT_0::SET);
             Some(EndpointIndex::Endpoint0)
-        } else if self.registers.in_sent.is_set(IN_SENT::SENT_1) {
-            self.registers.in_sent.modify(IN_SENT::SENT_1::SET);
+        } else if self.registers.in_sent[0].is_set(IN_SENT::SENT_1) {
+            self.registers.in_sent[0].modify(IN_SENT::SENT_1::SET);
             Some(EndpointIndex::Endpoint1)
-        } else if self.registers.in_sent.is_set(IN_SENT::SENT_2) {
-            self.registers.in_sent.modify(IN_SENT::SENT_2::SET);
+        } else if self.registers.in_sent[0].is_set(IN_SENT::SENT_2) {
+            self.registers.in_sent[0].modify(IN_SENT::SENT_2::SET);
             Some(EndpointIndex::Endpoint2)
-        } else if self.registers.in_sent.is_set(IN_SENT::SENT_3) {
-            self.registers.in_sent.modify(IN_SENT::SENT_3::SET);
+        } else if self.registers.in_sent[0].is_set(IN_SENT::SENT_3) {
+            self.registers.in_sent[0].modify(IN_SENT::SENT_3::SET);
             Some(EndpointIndex::Endpoint3)
-        } else if self.registers.in_sent.is_set(IN_SENT::SENT_4) {
-            self.registers.in_sent.modify(IN_SENT::SENT_4::SET);
+        } else if self.registers.in_sent[0].is_set(IN_SENT::SENT_4) {
+            self.registers.in_sent[0].modify(IN_SENT::SENT_4::SET);
             Some(EndpointIndex::Endpoint4)
-        } else if self.registers.in_sent.is_set(IN_SENT::SENT_5) {
-            self.registers.in_sent.modify(IN_SENT::SENT_5::SET);
+        } else if self.registers.in_sent[0].is_set(IN_SENT::SENT_5) {
+            self.registers.in_sent[0].modify(IN_SENT::SENT_5::SET);
             Some(EndpointIndex::Endpoint5)
-        } else if self.registers.in_sent.is_set(IN_SENT::SENT_6) {
-            self.registers.in_sent.modify(IN_SENT::SENT_6::SET);
+        } else if self.registers.in_sent[0].is_set(IN_SENT::SENT_6) {
+            self.registers.in_sent[0].modify(IN_SENT::SENT_6::SET);
             Some(EndpointIndex::Endpoint6)
-        } else if self.registers.in_sent.is_set(IN_SENT::SENT_7) {
-            self.registers.in_sent.modify(IN_SENT::SENT_7::SET);
+        } else if self.registers.in_sent[0].is_set(IN_SENT::SENT_7) {
+            self.registers.in_sent[0].modify(IN_SENT::SENT_7::SET);
             Some(EndpointIndex::Endpoint7)
-        } else if self.registers.in_sent.is_set(IN_SENT::SENT_8) {
-            self.registers.in_sent.modify(IN_SENT::SENT_8::SET);
+        } else if self.registers.in_sent[0].is_set(IN_SENT::SENT_8) {
+            self.registers.in_sent[0].modify(IN_SENT::SENT_8::SET);
             Some(EndpointIndex::Endpoint8)
-        } else if self.registers.in_sent.is_set(IN_SENT::SENT_9) {
-            self.registers.in_sent.modify(IN_SENT::SENT_9::SET);
+        } else if self.registers.in_sent[0].is_set(IN_SENT::SENT_9) {
+            self.registers.in_sent[0].modify(IN_SENT::SENT_9::SET);
             Some(EndpointIndex::Endpoint9)
-        } else if self.registers.in_sent.is_set(IN_SENT::SENT_10) {
-            self.registers.in_sent.modify(IN_SENT::SENT_10::SET);
+        } else if self.registers.in_sent[0].is_set(IN_SENT::SENT_10) {
+            self.registers.in_sent[0].modify(IN_SENT::SENT_10::SET);
             Some(EndpointIndex::Endpoint10)
-        } else if self.registers.in_sent.is_set(IN_SENT::SENT_11) {
-            self.registers.in_sent.modify(IN_SENT::SENT_11::SET);
+        } else if self.registers.in_sent[0].is_set(IN_SENT::SENT_11) {
+            self.registers.in_sent[0].modify(IN_SENT::SENT_11::SET);
             Some(EndpointIndex::Endpoint11)
         } else {
             None

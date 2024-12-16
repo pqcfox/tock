@@ -43,7 +43,7 @@ pub struct EarlGrey<
     userspace_kernel_boundary: SysCall,
     pub mpu: PMPUserMPU<MPU_REGIONS, PMP>,
     plic: &'a Plic,
-    pwrmgr: lowrisc::pwrmgr::PwrMgr,
+    pwrmgr: crate::pwrmgr::PwrMgr,
     plic_interrupt_service: &'a I,
     _cfg: PhantomData<CFG>,
     _pinmux: PhantomData<PINMUX>,
@@ -52,7 +52,7 @@ pub struct EarlGrey<
 pub struct EarlGreyDefaultPeripherals<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig> {
     #[cfg(not(feature = "qemu"))]
     pub sram_ret: crate::sram_ret::SramCtrl,
-    pub aes: crate::aes::Aes<'a>,
+    pub aes: lowrisc::aes::Aes<'a>,
     pub hmac: lowrisc::hmac::Hmac<'a>,
     pub clkmgr: crate::clkmgr::Clkmgr,
     pub usb: lowrisc::usb::Usb<'a>,
@@ -87,7 +87,7 @@ impl<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig>
         Self {
             #[cfg(not(feature = "qemu"))]
             sram_ret: crate::sram_ret::SramCtrl::new(),
-            aes: crate::aes::Aes::new(),
+            aes: lowrisc::aes::Aes::new(crate::aes::AES_BASE),
             hmac: lowrisc::hmac::Hmac::new(crate::hmac::HMAC0_BASE),
             clkmgr: crate::clkmgr::Clkmgr::new(),
             usb: lowrisc::usb::Usb::new(crate::usbdev::USB0_BASE),
@@ -314,7 +314,7 @@ impl<
             userspace_kernel_boundary: SysCall::new(),
             mpu: PMPUserMPU::new(pmp),
             plic: &*addr_of!(PLIC),
-            pwrmgr: lowrisc::pwrmgr::PwrMgr::new(crate::pwrmgr::PWRMGR_BASE),
+            pwrmgr: crate::pwrmgr::PwrMgr::new(crate::pwrmgr::PWRMGR_BASE),
             plic_interrupt_service,
             _cfg: PhantomData,
             _pinmux: PhantomData,
