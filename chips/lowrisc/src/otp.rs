@@ -33,6 +33,15 @@ const SIZE_U32: NonZeroUsize = create_non_zero_usize(core::mem::size_of::<u32>()
 #[derive(Clone, Copy)]
 pub struct OtpAddress32(usize);
 
+/// Returned when a raw OTBN address does not fit in the 10-bite address space
+/// or is not properly aligned.
+#[derive(Debug)]
+pub struct OtpAddressError;
+
+/// Returned when an OTBN peripheral initialization fails.
+#[derive(Debug)]
+pub struct OtpInitError;
+
 impl OtpAddress32 {
     /// Create a new OTP address for a 32-bit word.
     ///
@@ -43,12 +52,12 @@ impl OtpAddress32 {
     /// # Return value
     ///
     /// + Ok(Self): the OTP address if `raw_address` is valid
-    /// + Err(()): if `raw_address` does not fit in the 10-bit address space and is not properly
-    /// aligned.
-    pub const fn new(raw_address: usize) -> Result<Self, ()> {
+    /// + Err(OtpAddressError): if `raw_address` does not fit in the 10-bit
+    ///   address space or is not properly aligned.
+    pub const fn new(raw_address: usize) -> Result<Self, OtpAddressError> {
         // CAST: u32 == usize on RV32I
         if raw_address >= MAX_PAST_OTP_ADDRESS.get() || raw_address & 0b11 != 0 {
-            Err(())
+            Err(OtpAddressError)
         } else {
             Ok(Self(raw_address))
         }
@@ -69,7 +78,7 @@ impl OtpAddress32 {
     /// Panics if `raw_address` is invalid. See [new] for more details.
     const fn new_or_panic(raw_address: usize) -> Self {
         match Self::new(raw_address) {
-            Err(()) => panic!("Attempted to create OtpAddress32 with invalid value"),
+            Err(_) => panic!("Attempted to create OtpAddress32 with invalid value"),
             Ok(otp_address32) => otp_address32,
         }
     }
@@ -79,7 +88,7 @@ impl OtpAddress32 {
     /// # Return value
     ///
     /// The underlying 32-bit unsigned number.
-    pub const fn as_u32(self) -> u32 {
+    pub const fn into_u32(self) -> u32 {
         // CAST: u32 == usize on RV32I
         self.0 as u32
     }
@@ -91,10 +100,10 @@ impl OtpAddress32 {
     /// + Some(address): the next [OtpAddress32]
     /// + None: the current OTP address is the last [OtpAddress32]
     pub const fn next(self) -> Option<Self> {
-        let next_raw_address = self.as_u32() as usize + SIZE_U32.get();
+        let next_raw_address = self.into_u32() as usize + SIZE_U32.get();
         match Self::new(next_raw_address) {
             Ok(next_address) => Some(next_address),
-            Err(()) => None,
+            Err(_) => None,
         }
     }
 }
@@ -186,7 +195,7 @@ impl OtpAddress64 {
     /// # Return value
     ///
     /// The underlying 32-bit unsigned number.
-    const fn as_u32(self) -> u32 {
+    const fn into_u32(self) -> u32 {
         // CAST: u32 == usize on RV32I
         self.0 as u32
     }
@@ -323,9 +332,9 @@ impl Otp {
         integrity_check_period: u32,
         consistency_check_period: u32,
         timeout: Option<NonZeroU32>,
-    ) -> Result<(), ()> {
+    ) -> Result<(), OtpInitError> {
         if self.has_errors() {
-            return Err(());
+            return Err(OtpInitError);
         }
         if !self.are_check_registers_locked() {
             self.set_integrity_check_period(integrity_check_period);
@@ -352,14 +361,14 @@ impl Otp {
     fn set_address32(&self, address: OtpAddress32) {
         self.registers
             .direct_access_address
-            .modify(DIRECT_ACCESS_ADDRESS::DIRECT_ACCESS_ADDRESS.val(address.as_u32()));
+            .modify(DIRECT_ACCESS_ADDRESS::DIRECT_ACCESS_ADDRESS.val(address.into_u32()));
     }
 
     /// Set the address for the next 64-bit operation
     fn set_address64(&self, address: OtpAddress64) {
         self.registers
             .direct_access_address
-            .modify(DIRECT_ACCESS_ADDRESS::DIRECT_ACCESS_ADDRESS.val(address.as_u32()));
+            .modify(DIRECT_ACCESS_ADDRESS::DIRECT_ACCESS_ADDRESS.val(address.into_u32()));
     }
 
     /// Start a read

@@ -18,10 +18,10 @@ mod interrupt;
 mod packet_received;
 mod packet_size;
 mod request;
-mod usb;
 mod usb_address;
+mod usb_main;
 mod utils;
 
 pub use interrupt::UsbInterrupt;
 pub use packet_size::MAXIMUM_PACKET_SIZE;
-pub use usb::Usb;
+pub use usb_main::Usb;

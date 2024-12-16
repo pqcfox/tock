@@ -50,7 +50,7 @@ impl<'a> SpiHost<'a> {
             client: OptionalCell::empty(),
             busy: Cell::new(false),
             chip_select: Cell::new(0),
-            cpu_clk: cpu_clk,
+            cpu_clk,
             tsclk: Cell::new(0),
             tx_buf: TakeCell::empty(),
             rx_buf: TakeCell::empty(),
@@ -184,53 +184,46 @@ impl<'a> SpiHost<'a> {
     /// Continue SPI transfer from offset point
     fn spi_transfer_progress(&self) -> Result<SpiHostStatus, ErrorCode> {
         let mut transfer_complete = false;
-        if self
-            .tx_buf
-            .take()
-            .map(|tx_buf| -> Result<(), ErrorCode> {
-                let regs = self.registers;
-                let mut t_byte: u32;
-                let mut tx_slice: [u8; 4];
+        if let Some(tx_buf) = self.tx_buf.take() {
+            let regs = self.registers;
+            let mut t_byte: u32;
+            let mut tx_slice: [u8; 4];
 
-                if regs.status.read(STATUS::TXQD) != 0 || regs.status.read(STATUS::ACTIVE) != 0 {
-                    self.tx_buf.replace(tx_buf);
-                    return Err(ErrorCode::BUSY);
-                }
+            if regs.status.read(STATUS::TXQD) != 0 || regs.status.read(STATUS::ACTIVE) != 0 {
+                self.tx_buf.replace(tx_buf);
+                return Err(ErrorCode::BUSY);
+            }
 
-                while !regs.status.is_set(STATUS::TXFULL) && regs.status.read(STATUS::TXQD) < 64 {
-                    tx_slice = [0, 0, 0, 0];
-                    for elem in tx_slice.iter_mut() {
-                        if self.tx_offset.get() >= self.tx_len.get() {
-                            break;
-                        }
-                        if let Some(val) = tx_buf.get(self.tx_offset.get()) {
-                            *elem = *val;
-                            self.tx_offset.set(self.tx_offset.get() + 1);
-                        } else {
-                            //Unexpectedly ran out of tx buffer
-                            break;
-                        }
-                    }
-                    t_byte = u32::from_le_bytes(tx_slice);
-                    regs.txdata[0].set(t_byte);
-
-                    //Transfer Complete in one-shot
+            while !regs.status.is_set(STATUS::TXFULL) && regs.status.read(STATUS::TXQD) < 64 {
+                tx_slice = [0, 0, 0, 0];
+                for elem in tx_slice.iter_mut() {
                     if self.tx_offset.get() >= self.tx_len.get() {
-                        transfer_complete = true;
+                        break;
+                    }
+                    if let Some(val) = tx_buf.get(self.tx_offset.get()) {
+                        *elem = *val;
+                        self.tx_offset.set(self.tx_offset.get() + 1);
+                    } else {
+                        //Unexpectedly ran out of tx buffer
                         break;
                     }
                 }
+                t_byte = u32::from_le_bytes(tx_slice);
+                regs.txdata[0].set(t_byte);
 
-                //Hold tx_buf for offset transfer continue
-                self.tx_buf.replace(tx_buf);
+                //Transfer Complete in one-shot
+                if self.tx_offset.get() >= self.tx_len.get() {
+                    transfer_complete = true;
+                    break;
+                }
+            }
 
-                //Set command register to init transfer
-                self.start_transceive();
-                Ok(())
-            })
-            .transpose()
-            .is_err()
-        {
+            //Hold tx_buf for offset transfer continue
+            self.tx_buf.replace(tx_buf);
+
+            //Set command register to init transfer
+            self.start_transceive();
+        } else {
             return Err(ErrorCode::BUSY);
         }
 
@@ -509,10 +502,10 @@ impl<'a> hil::spi::SpiMaster<'a> for SpiHost<'a> {
 
         //Hold rx_buf for later
 
-        rx_buf.map(|rx_buf_t| {
+        if let Some(rx_buf_t) = rx_buf {
             self.rx_len.set(cmp::min(self.tx_len.get(), rx_buf_t.len()));
             self.rx_buf.replace(rx_buf_t);
-        });
+        }
 
         //Set command register to init transfer
         self.start_transceive();

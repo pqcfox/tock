@@ -31,7 +31,7 @@ impl<'a, PAD> GpioPin<'a, PAD> {
     ) -> GpioPin<'a, PAD> {
         GpioPin {
             gpio_registers: gpio_base,
-            padctl: padctl,
+            padctl,
             pin,
             client: OptionalCell::empty(),
         }

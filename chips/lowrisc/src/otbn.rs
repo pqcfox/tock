@@ -142,7 +142,7 @@ impl<'a> Otbn<'a> {
                     .get()
                     .to_ne_bytes();
 
-                out_buf[idx + 0] = d[0];
+                out_buf[idx] = d[0];
                 out_buf[idx + 1] = d[1];
                 out_buf[idx + 2] = d[2];
                 out_buf[idx + 3] = d[3];
@@ -179,7 +179,7 @@ impl<'a> Otbn<'a> {
         for i in 0..(input.len() / 4) {
             let idx = i * 4;
 
-            let mut d = (input[idx + 0] as u32) << 0;
+            let mut d = input[idx] as u32;
             d |= (input[idx + 1] as u32) << 8;
             d |= (input[idx + 2] as u32) << 16;
             d |= (input[idx + 3] as u32) << 24;
@@ -204,7 +204,7 @@ impl<'a> Otbn<'a> {
         for i in 0..(data.len() / 4) {
             let idx = i * 4;
 
-            let mut d = (data[idx + 0] as u32) << 0;
+            let mut d = data[idx] as u32;
             d |= (data[idx + 1] as u32) << 8;
             d |= (data[idx + 2] as u32) << 16;
             d |= (data[idx + 3] as u32) << 24;

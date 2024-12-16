@@ -21,7 +21,7 @@ const MAX_LENGTH: usize = 128;
 
 #[derive(Clone, Copy)]
 enum Mode {
-    IDLE,
+    Idle,
     AES128CTR,
     AES128CBC,
     AES128ECB,
@@ -45,7 +45,7 @@ impl<'a> Aes<'a> {
             client: OptionalCell::empty(),
             source: TakeCell::empty(),
             dest: TakeCell::empty(),
-            mode: Cell::new(Mode::IDLE),
+            mode: Cell::new(Mode::Idle),
             deferred_call: DeferredCall::new(),
         }
     }
@@ -124,7 +124,7 @@ impl<'a> Aes<'a> {
                     3 => v = self.registers.data_out[3].get(),
                     _ => {}
                 }
-                dest[blocknum + (i * 4) + 0] = (v >> 0) as u8;
+                dest[blocknum + (i * 4)] = v as u8;
                 dest[blocknum + (i * 4) + 1] = (v >> 8) as u8;
                 dest[blocknum + (i * 4) + 2] = (v >> 16) as u8;
                 dest[blocknum + (i * 4) + 3] = (v >> 24) as u8;
@@ -139,7 +139,7 @@ impl<'a> Aes<'a> {
                 // This is the case that dest = source
                 self.dest.map_or(Err(ErrorCode::NOMEM), |dest| {
                     for i in 0..4 {
-                        let mut v = dest[blocknum + (i * 4) + 0] as usize;
+                        let mut v = dest[blocknum + (i * 4)] as usize;
                         v |= (dest[blocknum + (i * 4) + 1] as usize) << 8;
                         v |= (dest[blocknum + (i * 4) + 2] as usize) << 16;
                         v |= (dest[blocknum + (i * 4) + 3] as usize) << 24;
@@ -158,7 +158,7 @@ impl<'a> Aes<'a> {
                 for i in 0..4 {
                     // we work off an array of u8 so we need to assemble
                     // those back into a u32
-                    let mut v = source[blocknum + (i * 4) + 0] as usize;
+                    let mut v = source[blocknum + (i * 4)] as usize;
                     v |= (source[blocknum + (i * 4) + 1] as usize) << 8;
                     v |= (source[blocknum + (i * 4) + 2] as usize) << 16;
                     v |= (source[blocknum + (i * 4) + 3] as usize) << 24;
@@ -234,7 +234,7 @@ impl<'a> hil::symmetric_encryption::AES128<'a> for Aes<'a> {
         }
 
         for i in 0..(AES128_BLOCK_SIZE / 4) {
-            let mut k = iv[i * 4 + 0] as u32;
+            let mut k = iv[i * 4] as u32;
             k |= (iv[i * 4 + 1] as u32) << 8;
             k |= (iv[i * 4 + 2] as u32) << 16;
             k |= (iv[i * 4 + 3] as u32) << 24;
@@ -260,7 +260,7 @@ impl<'a> hil::symmetric_encryption::AES128<'a> for Aes<'a> {
         }
 
         for i in 0..(AES128_KEY_SIZE / 4) {
-            let mut k = key[i * 4 + 0] as u32;
+            let mut k = key[i * 4] as u32;
             k |= (key[i * 4 + 1] as u32) << 8;
             k |= (key[i * 4 + 2] as u32) << 16;
             k |= (key[i * 4 + 3] as u32) << 24;

@@ -231,7 +231,7 @@ impl Request {
     /// + Ok: the packet represents a valid USB request
     /// + Err: the packet does not represent a valid USB request
     pub(super) fn try_from_packet(packet: &[VolatileCell<u8>]) -> Result<Self, RequestDecodeError> {
-        let request_type_byte = match packet.get(0) {
+        let request_type_byte = match packet.first() {
             Some(volatile_byte) => volatile_byte.get(),
             None => return Err(RequestDecodeError::PacketTooShort),
         };

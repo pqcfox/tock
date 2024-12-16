@@ -49,6 +49,7 @@ impl Buffer {
 }
 
 /// Available buffer.
+#[allow(clippy::declare_interior_mutable_const)]
 pub(super) const AVAILABLE_BUFFER: Buffer = Buffer {
     available: Cell::new(true),
 };

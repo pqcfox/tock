@@ -58,7 +58,7 @@ impl<'a> Uart<'a> {
     pub fn new(base: StaticRef<UartRegisters>, clock_frequency: u32) -> Uart<'a> {
         Uart {
             registers: base,
-            clock_frequency: clock_frequency,
+            clock_frequency,
             tx_client: OptionalCell::empty(),
             rx_client: OptionalCell::empty(),
             rx_deferred_call: DeferredCall::new(),
@@ -189,11 +189,16 @@ impl<'a> Uart<'a> {
         let regs = self.registers;
 
         self.rx_client.map(|client| {
-            self.rx_buffer.take().map(|rx_buf| {
+            if let Some(rx_buf) = self.rx_buffer.take() {
                 let mut len = 0;
                 let mut return_code = Ok(());
 
-                for i in self.rx_index.get()..self.rx_len.get() {
+                for (i, item) in rx_buf
+                    .iter_mut()
+                    .enumerate()
+                    .take(self.rx_len.get())
+                    .skip(self.rx_index.get())
+                {
                     if regs.status.is_set(STATUS::RXEMPTY) {
                         /* RX is empty */
 
@@ -211,12 +216,12 @@ impl<'a> Uart<'a> {
                         }
                     }
 
-                    rx_buf[i] = regs.rdata.get() as u8;
+                    *item = regs.rdata.get() as u8;
                     len = i + 1;
                 }
 
                 client.received_buffer(rx_buf, len, return_code, uart::Error::None);
-            });
+            }
         });
     }
 
@@ -231,9 +236,9 @@ impl<'a> Uart<'a> {
                 // We sent everything to the UART hardware, now from an
                 // interrupt callback we can issue the callback.
                 self.tx_client.map(|client| {
-                    self.tx_buffer.take().map(|tx_buf| {
+                    if let Some(tx_buf) = self.tx_buffer.take() {
                         client.transmitted_buffer(tx_buf, self.tx_len.get(), Ok(()));
-                    });
+                    }
                 });
             } else {
                 // We have more to transmit, so continue in tx_progress().
@@ -262,50 +267,50 @@ impl<'a> Uart<'a> {
         } else if intrs.is_set(INTR::RX_OVERFLOW) {
             self.disable_rx_interrupt();
             self.rx_client.map(|client| {
-                self.rx_buffer.take().map(|rx_buf| {
+                if let Some(rx_buf) = self.rx_buffer.take() {
                     client.received_buffer(
                         rx_buf,
                         self.rx_index.get(),
                         Err(kernel::ErrorCode::FAIL),
                         uart::Error::OverrunError,
                     );
-                });
+                }
             });
         } else if intrs.is_set(INTR::RX_FRAME_ERR) {
             self.disable_rx_interrupt();
             self.rx_client.map(|client| {
-                self.rx_buffer.take().map(|rx_buf| {
+                if let Some(rx_buf) = self.rx_buffer.take() {
                     client.received_buffer(
                         rx_buf,
                         self.rx_index.get(),
                         Err(kernel::ErrorCode::FAIL),
                         uart::Error::FramingError,
                     );
-                });
+                }
             });
         } else if intrs.is_set(INTR::RX_BREAK_ERR) {
             self.disable_rx_interrupt();
             self.rx_client.map(|client| {
-                self.rx_buffer.take().map(|rx_buf| {
+                if let Some(rx_buf) = self.rx_buffer.take() {
                     client.received_buffer(
                         rx_buf,
                         self.rx_index.get(),
                         Err(kernel::ErrorCode::FAIL),
                         uart::Error::BreakError,
                     );
-                });
+                }
             });
         } else if intrs.is_set(INTR::RX_PARITY_ERR) {
             self.disable_rx_interrupt();
             self.rx_client.map(|client| {
-                self.rx_buffer.take().map(|rx_buf| {
+                if let Some(rx_buf) = self.rx_buffer.take() {
                     client.received_buffer(
                         rx_buf,
                         self.rx_index.get(),
                         Err(kernel::ErrorCode::FAIL),
                         uart::Error::ParityError,
                     );
-                });
+                }
             });
         }
     }

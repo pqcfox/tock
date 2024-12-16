@@ -46,6 +46,10 @@ pub enum UsbInterrupt {
     LinkOutErr,
 }
 
+/// Returned when an invalid USB interrupt ID is provided.
+#[derive(Debug)]
+pub struct UsbInvalidInterruptError;
+
 impl UsbInterrupt {
     /// Converts a usize to a USB interrupt
     ///
@@ -57,7 +61,7 @@ impl UsbInterrupt {
     ///
     /// + Ok: if value >= 135 && value <= 151
     /// + Err: if value < 135 || value > 151
-    pub fn try_from_usize(value: usize) -> Result<Self, ()> {
+    pub fn try_from_usize(value: usize) -> Result<Self, UsbInvalidInterruptError> {
         match value {
             135 => Ok(UsbInterrupt::PacketReceived),
             136 => Ok(UsbInterrupt::PacketSent),
@@ -76,7 +80,7 @@ impl UsbInterrupt {
             149 => Ok(UsbInterrupt::Frame),
             150 => Ok(UsbInterrupt::Powered),
             151 => Ok(UsbInterrupt::LinkOutErr),
-            _ => Err(()),
+            _ => Err(UsbInvalidInterruptError),
         }
     }
 }
