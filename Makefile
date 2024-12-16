@@ -178,7 +178,7 @@ licensecheck:
 
 .PHONY: ot-license-compat
 ot-license-compat:
-	@cargo install cargo-deny --version 0.16.1
+	@cargo install cargo-deny --version 0.16.1 --locked
 	@cargo deny --all-features --manifest-path boards/opentitan/earlgrey-cw310/Cargo.toml check
 
 
