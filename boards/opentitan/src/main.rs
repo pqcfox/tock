@@ -75,6 +75,8 @@ use rv32i::csr;
 pub mod io;
 mod otbn;
 pub mod pinmux_layout;
+#[cfg(feature = "ffi")]
+pub mod polyfill;
 #[cfg(test)]
 mod tests;
 /// The `earlgrey` chip crate supports multiple targets with slightly different
