@@ -7,5 +7,4 @@
 
 pub mod cryptolib;
 pub mod hardened;
-pub mod polyfill;
 pub mod status;

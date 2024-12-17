@@ -5,7 +5,7 @@
 // Copyright zeroRISC Inc.
 // Confidential information of zeroRISC Inc. All rights reserved.
 
-use crate::ffi::cryptolib::ecc::ecdsa::EcdsaVerifyP256Job;
+use crate::ffi::cryptolib::ecc::ecdsa::{EcdsaVerifyP256Job, EcdsaVerifyP384Job};
 use crate::otbn::{OtbnRegisters, STATUS};
 use capsules_core::virtualizers::timeout_mux::{Job, TimeoutMux};
 use kernel::hil::time::Alarm;
@@ -54,12 +54,14 @@ pub trait OtbnJob<'a, A: Alarm<'a>> {
 
 pub enum OtbnOperation<'a, A: Alarm<'a>> {
     EcdsaVerifyP256(EcdsaVerifyP256Job<'a, A>),
+    EcdsaVerifyP384(EcdsaVerifyP384Job<'a, A>),
 }
 
 impl<'a, A: Alarm<'a>> Job for OtbnOperation<'a, A> {
     fn setup(&mut self) -> Result<(), ErrorCode> {
         match self {
             OtbnOperation::EcdsaVerifyP256(state) => OtbnJob::setup(state),
+            OtbnOperation::EcdsaVerifyP384(state) => OtbnJob::setup(state),
         }
     }
 
@@ -70,18 +72,24 @@ impl<'a, A: Alarm<'a>> Job for OtbnOperation<'a, A> {
                 .otbn_registers
                 .status
                 .matches_all(STATUS::STATUS::IDLE),
+            OtbnOperation::EcdsaVerifyP384(state) => OtbnJob::parent(state)
+                .otbn_registers
+                .status
+                .matches_all(STATUS::STATUS::IDLE),
         })
     }
 
     fn on_complete(&mut self, status: Result<(), ErrorCode>) {
         match self {
             OtbnOperation::EcdsaVerifyP256(state) => OtbnJob::on_complete(state, status),
+            OtbnOperation::EcdsaVerifyP384(state) => OtbnJob::on_complete(state, status),
         }
     }
 
     fn on_timeout(&self) {
         match self {
             OtbnOperation::EcdsaVerifyP256(state) => OtbnJob::on_timeout(state),
+            OtbnOperation::EcdsaVerifyP384(state) => OtbnJob::on_timeout(state),
         }
     }
 }

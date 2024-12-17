@@ -53,7 +53,7 @@ use kernel::hil::led::LedHigh;
 use kernel::hil::opentitan_attestation::CertificateReader;
 use kernel::hil::pattgen::PattGen;
 #[cfg(feature = "ffi")]
-use kernel::hil::public_key_crypto::ecc::{EllipticCurve, P256};
+use kernel::hil::public_key_crypto::ecc::{EllipticCurve, P256, P384};
 use kernel::hil::rng::Rng;
 use kernel::hil::symmetric_encryption::AES128;
 use kernel::hil::usb::UsbController;
@@ -65,8 +65,10 @@ use kernel::{create_capability, debug, static_init};
 #[cfg(feature = "ffi")]
 use lowrisc::ffi::cryptolib::{
     ecc::ecdsa::OtCryptoEcdsaP256,
+    ecc::ecdsa::OtCryptoEcdsaP384,
     mux::{CryptolibMux, OtbnOperation, OTBN_TIMEOUT_MUX_CHECK_FREQ},
     timeouts::ECDSA_P256_VERIFY_TIMEOUT,
+    timeouts::ECDSA_P384_VERIFY_TIMEOUT,
 };
 #[cfg(not(feature = "qemu"))]
 use lowrisc::sysrst_ctrl::SysRstCtrl;
@@ -75,6 +77,8 @@ use rv32i::csr;
 pub mod io;
 mod otbn;
 pub mod pinmux_layout;
+#[cfg(feature = "ffi")]
+pub mod polyfill;
 #[cfg(test)]
 mod tests;
 /// The `earlgrey` chip crate supports multiple targets with slightly different
@@ -327,6 +331,13 @@ struct EarlGrey {
         { P256::SIG_LEN },
         OtCryptoEcdsaP256<'static, RvTimer<'static>>,
     >,
+    #[cfg(feature = "ffi")]
+    ecdsa_p384: &'static capsules_extra::public_key_crypto::asymmetric_crypto::AsymmetricCrypto<
+        'static,
+        { P384::HASH_LEN },
+        { P384::SIG_LEN },
+        OtCryptoEcdsaP384<'static, RvTimer<'static>>,
+    >,
 }
 
 /// Mapping of integer syscalls to objects that implement syscalls.
@@ -361,6 +372,10 @@ impl SyscallDriverLookup for EarlGrey {
             #[cfg(feature = "ffi")]
             capsules_extra::public_key_crypto::asymmetric_crypto::DRIVER_NUM_ECDSA_P256 => {
                 f(Some(self.ecdsa_p256))
+            }
+            #[cfg(feature = "ffi")]
+            capsules_extra::public_key_crypto::asymmetric_crypto::DRIVER_NUM_ECDSA_P384 => {
+                f(Some(self.ecdsa_p384))
             }
             kernel::ipc::DRIVER_NUM => f(Some(&self.ipc)),
             _ => f(None),
@@ -1241,7 +1256,7 @@ unsafe fn setup() -> (
 
     // Asymmetric crypto
     #[cfg(feature = "ffi")]
-    let ecdsa_p256 = {
+    let (ecdsa_p256, ecdsa_p384) = {
         let timeout_mux = static_init!(
             TimeoutMux<'static, RvTimer, OtbnOperation<'static, RvTimer>>,
             TimeoutMux::new(otbn_timer, OTBN_TIMEOUT_MUX_CHECK_FREQ),
@@ -1270,9 +1285,9 @@ unsafe fn setup() -> (
             public_key_buf,
         )
         .unwrap();
-        let hash_buf: &'static mut [u8; P256::HASH_LEN] =
+        let p256_hash_buf: &'static mut [u8; P256::HASH_LEN] =
             static_init!([u8; P256::HASH_LEN], [0u8; P256::HASH_LEN],);
-        let signature_buf: &'static mut [u8; P256::SIG_LEN] =
+        let p256_signature_buf: &'static mut [u8; P256::SIG_LEN] =
             static_init!([u8; P256::SIG_LEN], [0u8; P256::SIG_LEN],);
         let ecdsa_p256: &'static capsules_extra::public_key_crypto::asymmetric_crypto::AsymmetricCrypto<
                     'static,
@@ -1288,10 +1303,53 @@ unsafe fn setup() -> (
             >,
             capsules_extra::public_key_crypto::asymmetric_crypto::AsymmetricCrypto::new(
                 cryptolib_ecdsa_p256,
-                hash_buf,
-                signature_buf,
+                p256_hash_buf,
+                p256_signature_buf,
                 board_kernel.create_grant(
                     capsules_extra::public_key_crypto::asymmetric_crypto::DRIVER_NUM_ECDSA_P256,
+                    &memory_allocation_cap
+                ),
+            ),
+        );
+        // ECDSA P-384
+        let cryptolib_ecdsa_p384: &'static OtCryptoEcdsaP384<'static, RvTimer<'static>> = static_init!(
+            OtCryptoEcdsaP384<'static, RvTimer<'static>>,
+            OtCryptoEcdsaP384::new(cryptolib_mux, ECDSA_P384_VERIFY_TIMEOUT.into()),
+        );
+        cryptolib_ecdsa_p384.set_self_ref();
+        let public_key_buf: &'static mut [u8; 2 * P384::COORD_LEN] =
+            static_init!([u8; 2 * P384::COORD_LEN], [0u8; 2 * P384::COORD_LEN],);
+        // Initialize the public key buffer for ECDSA P-384 driver.
+        //
+        // PANIC: The implementation of `import_public_key` for
+        // `OtCryptoEcdsaP384` never returns `Err`.
+        kernel::hil::public_key_crypto::keys::PubKeyMut::import_public_key(
+            cryptolib_ecdsa_p384,
+            public_key_buf,
+        )
+        .unwrap();
+        let p384_hash_buf: &'static mut [u8; P384::HASH_LEN] =
+            static_init!([u8; P384::HASH_LEN], [0u8; P384::HASH_LEN],);
+        let p384_signature_buf: &'static mut [u8; P384::SIG_LEN] =
+            static_init!([u8; P384::SIG_LEN], [0u8; P384::SIG_LEN],);
+        let ecdsa_p384: &'static capsules_extra::public_key_crypto::asymmetric_crypto::AsymmetricCrypto<
+                    'static,
+                { P384::HASH_LEN },
+                { P384::SIG_LEN },
+                OtCryptoEcdsaP384<'static, RvTimer>,
+                > = static_init!(
+            capsules_extra::public_key_crypto::asymmetric_crypto::AsymmetricCrypto<
+                'static,
+            { P384::HASH_LEN },
+            { P384::SIG_LEN },
+                OtCryptoEcdsaP384<'static, RvTimer>,
+            >,
+            capsules_extra::public_key_crypto::asymmetric_crypto::AsymmetricCrypto::new(
+                cryptolib_ecdsa_p384,
+                p384_hash_buf,
+                p384_signature_buf,
+                board_kernel.create_grant(
+                    capsules_extra::public_key_crypto::asymmetric_crypto::DRIVER_NUM_ECDSA_P384,
                     &memory_allocation_cap
                 ),
             ),
@@ -1304,31 +1362,58 @@ unsafe fn setup() -> (
         );
         #[cfg(feature = "test_cryptolib")]
         {
-            let hash_buf: &'static mut [u8; P256::HASH_LEN] =
+            let p256_hash_buf: &'static mut [u8; P256::HASH_LEN] =
                 static_init!([u8; P256::HASH_LEN], [0u8; P256::HASH_LEN],);
-            let signature_buf: &'static mut [u8; P256::SIG_LEN] =
+            let p256_signature_buf: &'static mut [u8; P256::SIG_LEN] =
                 static_init!([u8; P256::SIG_LEN], [0u8; P256::SIG_LEN],);
-            let hash_buf_2: &'static mut [u8; P256::HASH_LEN] =
+            let p256_hash_buf_2: &'static mut [u8; P256::HASH_LEN] =
                 static_init!([u8; P256::HASH_LEN], [0u8; P256::HASH_LEN],);
-            let signature_buf_2: &'static mut [u8; P256::SIG_LEN] =
+            let p256_signature_buf_2: &'static mut [u8; P256::SIG_LEN] =
                 static_init!([u8; P256::SIG_LEN], [0u8; P256::SIG_LEN],);
-            let ecdsa_p256_test_client: &'static lowrisc::ffi::cryptolib::ecc::ecdsa::tests::EcdsaP256TestClient = static_init!(
-                lowrisc::ffi::cryptolib::ecc::ecdsa::tests::EcdsaP256TestClient ,
-                lowrisc::ffi::cryptolib::ecc::ecdsa::tests::EcdsaP256TestClient::new(hash_buf, signature_buf, hash_buf_2, signature_buf_2),
+            let p256_test_client: &'static lowrisc::ffi::cryptolib::ecc::ecdsa::tests::EcdsaP256TestClient = static_init!(
+                lowrisc::ffi::cryptolib::ecc::ecdsa::tests::EcdsaP256TestClient,
+                lowrisc::ffi::cryptolib::ecc::ecdsa::tests::EcdsaP256TestClient::new(p256_hash_buf, p256_signature_buf, p256_hash_buf_2, p256_signature_buf_2),
             );
             kernel::hil::public_key_crypto::ecc::EcdsaP256::set_verify_client(
                 cryptolib_ecdsa_p256,
-                ecdsa_p256_test_client,
+                p256_test_client,
             );
-            let pub_key_buf: &'static mut [u8; 2 * P256::COORD_LEN] =
+            let p256_pub_key_buf: &'static mut [u8; 2 * P256::COORD_LEN] =
                 static_init!([u8; 2 * P256::COORD_LEN], [0u8; 2 * P256::COORD_LEN],);
+
+            let p384_hash_buf: &'static mut [u8; P384::HASH_LEN] =
+                static_init!([u8; P384::HASH_LEN], [0u8; P384::HASH_LEN],);
+            let p384_signature_buf: &'static mut [u8; P384::SIG_LEN] =
+                static_init!([u8; P384::SIG_LEN], [0u8; P384::SIG_LEN],);
+            let p384_hash_buf_2: &'static mut [u8; P384::HASH_LEN] =
+                static_init!([u8; P384::HASH_LEN], [0u8; P384::HASH_LEN],);
+            let p384_signature_buf_2: &'static mut [u8; P384::SIG_LEN] =
+                static_init!([u8; P384::SIG_LEN], [0u8; P384::SIG_LEN],);
+            let p384_test_client: &'static lowrisc::ffi::cryptolib::ecc::ecdsa::tests::EcdsaP384TestClient = static_init!(
+                lowrisc::ffi::cryptolib::ecc::ecdsa::tests::EcdsaP384TestClient,
+                lowrisc::ffi::cryptolib::ecc::ecdsa::tests::EcdsaP384TestClient::new(p384_hash_buf, p384_signature_buf, p384_hash_buf_2, p384_signature_buf_2),
+            );
+            kernel::hil::public_key_crypto::ecc::EcdsaP384::set_verify_client(
+                cryptolib_ecdsa_p384,
+                p384_test_client,
+            );
+            let p384_pub_key_buf: &'static mut [u8; 2 * P384::COORD_LEN] =
+                static_init!([u8; 2 * P384::COORD_LEN], [0u8; 2 * P384::COORD_LEN],);
+
+            // Test P-256 verify
             lowrisc::ffi::cryptolib::ecc::ecdsa::tests::test_ecdsa_p256_verify(
                 cryptolib_ecdsa_p256,
-                ecdsa_p256_test_client,
-                pub_key_buf,
+                p256_test_client,
+                p256_pub_key_buf,
+            );
+            // Test P-384 verify
+            lowrisc::ffi::cryptolib::ecc::ecdsa::tests::test_ecdsa_p384_verify(
+                cryptolib_ecdsa_p384,
+                p384_test_client,
+                p384_pub_key_buf,
             );
         }
-        ecdsa_p256
+        (ecdsa_p256, ecdsa_p384)
     };
 
     let earlgrey = static_init!(
@@ -1361,6 +1446,8 @@ unsafe fn setup() -> (
             attestation,
             #[cfg(feature = "ffi")]
             ecdsa_p256,
+            #[cfg(feature = "ffi")]
+            ecdsa_p384,
         }
     );
 

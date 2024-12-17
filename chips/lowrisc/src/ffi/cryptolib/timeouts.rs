@@ -11,3 +11,7 @@
 /// indicated in
 /// https://opentitan.org/book/hw/ip/otbn/doc/otbn_intro.html#performance).
 pub const ECDSA_P256_VERIFY_TIMEOUT: u64 = 2_100_000;
+/// ECDSA P-384 verify operation timeout (~5X the normal operation time as
+/// indicated in
+/// https://opentitan.org/book/hw/ip/otbn/doc/otbn_intro.html#performance).
+pub const ECDSA_P384_VERIFY_TIMEOUT: u64 = 5_400_000;
