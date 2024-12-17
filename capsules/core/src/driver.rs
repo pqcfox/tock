@@ -53,6 +53,7 @@ pub enum NUM {
     Sha                   = 0x40005,
     Aes                   = 0x40006,
     EcdsaP256             = 0x40007,
+    EcdsaP384             = 0x40008,
 
     // Storage
     AppFlash              = 0x50000,

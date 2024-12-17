@@ -26,7 +26,13 @@
 //! in little-endian encoding.
 //!
 //! Arguments:
-//! None
+//! + Hash algorithm used to compute the message digest.
+//!   + 0: SHA-256
+//!   + 1: SHA-384
+//!   + 2: SHA-512
+//!   + 3: SHA3-256
+//!   + 4: SHA3-384
+//!   + 5: SHA3-512
 //!
 //! Read-only allow inputs:
 //! + 0: Message digest
@@ -38,8 +44,9 @@
 //! does not match the indicated algorithm.
 //! + CommandReturn::failure(ErrorCode::BUSY): if the underlying cryptographic hardware
 //! + reported a busy status.
-//! + CommandReturn::failure(ErrorCode::INVAL): Either no public key was set, or the current
-//! public key is for an incompatible algorithm.
+//! + CommandReturn::failure(ErrorCode::INVAL): Either no public key was set, the current
+//! public key is for an incompatible algorithm, or the specified hash mode is not supported
+//! by the associated curve.
 //! + CommandReturn::failure(ErrorCode::FAIL): if the operation failed for any other reason.
 //! + CommandReturn::success(): the operation has been initiated.
 //!
@@ -63,6 +70,7 @@
 //! 3. Always 0
 
 use kernel::grant::{AllowRoCount, AllowRwCount, Grant, UpcallCount};
+use kernel::hil::public_key_crypto::ecc::{HashMode, SetHashMode};
 use kernel::hil::public_key_crypto::keys::PubKeyMut;
 use kernel::hil::public_key_crypto::signature::{ClientVerify, SignatureVerify};
 use kernel::processbuffer::ReadableProcessBuffer;
@@ -73,12 +81,14 @@ use kernel::ProcessId;
 
 /// ECDSA P-256 driver number
 pub const DRIVER_NUM_ECDSA_P256: usize = capsules_core::driver::NUM::EcdsaP256 as usize;
+/// ECDSA P-384 driver number
+pub const DRIVER_NUM_ECDSA_P384: usize = capsules_core::driver::NUM::EcdsaP384 as usize;
 
 pub struct AsymmetricCrypto<
     'a,
     const HASH_LEN: usize,
     const SIG_LEN: usize,
-    SigVerify: PubKeyMut + SignatureVerify<'a, HASH_LEN, SIG_LEN>,
+    SigVerify: PubKeyMut + SetHashMode + SignatureVerify<'a, HASH_LEN, SIG_LEN>,
 > {
     verifier: &'a SigVerify,
     hash_buf: TakeCell<'static, [u8; HASH_LEN]>,
@@ -96,7 +106,7 @@ impl<
         'a,
         const HASH_LEN: usize,
         const SIG_LEN: usize,
-        SigVerify: PubKeyMut + SignatureVerify<'a, HASH_LEN, SIG_LEN>,
+        SigVerify: PubKeyMut + SetHashMode + SignatureVerify<'a, HASH_LEN, SIG_LEN>,
     > AsymmetricCrypto<'a, HASH_LEN, SIG_LEN, SigVerify>
 {
     /// Creates a new `AsymmetricCrypto` capsule
@@ -122,7 +132,21 @@ impl<
 
     /// Verify the provided signature on the provided digest. Uses the
     /// grant owned by this capsule as the source of the arguments.
-    fn command_verify(&self, calling_process: ProcessId) -> Result<(), ErrorCode> {
+    fn command_verify(
+        &self,
+        calling_process: ProcessId,
+        hash_mode: usize,
+    ) -> Result<(), ErrorCode> {
+        // Set hash mode, failing-fast if the value is invalid.
+        self.verifier.set_hash_mode(match hash_mode {
+            command::verify::hash_mode::SHA256 => HashMode::Sha256,
+            command::verify::hash_mode::SHA384 => HashMode::Sha384,
+            command::verify::hash_mode::SHA512 => HashMode::Sha512,
+            command::verify::hash_mode::SHA3_256 => HashMode::Sha3_256,
+            command::verify::hash_mode::SHA3_384 => HashMode::Sha3_384,
+            command::verify::hash_mode::SHA3_512 => HashMode::Sha3_512,
+            _ => return Err(ErrorCode::INVAL),
+        })?;
         // Get hash buffer
         let hash_buf = match self.hash_buf.take() {
             Some(hash_buf) => hash_buf,
@@ -160,7 +184,7 @@ impl<
                     .get_readonly_processbuffer(RoAllowId::Digest as usize)
                     .and_then(|allowed_buffer| {
                         allowed_buffer.enter(|data| {
-                            if data.len() > hash_buf.len() {
+                            if data.len() != hash_buf.len() {
                                 return Err(ErrorCode::SIZE);
                             }
                             // PANIC: the length of `data` has been checked.
@@ -174,7 +198,7 @@ impl<
                     .get_readonly_processbuffer(RoAllowId::Signature as usize)
                     .and_then(|allowed_buffer| {
                         allowed_buffer.enter(|data| {
-                            if data.len() > signature_buf.len() {
+                            if data.len() != signature_buf.len() {
                                 return Err(ErrorCode::SIZE);
                             }
                             // PANIC: the length of `data` has been checked.
@@ -188,7 +212,7 @@ impl<
                     .get_readonly_processbuffer(RoAllowId::PublicKey as usize)
                     .and_then(|allowed_buffer| {
                         allowed_buffer.enter(|data| {
-                            if data.len() > pub_key_buf.len() {
+                            if data.len() != pub_key_buf.len() {
                                 return Err(ErrorCode::SIZE);
                             }
                             // PANIC: the length of `data` has been checked.
@@ -332,21 +356,28 @@ mod upcall {
     }
 }
 
-/// Attestation commands, as described in the API definition at the
-/// top of this file.
-enum Command {
-    DriverExistence,
-    Verify,
-}
+mod command {
+    /// Command ID to check this driver exists.
+    pub const EXISTS: usize = 0;
+    /// Command ID for signature verification.
+    pub const VERIFY: usize = 1;
 
-impl TryFrom<usize> for Command {
-    type Error = ();
-
-    fn try_from(id: usize) -> Result<Command, Self::Error> {
-        match id {
-            0 => Ok(Command::DriverExistence),
-            1 => Ok(Command::Verify),
-            _ => Err(()),
+    /// Parameter IDs for `verify` command.
+    pub mod verify {
+        /// Hash mode paramter values (parameter 1).
+        pub mod hash_mode {
+            /// SHA-256
+            pub const SHA256: usize = 0;
+            /// SHA-384
+            pub const SHA384: usize = 1;
+            /// SHA-512
+            pub const SHA512: usize = 2;
+            /// SHA3-256
+            pub const SHA3_256: usize = 3;
+            /// SHA3-384
+            pub const SHA3_384: usize = 4;
+            /// SHA3-512
+            pub const SHA3_512: usize = 5;
         }
     }
 }
@@ -355,21 +386,20 @@ impl<
         'a,
         const HASH_LEN: usize,
         const SIG_LEN: usize,
-        SigVerify: PubKeyMut + SignatureVerify<'a, HASH_LEN, SIG_LEN>,
+        SigVerify: PubKeyMut + SetHashMode + SignatureVerify<'a, HASH_LEN, SIG_LEN>,
     > SyscallDriver for AsymmetricCrypto<'a, HASH_LEN, SIG_LEN, SigVerify>
 {
     fn command(
         &self,
         command_num: usize,
-        _data1: usize,
+        data1: usize,
         _data2: usize,
         calling_process: ProcessId,
     ) -> CommandReturn {
-        let cmd = Command::try_from(command_num);
-        CommandReturn::from(match cmd {
-            Ok(Command::DriverExistence) => Ok(()),
-            Ok(Command::Verify) => self.command_verify(calling_process),
-            Err(()) => Err(ErrorCode::NOSUPPORT),
+        CommandReturn::from(match command_num {
+            command::EXISTS => Ok(()),
+            command::VERIFY => self.command_verify(calling_process, data1),
+            _ => Err(ErrorCode::NOSUPPORT),
         })
     }
 
@@ -384,7 +414,7 @@ impl<
         'a,
         const HASH_LEN: usize,
         const SIG_LEN: usize,
-        SigVerify: PubKeyMut + SignatureVerify<'a, HASH_LEN, SIG_LEN>,
+        SigVerify: PubKeyMut + SetHashMode + SignatureVerify<'a, HASH_LEN, SIG_LEN>,
     > ClientVerify<HASH_LEN, SIG_LEN> for AsymmetricCrypto<'a, HASH_LEN, SIG_LEN, SigVerify>
 {
     fn verification_done(
