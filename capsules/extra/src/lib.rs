@@ -68,6 +68,7 @@ pub mod ninedof;
 pub mod nonvolatile_storage_driver;
 pub mod nonvolatile_to_pages;
 pub mod nrf51822_serialization;
+pub mod oneshot_digest;
 pub mod opentitan_alerthandler;
 pub mod opentitan_attestation;
 pub mod opentitan_sysrst;

@@ -248,7 +248,10 @@ struct EarlGrey {
         'static,
         VirtualMuxAlarm<'static, RvTimer<'static>>,
     >,
-    hmac: &'static capsules_extra::hmac::HmacDriver<'static, lowrisc::hmac::Hmac<'static>, 32>,
+    #[cfg(feature = "ffi")]
+    oneshot_digest: &'static capsules_extra::oneshot_digest::OneshotDigest<
+        lowrisc::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest,
+    >,
     info_flash: &'static capsules_extra::info_flash::InfoFlash<
         'static,
         InfoFlashUser<'static, earlgrey::flash_ctrl::FlashCtrl<'static>>,
@@ -348,7 +351,8 @@ impl SyscallDriverLookup for EarlGrey {
     {
         match driver_num {
             capsules_core::led::DRIVER_NUM => f(Some(self.led)),
-            capsules_extra::hmac::DRIVER_NUM => f(Some(self.hmac)),
+            #[cfg(feature = "ffi")]
+            capsules_extra::oneshot_digest::DRIVER_NUM => f(Some(self.oneshot_digest)),
             capsules_core::gpio::DRIVER_NUM => f(Some(self.gpio)),
             capsules_core::console::DRIVER_NUM => f(Some(self.console)),
             capsules_core::alarm::DRIVER_NUM => f(Some(self.alarm)),
@@ -767,13 +771,21 @@ unsafe fn setup() -> (
     )
     .finalize(components::low_level_debug_component_static!());
 
-    let hmac = components::hmac::HmacComponent::new(
-        board_kernel,
-        capsules_extra::hmac::DRIVER_NUM,
-        &peripherals.hmac,
-    )
-    .finalize(components::hmac_component_static!(lowrisc::hmac::Hmac, 32));
-
+    #[cfg(feature = "ffi")]
+    let oneshot_digest: &'static capsules_extra::oneshot_digest::OneshotDigest<
+        lowrisc::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest,
+    > = static_init!(
+        capsules_extra::oneshot_digest::OneshotDigest<
+            lowrisc::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest,
+        >,
+        capsules_extra::oneshot_digest::OneshotDigest::new(
+            lowrisc::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest,
+            board_kernel.create_grant(
+                capsules_extra::oneshot_digest::DRIVER_NUM,
+                &memory_allocation_cap
+            )
+        )
+    );
     let i2c_master_buffer = static_init!(
         [u8; capsules_core::i2c_master::BUFFER_LENGTH],
         [0; capsules_core::i2c_master::BUFFER_LENGTH]
@@ -1423,7 +1435,6 @@ unsafe fn setup() -> (
             led,
             console,
             alarm,
-            hmac,
             info_flash,
             rng,
             lldb,
@@ -1433,6 +1444,8 @@ unsafe fn setup() -> (
             usb,
             #[cfg(not(feature = "test_flash_ctrl"))]
             kv_driver,
+            #[cfg(feature = "ffi")]
+            oneshot_digest,
             pattgen,
             syscall_filter,
             scheduler,
