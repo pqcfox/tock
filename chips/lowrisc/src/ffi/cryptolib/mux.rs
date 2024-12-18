@@ -16,7 +16,7 @@ use kernel::ErrorCode;
 
 /// Check frequency for `capsules_core::virtualizers::TimeoutMux` for OTBN
 /// scheduling. 1 tick_freq = 10000 cycles at 100 MHz = 100 μs.
-pub const OTBN_TIMEOUT_MUX_CHECK_FREQ: kernel::hil::time::Ticks64 = Ticks64::new(2);
+pub const OTBN_TIMEOUT_MUX_CHECK_FREQ: kernel::hil::time::Ticks64 = Ticks64::new(4);
 
 /// Multiplexer over cryptolib asynchronous cryptolib operations.
 pub struct CryptolibMux<'a, A: Alarm<'a>> {

@@ -41,6 +41,24 @@ pub(super) enum EraseEnabledStatus {
     Enabled,
 }
 
+/// The status of memory scrambling
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(super) enum ScrambleEnabledStatus {
+    /// Scramble is disabled
+    Disabled,
+    /// Scramble is enabled
+    Enabled,
+}
+
+/// The status of ECC
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(super) enum EccEnabledStatus {
+    /// ECC is disabled
+    Disabled,
+    /// ECC is enabled
+    Enabled,
+}
+
 /// The status of high endurance
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(super) enum HighEnduranceEnabledStatus {
@@ -56,6 +74,8 @@ struct MemoryProtectionRegionConfiguration {
     read_enabled: ReadEnabledStatus,
     write_enabled: WriteEnabledStatus,
     erase_enabled: EraseEnabledStatus,
+    scramble_enabled: ScrambleEnabledStatus,
+    ecc_enabled: EccEnabledStatus,
     high_endurance_enabled: HighEnduranceEnabledStatus,
 }
 
@@ -75,6 +95,8 @@ impl MemoryProtectionRegionConfiguration {
             read_enabled: ReadEnabledStatus::Disabled,
             write_enabled: WriteEnabledStatus::Disabled,
             erase_enabled: EraseEnabledStatus::Disabled,
+            scramble_enabled: ScrambleEnabledStatus::Disabled,
+            ecc_enabled: EccEnabledStatus::Disabled,
             high_endurance_enabled: HighEnduranceEnabledStatus::Disabled,
         }
     }
@@ -119,6 +141,34 @@ impl MemoryProtectionRegionConfiguration {
     /// [EraseEnabledStatus] indicating erase status
     fn is_erase_enabled(&self) -> EraseEnabledStatus {
         self.erase_enabled
+    }
+
+    /// Enable memory scrambling
+    fn enable_scramble(&mut self) {
+        self.scramble_enabled = ScrambleEnabledStatus::Enabled;
+    }
+
+    /// Check whether memory scrambling is enabled
+    ///
+    /// # Return value
+    ///
+    /// [ScrambleEnabledStatus] indicating memory scrambling status
+    fn is_scramble_enabled(&self) -> ScrambleEnabledStatus {
+        self.scramble_enabled
+    }
+
+    /// Enable ECC
+    fn enable_ecc(&mut self) {
+        self.ecc_enabled = EccEnabledStatus::Enabled;
+    }
+
+    /// Check whether ECC is enabled
+    ///
+    /// # Return value
+    ///
+    /// [EccEnabledStatus] indicating ECC status
+    fn is_ecc_enabled(&self) -> EccEnabledStatus {
+        self.ecc_enabled
     }
 
     /// Enable high endurance
@@ -204,6 +254,36 @@ impl DefaultMemoryProtectionRegion {
     /// [EraseEnabledStatus] indicating erase status
     pub(super) fn is_erase_enabled(&self) -> EraseEnabledStatus {
         self.configuration.is_erase_enabled()
+    }
+
+    /// Enable memory scrambling
+    pub fn enable_scramble(mut self) -> Self {
+        self.configuration.enable_scramble();
+        self
+    }
+
+    /// Check whether memory scrambling is enabled
+    ///
+    /// # Return value
+    ///
+    /// [ScrambleEnabledStatus] indicating memory scrambling status
+    pub(super) fn is_scramble_enabled(&self) -> ScrambleEnabledStatus {
+        self.configuration.is_scramble_enabled()
+    }
+
+    /// Enable ECC
+    pub fn enable_ecc(mut self) -> Self {
+        self.configuration.enable_ecc();
+        self
+    }
+
+    /// Check whether ECC is enabled
+    ///
+    /// # Return value
+    ///
+    /// [EccEnabledStatus] indicating ECC status
+    pub(super) fn is_ecc_enabled(&self) -> EccEnabledStatus {
+        self.configuration.is_ecc_enabled()
     }
 
     /// Enable high endurance
@@ -491,6 +571,30 @@ impl DataMemoryProtectionRegion {
         self.configuration.is_erase_enabled()
     }
 
+    /// Enable memory scrambling for the region
+    pub(super) fn enable_scramble(&mut self) {
+        self.configuration.enable_scramble();
+    }
+
+    /// Check whether memory scrambling is enabled for the region
+    ///
+    /// [ScrambleEnabledStatus] indicating whether memory scrambling is enabled
+    pub(super) fn is_scramble_enabled(&self) -> ScrambleEnabledStatus {
+        self.configuration.is_scramble_enabled()
+    }
+
+    /// Enable ECC for the region
+    pub(super) fn enable_ecc(&mut self) {
+        self.configuration.enable_ecc();
+    }
+
+    /// Check whether ECC is enabled for the region
+    ///
+    /// [EccEnabledStatus] indicating whether ECC is enabled
+    pub(super) fn is_ecc_enabled(&self) -> EccEnabledStatus {
+        self.configuration.is_ecc_enabled()
+    }
+
     /// Enable high endurance for the region
     pub(super) fn enable_high_endurance(&mut self) {
         self.configuration.enable_high_endurance();
@@ -588,6 +692,30 @@ impl InfoMemoryProtectionRegion {
     /// [EraseEnabledStatus] indicating the erase access status
     pub(super) fn is_erase_enabled(&self) -> EraseEnabledStatus {
         self.configuration.is_erase_enabled()
+    }
+
+    /// Enable memory scrambling for the region
+    pub(super) fn enable_scramble(&mut self) {
+        self.configuration.enable_scramble();
+    }
+
+    /// Check whether memory scrambling is enabled for the region
+    ///
+    /// [ScrambleEnabledStatus] indicating whether memory scrambling is enabled
+    pub(super) fn is_scramble_enabled(&self) -> ScrambleEnabledStatus {
+        self.configuration.is_scramble_enabled()
+    }
+
+    /// Enable ECC for the region
+    pub(super) fn enable_ecc(&mut self) {
+        self.configuration.enable_ecc();
+    }
+
+    /// Check whether ECC is enabled for the region
+    ///
+    /// [EccEnabledStatus] indicating whether ECC is enabled
+    pub(super) fn is_ecc_enabled(&self) -> EccEnabledStatus {
+        self.configuration.is_ecc_enabled()
     }
 
     /// Enable high endurance for the region
@@ -1183,7 +1311,7 @@ impl MemoryProtectionConfiguration {
     ) -> Result<DataMemoryProtectionRegionBuilder, ()> {
         let base = DataMemoryProtectionRegionBase::new_from_flash_address(starting_address);
         let end = DataMemoryProtectionRegionBase::new_from_flash_address(ending_address);
-        let size = end.subtract(base)?;
+        let size = base.subtract(end)?;
         Ok(self.enable_and_configure_data_region(index, base, size))
     }
 
@@ -1259,6 +1387,18 @@ impl MemoryProtectionConfiguration {
         memory_protection_region.enable_erase();
     }
 
+    /// Enable memory scrambling for data memory protection region
+    fn enable_scramble_data(&mut self, index: DataMemoryProtectionRegionIndex) {
+        let memory_protection_region = self.get_data_memory_protection_region_mut(index);
+        memory_protection_region.enable_scramble();
+    }
+
+    /// Enable ECC for data memory protection region
+    fn enable_ecc_data(&mut self, index: DataMemoryProtectionRegionIndex) {
+        let memory_protection_region = self.get_data_memory_protection_region_mut(index);
+        memory_protection_region.enable_ecc();
+    }
+
     /// Enable high endurance for data memory protection region
     fn enable_high_endurance_data(&mut self, index: DataMemoryProtectionRegionIndex) {
         let memory_protection_region = self.get_data_memory_protection_region_mut(index);
@@ -1281,6 +1421,18 @@ impl MemoryProtectionConfiguration {
     fn enable_erase_info0(&mut self, index: Info0MemoryProtectionRegionIndex) {
         let memory_protection_region = self.get_info0_memory_protection_region_mut(index);
         memory_protection_region.enable_erase();
+    }
+
+    /// Enable memory scrambling for info0 memory protection region
+    fn enable_scramble_info0(&mut self, index: Info0MemoryProtectionRegionIndex) {
+        let memory_protection_region = self.get_info0_memory_protection_region_mut(index);
+        memory_protection_region.enable_scramble();
+    }
+
+    /// Enable ECC for info0 memory protection region
+    fn enable_ecc_info0(&mut self, index: Info0MemoryProtectionRegionIndex) {
+        let memory_protection_region = self.get_info0_memory_protection_region_mut(index);
+        memory_protection_region.enable_ecc();
     }
 
     /// Enable high endurance for info0 memory protection region
@@ -1307,6 +1459,18 @@ impl MemoryProtectionConfiguration {
         memory_protection_region.enable_erase();
     }
 
+    /// Enable memory scrambling for info1 memory protection region
+    fn enable_scramble_info1(&mut self, index: Info1MemoryProtectionRegionIndex) {
+        let memory_protection_region = self.get_info1_memory_protection_region_mut(index);
+        memory_protection_region.enable_scramble();
+    }
+
+    /// Enable ECC for info1 memory protection region
+    fn enable_ecc_info1(&mut self, index: Info1MemoryProtectionRegionIndex) {
+        let memory_protection_region = self.get_info1_memory_protection_region_mut(index);
+        memory_protection_region.enable_ecc();
+    }
+
     /// Enable high endurance for info1 memory protection region
     fn enable_high_endurance_info1(&mut self, index: Info1MemoryProtectionRegionIndex) {
         let memory_protection_region = self.get_info1_memory_protection_region_mut(index);
@@ -1331,7 +1495,19 @@ impl MemoryProtectionConfiguration {
         memory_protection_region.enable_erase();
     }
 
-    /// Enable high endurance for info1 memory protection region
+    /// Enable memory scrambling for info2 memory protection region
+    fn enable_scramble_info2(&mut self, index: Info2MemoryProtectionRegionIndex) {
+        let memory_protection_region = self.get_info2_memory_protection_region_mut(index);
+        memory_protection_region.enable_scramble();
+    }
+
+    /// Enable ECC for info2 memory protection region
+    fn enable_ecc_info2(&mut self, index: Info2MemoryProtectionRegionIndex) {
+        let memory_protection_region = self.get_info2_memory_protection_region_mut(index);
+        memory_protection_region.enable_ecc();
+    }
+
+    /// Enable high endurance for info2 memory protection region
     fn enable_high_endurance_info2(&mut self, index: Info2MemoryProtectionRegionIndex) {
         let memory_protection_region = self.get_info2_memory_protection_region_mut(index);
         memory_protection_region.enable_high_endurance();
@@ -1402,6 +1578,20 @@ impl DataMemoryProtectionRegionBuilder {
         self
     }
 
+    /// Enable memory scrambling
+    pub fn enable_scramble(mut self) -> DataMemoryProtectionRegionBuilder {
+        self.memory_protection_configuration
+            .enable_scramble_data(self.index);
+        self
+    }
+
+    /// Enable ECC
+    pub fn enable_ecc(mut self) -> DataMemoryProtectionRegionBuilder {
+        self.memory_protection_configuration
+            .enable_ecc_data(self.index);
+        self
+    }
+
     /// Enable high endurance
     pub fn enable_high_endurance(mut self) -> DataMemoryProtectionRegionBuilder {
         self.memory_protection_configuration
@@ -1456,6 +1646,20 @@ impl Info0MemoryProtectionRegionBuilder {
     pub fn enable_erase(mut self) -> Info0MemoryProtectionRegionBuilder {
         self.memory_protection_configuration
             .enable_erase_info0(self.index);
+        self
+    }
+
+    /// Enable memory scrambling
+    pub fn enable_scramble(mut self) -> Info0MemoryProtectionRegionBuilder {
+        self.memory_protection_configuration
+            .enable_scramble_info0(self.index);
+        self
+    }
+
+    /// Enable ECC
+    pub fn enable_ecc(mut self) -> Info0MemoryProtectionRegionBuilder {
+        self.memory_protection_configuration
+            .enable_ecc_info0(self.index);
         self
     }
 
@@ -1516,6 +1720,20 @@ impl Info1MemoryProtectionRegionBuilder {
         self
     }
 
+    /// Enable memory scrambling
+    pub fn enable_scramble(mut self) -> Info1MemoryProtectionRegionBuilder {
+        self.memory_protection_configuration
+            .enable_scramble_info1(self.index);
+        self
+    }
+
+    /// Enable ECC
+    pub fn enable_ecc(mut self) -> Info1MemoryProtectionRegionBuilder {
+        self.memory_protection_configuration
+            .enable_ecc_info1(self.index);
+        self
+    }
+
     /// Enable high endurance
     pub fn enable_high_endurance(mut self) -> Info1MemoryProtectionRegionBuilder {
         self.memory_protection_configuration
@@ -1570,6 +1788,20 @@ impl Info2MemoryProtectionRegionBuilder {
     pub fn enable_erase(mut self) -> Info2MemoryProtectionRegionBuilder {
         self.memory_protection_configuration
             .enable_erase_info2(self.index);
+        self
+    }
+
+    /// Enable memory scrambling
+    pub fn enable_scramble(mut self) -> Info2MemoryProtectionRegionBuilder {
+        self.memory_protection_configuration
+            .enable_scramble_info2(self.index);
+        self
+    }
+
+    /// Enable ECC
+    pub fn enable_ecc(mut self) -> Info2MemoryProtectionRegionBuilder {
+        self.memory_protection_configuration
+            .enable_ecc_info2(self.index);
         self
     }
 
