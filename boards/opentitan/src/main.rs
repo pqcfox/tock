@@ -1372,6 +1372,10 @@ unsafe fn setup() -> (
             cryptolib_ecdsa_p256,
             ecdsa_p256,
         );
+        kernel::hil::public_key_crypto::ecc::EcdsaP384::set_verify_client(
+            cryptolib_ecdsa_p384,
+            ecdsa_p384,
+        );
         #[cfg(feature = "test_cryptolib")]
         {
             let p256_hash_buf: &'static mut [u8; P256::HASH_LEN] =
