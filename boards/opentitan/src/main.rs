@@ -219,17 +219,9 @@ const FAULT_RESPONSE: capsules_system::process_policies::PanicFaultPolicy =
     capsules_system::process_policies::PanicFaultPolicy {};
 
 /// Dummy buffer that causes the linker to reserve enough space for the stack.
-//
-// `sram_ret` tests require extra stack space for calling `forced_safe_init`,
-/// but this is not needed outside of testing
-#[cfg(feature = "test_sram_ret")]
 #[no_mangle]
 #[link_section = ".stack_buffer"]
-pub static mut STACK_MEMORY: [u8; 0x2000] = [0; 0x2000];
-#[cfg(not(feature = "test_sram_ret"))]
-#[no_mangle]
-#[link_section = ".stack_buffer"]
-pub static mut STACK_MEMORY: [u8; 0x1400] = [0; 0x1400];
+pub static mut STACK_MEMORY: [u8; 0x6000] = [0; 0x6000];
 
 /// A structure representing this platform that holds references to all
 /// capsules for this platform. We've included an alarm and console.
@@ -446,7 +438,13 @@ extern "C" {
 }
 
 fn get_flash_default_memory_protection_region() -> flash_ctrl::DefaultMemoryProtectionRegion {
-    flash_ctrl::DefaultMemoryProtectionRegion::new()
+    if cfg!(feature = "sival") {
+        flash_ctrl::DefaultMemoryProtectionRegion::new()
+            .enable_ecc()
+            .enable_scramble()
+    } else {
+        flash_ctrl::DefaultMemoryProtectionRegion::new()
+    }
 }
 
 fn get_flash_memory_protection_configuration() -> flash_ctrl::MemoryProtectionConfiguration {
@@ -541,22 +539,47 @@ fn get_flash_memory_protection_configuration() -> flash_ctrl::MemoryProtectionCo
         // Setup flash memory protection for the kernel
         // PANIC: the unwrap panics only if Flash(_stext) < FlashAddress(_etext), which occurs
         // only due to a linker script bug.
-        base_memory_protection_config
-            .enable_and_configure_data_region_from_pointers(
-                flash_ctrl::DataMemoryProtectionRegionIndex::Index0,
-                starting_address,
-                ending_address,
-            )
-            .unwrap()
-            .enable_read()
-            .finalize_region()
-            .enable_and_configure_info2_region(flash_ctrl::Info2MemoryProtectionRegionIndex::Bank1(
-                flash_ctrl::Info2PageIndex::Index1,
-            ))
-            .enable_read()
-            .enable_write()
-            .enable_erase()
-            .finalize_region()
+        if cfg!(feature = "sival") {
+            base_memory_protection_config
+                .enable_and_configure_data_region_from_pointers(
+                    flash_ctrl::DataMemoryProtectionRegionIndex::Index0,
+                    starting_address,
+                    ending_address,
+                )
+                .unwrap()
+                .enable_read()
+                .enable_scramble()
+                .enable_ecc()
+                .finalize_region()
+                .enable_and_configure_info2_region(
+                    flash_ctrl::Info2MemoryProtectionRegionIndex::Bank1(
+                        flash_ctrl::Info2PageIndex::Index1,
+                    ),
+                )
+                .enable_read()
+                .enable_write()
+                .enable_erase()
+                .finalize_region()
+        } else {
+            base_memory_protection_config
+                .enable_and_configure_data_region_from_pointers(
+                    flash_ctrl::DataMemoryProtectionRegionIndex::Index0,
+                    starting_address,
+                    ending_address,
+                )
+                .unwrap()
+                .enable_read()
+                .finalize_region()
+                .enable_and_configure_info2_region(
+                    flash_ctrl::Info2MemoryProtectionRegionIndex::Bank1(
+                        flash_ctrl::Info2PageIndex::Index1,
+                    ),
+                )
+                .enable_read()
+                .enable_write()
+                .enable_erase()
+                .finalize_region()
+        }
     }
 }
 

@@ -15,12 +15,12 @@ use super::flash_address::FlashAddress;
 use super::info_partition_type::InfoPartitionType;
 use super::memory_protection::{
     DataMemoryProtectionRegion, DataMemoryProtectionRegionBase, DataMemoryProtectionRegionIndex,
-    DataMemoryProtectionRegionList, DefaultMemoryProtectionRegion, EraseEnabledStatus,
-    HighEnduranceEnabledStatus, Info0MemoryProtectionRegionIndex, Info0MemoryProtectionRegionList,
-    Info1MemoryProtectionRegionIndex, Info1MemoryProtectionRegionList,
-    Info2MemoryProtectionRegionIndex, Info2MemoryProtectionRegionList, InfoMemoryProtectionRegion,
-    MemoryProtectionConfiguration, MemoryProtectionRegionStatus, ReadEnabledStatus,
-    WriteEnabledStatus,
+    DataMemoryProtectionRegionList, DefaultMemoryProtectionRegion, EccEnabledStatus,
+    EraseEnabledStatus, HighEnduranceEnabledStatus, Info0MemoryProtectionRegionIndex,
+    Info0MemoryProtectionRegionList, Info1MemoryProtectionRegionIndex,
+    Info1MemoryProtectionRegionList, Info2MemoryProtectionRegionIndex,
+    Info2MemoryProtectionRegionList, InfoMemoryProtectionRegion, MemoryProtectionConfiguration,
+    MemoryProtectionRegionStatus, ReadEnabledStatus, ScrambleEnabledStatus, WriteEnabledStatus,
 };
 use super::page::{DataFlashCtrlPage, FlashCtrlPage, InfoFlashCtrlPage, RawFlashCtrlPage};
 use super::page_index::{DataPageIndex, Info0PageIndex, Info1PageIndex, Info2PageIndex};
@@ -246,6 +246,16 @@ impl FlashCtrl<'_> {
                 HighEnduranceEnabledStatus::Enabled => DEFAULT_REGION::HE_EN::Set,
             };
 
+        let scramble_enabled = match default_memory_protection_region.is_scramble_enabled() {
+            ScrambleEnabledStatus::Disabled => DEFAULT_REGION::SCRAMBLE_EN::Clear,
+            ScrambleEnabledStatus::Enabled => DEFAULT_REGION::SCRAMBLE_EN::Set,
+        };
+
+        let ecc_enabled = match default_memory_protection_region.is_ecc_enabled() {
+            EccEnabledStatus::Disabled => DEFAULT_REGION::ECC_EN::Clear,
+            EccEnabledStatus::Enabled => DEFAULT_REGION::ECC_EN::Set,
+        };
+
         let erase_enabled = match default_memory_protection_region.is_erase_enabled() {
             EraseEnabledStatus::Disabled => DEFAULT_REGION::ERASE_EN::Clear,
             EraseEnabledStatus::Enabled => DEFAULT_REGION::ERASE_EN::Set,
@@ -261,9 +271,14 @@ impl FlashCtrl<'_> {
             ReadEnabledStatus::Enabled => DEFAULT_REGION::RD_EN::Set,
         };
 
-        self.registers
-            .default_region
-            .modify(high_endurance_enabled + erase_enabled + write_enabled + read_enabled);
+        self.registers.default_region.modify(
+            high_endurance_enabled
+                + scramble_enabled
+                + ecc_enabled
+                + erase_enabled
+                + write_enabled
+                + read_enabled,
+        );
     }
 
     /// Convert a [DataMemoryProtectionRegionBase] to register value, so it can be written to a
@@ -323,6 +338,16 @@ impl FlashCtrl<'_> {
             HighEnduranceEnabledStatus::Enabled => MP_REGION_CFG::HE_EN::Set,
         };
 
+        let scramble_enabled = match memory_protection_region.is_scramble_enabled() {
+            ScrambleEnabledStatus::Disabled => MP_REGION_CFG::SCRAMBLE_EN::Clear,
+            ScrambleEnabledStatus::Enabled => MP_REGION_CFG::SCRAMBLE_EN::Set,
+        };
+
+        let ecc_enabled = match memory_protection_region.is_ecc_enabled() {
+            EccEnabledStatus::Disabled => MP_REGION_CFG::ECC_EN::Clear,
+            EccEnabledStatus::Enabled => MP_REGION_CFG::ECC_EN::Set,
+        };
+
         let erase_enabled = match memory_protection_region.is_erase_enabled() {
             EraseEnabledStatus::Disabled => MP_REGION_CFG::ERASE_EN::Clear,
             EraseEnabledStatus::Enabled => MP_REGION_CFG::ERASE_EN::Set,
@@ -345,6 +370,8 @@ impl FlashCtrl<'_> {
 
         memory_protection_region_register.modify(
             high_endurance_enabled
+                + scramble_enabled
+                + ecc_enabled
                 + erase_enabled
                 + write_enabled
                 + read_enabled
@@ -503,6 +530,16 @@ impl FlashCtrl<'_> {
             HighEnduranceEnabledStatus::Enabled => INFO_PAGE_CFG::HE_EN::Set,
         };
 
+        let scramble_enabled = match info_memory_protection_region.is_scramble_enabled() {
+            ScrambleEnabledStatus::Disabled => INFO_PAGE_CFG::SCRAMBLE_EN::Clear,
+            ScrambleEnabledStatus::Enabled => INFO_PAGE_CFG::SCRAMBLE_EN::Set,
+        };
+
+        let ecc_enabled = match info_memory_protection_region.is_ecc_enabled() {
+            EccEnabledStatus::Disabled => INFO_PAGE_CFG::ECC_EN::Clear,
+            EccEnabledStatus::Enabled => INFO_PAGE_CFG::ECC_EN::Set,
+        };
+
         let erase_enabled = match info_memory_protection_region.is_erase_enabled() {
             EraseEnabledStatus::Disabled => INFO_PAGE_CFG::ERASE_EN::Clear,
             EraseEnabledStatus::Enabled => INFO_PAGE_CFG::ERASE_EN::Set,
@@ -523,7 +560,13 @@ impl FlashCtrl<'_> {
             MemoryProtectionRegionStatus::Enabled => INFO_PAGE_CFG::EN::Set,
         };
 
-        high_endurance_enabled + erase_enabled + write_enabled + read_enabled + is_region_enabled
+        high_endurance_enabled
+            + scramble_enabled
+            + ecc_enabled
+            + erase_enabled
+            + write_enabled
+            + read_enabled
+            + is_region_enabled
     }
 
     /// Configure access permissions for info0 memory protection region.

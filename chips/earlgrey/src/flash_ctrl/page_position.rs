@@ -103,7 +103,7 @@ impl DataPagePosition {
                 // CAST: the match arm guarantees that flash_address is a valid bank0 address, i.e.
                 // flash_address >= BANK0_STARTING_FLASH_ADDRESS, so the difference can be
                 // represented as an unsigned value.
-                let bank_offset = flash_address.subtract(BANK0_STARTING_FLASH_ADDRESS) as usize;
+                let bank_offset = BANK0_STARTING_FLASH_ADDRESS.subtract(flash_address) as usize;
                 // SAFETY: the match arm guarantees that flash_address is a valid bank0 address and
                 // subtracting BANK0_STARTING_FLASH_ADDRESS from it provides a valid
                 // bank0-relative offset
@@ -113,7 +113,7 @@ impl DataPagePosition {
                 // CAST: the match arm guarantees that flash_address is a valid bank1 address, i.e.
                 // flash_address >= BANK1_STARTING_FLASH_ADDRESS, so the difference can be
                 // represented as an unsigned value.
-                let bank_offset = flash_address.subtract(BANK1_STARTING_FLASH_ADDRESS) as usize;
+                let bank_offset = BANK1_STARTING_FLASH_ADDRESS.subtract(flash_address) as usize;
                 // SAFETY: the match arm guarantees that flash_address is a valid bank1 address and
                 // subtracting BANK1_STARTING_FLASH_ADDRESS from it provides a valid
                 // bank1-relative offset
