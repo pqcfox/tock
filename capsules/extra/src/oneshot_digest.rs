@@ -644,9 +644,9 @@ mod command {
     pub const CSHAKE: usize = 3;
     /// Command ID for the hash-based message authentication code (HMAC)
     /// algorithm.
-    pub const HMAC: usize = 5;
+    pub const HMAC: usize = 4;
     /// Command ID for the Keccak message authentication code (KMAC) algorithm.
-    pub const KMAC: usize = 6;
+    pub const KMAC: usize = 5;
 
     /// Parameter IDs for `hash` command.
     pub mod hash {
