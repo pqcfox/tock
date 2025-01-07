@@ -6,6 +6,7 @@
 // Author: Darius Jipa <darius.jipa@oxidos.io>
 
 pub(crate) mod items;
+#[cfg(feature = "gui")]
 pub(crate) mod views;
 
 #[macro_use]

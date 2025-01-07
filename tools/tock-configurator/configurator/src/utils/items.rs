@@ -6,16 +6,19 @@
 // Author: Darius Jipa <darius.jipa@oxidos.io>
 
 use clap::ValueEnum;
+#[cfg(feature = "gui")]
 pub(crate) use parse::config::Index as SupportedCapsule;
 
 /// Trait for a type (usually an `enum`) that can be converted to a menu
 /// item as defined by cursive's `SelectView`.
+#[cfg(feature = "gui")]
 pub(crate) trait ToMenuItem {
     type Item;
     fn to_menu_item(self) -> (String, Self::Item);
 }
 
 /// Enum for the top-level configuration options for a board.
+#[cfg(feature = "gui")]
 #[derive(Clone, Copy)]
 pub(crate) enum ConfigurationField {
     Capsules,
@@ -25,6 +28,7 @@ pub(crate) enum ConfigurationField {
     StackMem,
 }
 
+#[cfg(feature = "gui")]
 impl ToMenuItem for ConfigurationField {
     type Item = Self;
     fn to_menu_item(self) -> (String, Self::Item) {
@@ -42,11 +46,13 @@ impl ToMenuItem for ConfigurationField {
 }
 
 /// Enum for the kernel resources for a board.
+#[cfg(feature = "gui")]
 #[derive(Clone, Copy)]
 pub(crate) enum KernelResources {
     Scheduler,
 }
 
+#[cfg(feature = "gui")]
 impl ToMenuItem for KernelResources {
     type Item = Self;
     fn to_menu_item(self) -> (String, Self::Item) {
@@ -68,6 +74,7 @@ pub(crate) enum SupportedChip {
     EarlgreyCw310,
 }
 
+#[cfg(feature = "gui")]
 impl<T> ToMenuItem for T
 where
     T: std::fmt::Debug,
