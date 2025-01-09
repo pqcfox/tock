@@ -238,6 +238,8 @@ fn process_capsule_config<C: parse::Chip>(
             );
             check_baud_rate(data);
         }
+        // Ignored, bazel workaround.
+        "__dummy" => {}
         "flash" => capsule_single_field!(
             capsule_config,
             data,

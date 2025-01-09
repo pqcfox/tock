@@ -196,6 +196,12 @@ impl<C: Chip + 'static> TockMain<C> {
                 aon_timer_tests.start_alarm(1000);
             }
 
+            /// Entry point for the OpenTitan board.
+            ///
+            /// # Safety
+            ///
+            /// This function relies on correct configuration of external
+            /// statics.
             #[no_mangle]
             pub unsafe fn main() {
                 #[cfg(test)]
@@ -310,7 +316,8 @@ impl<C: Chip + 'static> TockMain<C> {
             static mut PROCESS_PRINTER: Option<
                 &'static capsules_system::process_printer::ProcessPrinterText,
             > = None;
-            static mut CHIP: Option<&#chip_type> = None;
+            type ChipType = #chip_type;
+            static mut CHIP: Option<&ChipType> = None;
 
             // Test access to the peripherals
             #[cfg(test)]
@@ -506,12 +513,15 @@ impl<C: Chip + 'static> TockMain<C> {
 
         // Inject the custom code for a chip/arch? Like enabling interrupts?
         Ok(quote! {
-            unsafe fn setup() -> (
+            type SetupOut = (
                 &'static kernel::Kernel,
                 &'static #platform_ty,
                 &'static #chip_ty,
                 &'static #peripherals_ty,
-            ) {
+            );
+            unsafe fn setup() -> SetupOut {
+                // Could be unused if no drivers are included.
+                #[allow(unused)]
                 let memory_allocation_cap = kernel::create_capability!(kernel::capabilities::MemoryAllocationCapability);
                 let board_kernel = kernel::static_init!(kernel::Kernel, kernel::Kernel::new(&*core::ptr::addr_of!(PROCESSES)));
                 #(#initializations)*
@@ -677,6 +687,9 @@ impl<C: Chip + 'static> TockMain<C> {
         }
 
         Ok(quote! {
+            // This `#[allow]` is required because the configuration file may
+            // contain a non-camelcase config name.
+            #[allow(non_camel_case_types)]
             struct #board_ty {
                 #(#capsules_identifiers: &'static #capsules_types,)*
                 #scheduler_id: &'static #scheduler_ty,
@@ -689,6 +702,8 @@ impl<C: Chip + 'static> TockMain<C> {
                 where
                     F: FnOnce(Option<&dyn kernel::syscall::SyscallDriver>) -> R,
                 {
+                    // Don't flag verbosity for single binding if no capsules are included.
+                    #[allow(clippy::match_single_binding)]
                     match driver_num {
                         #( #capsules_driver_nums => f(Some(self.#capsules_identifiers)),)*
                         _ => f(None),
@@ -715,10 +730,10 @@ impl<C: Chip + 'static> TockMain<C> {
                     &()
                 }
                 fn scheduler(&self) -> &Self::Scheduler {
-                    &self.#scheduler_id
+                    self.#scheduler_id
                 }
                 fn scheduler_timer(&self) -> &Self::SchedulerTimer {
-                    &self.#scheduler_timer_id
+                    self.#scheduler_timer_id
                 }
                 fn watchdog(&self) -> &Self::WatchDog {
                     self.#watchdog_id
