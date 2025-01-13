@@ -100,7 +100,7 @@ jobs:
       - name: Install dependencies
         continue-on-error: true
         run: |
-          sudo apt install meson
+          sudo apt install libglib2.0-dev meson ninja-build
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4
         with:
