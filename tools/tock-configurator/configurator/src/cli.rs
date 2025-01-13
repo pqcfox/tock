@@ -141,7 +141,7 @@ macro_rules! process_gpio_capsule {
                 let (pin, existing) = match pins.get(pin_id) {
                     Some(p) => p,
                     // Selected pin out of range, ignore.
-                    None => continue,
+                    None => panic!("GPIO out of range: {}", pin_id),
                 };
                 if setting == "on" {
                     // Check the pin is not already in use for another purpose.

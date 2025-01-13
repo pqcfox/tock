@@ -400,19 +400,28 @@ impl<C: Chip + 'static> TockMain<C> {
             }
 
             fn get_flash_default_memory_protection_region() -> earlgrey::flash_ctrl::DefaultMemoryProtectionRegion {
-                earlgrey::flash_ctrl::DefaultMemoryProtectionRegion::new()
+                if cfg!(feature = "sival") {
+                    earlgrey::flash_ctrl::DefaultMemoryProtectionRegion::new()
+                        .enable_ecc()
+                        .enable_scramble()
+                } else {
+                    earlgrey::flash_ctrl::DefaultMemoryProtectionRegion::new()
+                }
             }
 
             fn get_flash_memory_protection_configuration() -> earlgrey::flash_ctrl::MemoryProtectionConfiguration {
                 let flash_default_memory_protection_region = get_flash_default_memory_protection_region();
+
+                let base_memory_protection_config =
+                    earlgrey::flash_ctrl::MemoryProtectionConfiguration::new(flash_default_memory_protection_region);
 
                 #[cfg(feature = "test_flash_ctrl")]
                 {
                     let page_index_range =
                         earlgrey::flash_ctrl::tests::convert_flash_slice_to_page_position_range(unsafe {
                             core::slice::from_raw_parts(
-                                &_sapps as *const u8,
-                                &_eapps as *const u8 as usize - &_sapps as *const u8 as usize,
+                                core::ptr::from_ref(&_sapps),
+                                core::ptr::from_ref(&_eapps) as usize - core::ptr::from_ref(&_sapps) as usize,
                             )
                         })
                         .unwrap();
@@ -423,10 +432,11 @@ impl<C: Chip + 'static> TockMain<C> {
                     let memory_protection_page0_base =
                         DataMemoryProtectionRegionBase::new(*page_index_range.end());
 
-                    const RAW_MEMORY_PROTECTION_PAGE0_SIZE: core::num::NonZeroU16 = match core::num::NonZeroU16::new(1) {
-                        Some(non_zero_u16) => non_zero_u16,
-                        None => unreachable!(),
-                    };
+                    const RAW_MEMORY_PROTECTION_PAGE0_SIZE: core::num::NonZeroU16 =
+                        match core::num::NonZeroU16::new(1) {
+                            Some(non_zero_u16) => non_zero_u16,
+                            None => unreachable!(),
+                        };
 
                     const MEMORY_PROTECTION_PAGE0_SIZE: DataMemoryProtectionRegionSize =
                         match DataMemoryProtectionRegionSize::new(RAW_MEMORY_PROTECTION_PAGE0_SIZE) {
@@ -434,7 +444,7 @@ impl<C: Chip + 'static> TockMain<C> {
                             Err(()) => unreachable!(),
                         };
 
-                    earlgrey::flash_ctrl::MemoryProtectionConfiguration::new(flash_default_memory_protection_region)
+                    base_memory_protection_config
                         .enable_and_configure_data_region(
                             earlgrey::flash_ctrl::DataMemoryProtectionRegionIndex::Index0,
                             memory_protection_page0_base,
@@ -458,32 +468,55 @@ impl<C: Chip + 'static> TockMain<C> {
                 {
                     // SAFETY: &_stext represents a valid flash address in the host address space.
                     let starting_address =
-                        earlgrey::flash_ctrl::FlashAddress::new_from_host_address(unsafe { &_stext as *const u8 })
-                            .unwrap();
+                        earlgrey::flash_ctrl::FlashAddress::new_from_host_address(unsafe { core::ptr::from_ref(&_stext) }).unwrap();
                     // SAFETY: &_etext represents a valid flash address in the host address space.
                     let ending_address =
-                        earlgrey::flash_ctrl::FlashAddress::new_from_host_address(unsafe { &_etext as *const u8 })
-                            .unwrap();
+                        earlgrey::flash_ctrl::FlashAddress::new_from_host_address(unsafe { core::ptr::from_ref(&_etext) }).unwrap();
 
                     // Setup flash memory protection for the kernel
                     // PANIC: the unwrap panics only if Flash(_stext) < FlashAddress(_etext), which occurs
                     // only due to a linker script bug.
-                    earlgrey::flash_ctrl::MemoryProtectionConfiguration::new(flash_default_memory_protection_region)
-                        .enable_and_configure_data_region_from_pointers(
-                            earlgrey::flash_ctrl::DataMemoryProtectionRegionIndex::Index0,
-                            starting_address,
-                            ending_address,
-                        )
-                        .unwrap()
-                        .enable_read()
-                        .finalize_region()
-                        .enable_and_configure_info2_region(earlgrey::flash_ctrl::Info2MemoryProtectionRegionIndex::Bank1(
-                            earlgrey::flash_ctrl::Info2PageIndex::Index1,
-                        ))
-                        .enable_read()
-                        .enable_write()
-                        .enable_erase()
-                        .finalize_region()
+                    if cfg!(feature = "sival") {
+                        base_memory_protection_config
+                            .enable_and_configure_data_region_from_pointers(
+                                earlgrey::flash_ctrl::DataMemoryProtectionRegionIndex::Index0,
+                                starting_address,
+                                ending_address,
+                            )
+                            .unwrap()
+                            .enable_read()
+                            .enable_scramble()
+                            .enable_ecc()
+                            .finalize_region()
+                            .enable_and_configure_info2_region(
+                                earlgrey::flash_ctrl::Info2MemoryProtectionRegionIndex::Bank1(
+                                    earlgrey::flash_ctrl::Info2PageIndex::Index1,
+                                ),
+                            )
+                            .enable_read()
+                            .enable_write()
+                            .enable_erase()
+                            .finalize_region()
+                    } else {
+                        base_memory_protection_config
+                            .enable_and_configure_data_region_from_pointers(
+                                earlgrey::flash_ctrl::DataMemoryProtectionRegionIndex::Index0,
+                                starting_address,
+                                ending_address,
+                            )
+                            .unwrap()
+                            .enable_read()
+                            .finalize_region()
+                            .enable_and_configure_info2_region(
+                                earlgrey::flash_ctrl::Info2MemoryProtectionRegionIndex::Bank1(
+                                    earlgrey::flash_ctrl::Info2PageIndex::Index1,
+                                ),
+                            )
+                            .enable_read()
+                            .enable_write()
+                            .enable_erase()
+                            .finalize_region()
+                    }
                 }
             }
         })
