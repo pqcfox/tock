@@ -53,108 +53,108 @@ pub const FLASH_CTRL_PARAM_REG_WIDTH: u32 = 32;
 register_structs! {
     pub FlashCtrlRegisters {
         /// Interrupt State Register
-        (0x0000 => pub(crate) intr_state: ReadWrite<u32, INTR::Register>),
+        (0x0000 => pub intr_state: ReadWrite<u32, INTR::Register>),
         /// Interrupt Enable Register
-        (0x0004 => pub(crate) intr_enable: ReadWrite<u32, INTR::Register>),
+        (0x0004 => pub intr_enable: ReadWrite<u32, INTR::Register>),
         /// Interrupt Test Register
-        (0x0008 => pub(crate) intr_test: ReadWrite<u32, INTR::Register>),
+        (0x0008 => pub intr_test: ReadWrite<u32, INTR::Register>),
         /// Alert Test Register
-        (0x000c => pub(crate) alert_test: ReadWrite<u32, ALERT_TEST::Register>),
+        (0x000c => pub alert_test: ReadWrite<u32, ALERT_TEST::Register>),
         /// Disable flash functionality
-        (0x0010 => pub(crate) dis: ReadWrite<u32, DIS::Register>),
+        (0x0010 => pub dis: ReadWrite<u32, DIS::Register>),
         /// Controls whether flash can be used for code execution fetches
-        (0x0014 => pub(crate) exec: ReadWrite<u32, EXEC::Register>),
+        (0x0014 => pub exec: ReadWrite<u32, EXEC::Register>),
         /// Controller init register
-        (0x0018 => pub(crate) init: ReadWrite<u32, INIT::Register>),
+        (0x0018 => pub init: ReadWrite<u32, INIT::Register>),
         /// Controls the configurability of the !!CONTROL register.
-        (0x001c => pub(crate) ctrl_regwen: ReadWrite<u32, CTRL_REGWEN::Register>),
+        (0x001c => pub ctrl_regwen: ReadWrite<u32, CTRL_REGWEN::Register>),
         /// Control register
-        (0x0020 => pub(crate) control: ReadWrite<u32, CONTROL::Register>),
+        (0x0020 => pub control: ReadWrite<u32, CONTROL::Register>),
         /// Address for flash operation
-        (0x0024 => pub(crate) addr: ReadWrite<u32, ADDR::Register>),
+        (0x0024 => pub addr: ReadWrite<u32, ADDR::Register>),
         /// Enable different program types
-        (0x0028 => pub(crate) prog_type_en: ReadWrite<u32, PROG_TYPE_EN::Register>),
+        (0x0028 => pub prog_type_en: ReadWrite<u32, PROG_TYPE_EN::Register>),
         /// Suspend erase
-        (0x002c => pub(crate) erase_suspend: ReadWrite<u32, ERASE_SUSPEND::Register>),
+        (0x002c => pub erase_suspend: ReadWrite<u32, ERASE_SUSPEND::Register>),
         /// Memory region registers configuration enable.
-        (0x0030 => pub(crate) region_cfg_regwen: [ReadWrite<u32, REGION_CFG_REGWEN::Register>; 8]),
+        (0x0030 => pub region_cfg_regwen: [ReadWrite<u32, REGION_CFG_REGWEN::Register>; 8]),
         /// Memory property configuration for data partition
-        (0x0050 => pub(crate) mp_region_cfg: [ReadWrite<u32, MP_REGION_CFG::Register>; 8]),
+        (0x0050 => pub mp_region_cfg: [ReadWrite<u32, MP_REGION_CFG::Register>; 8]),
         /// Memory base and size configuration for data partition
-        (0x0070 => pub(crate) mp_region: [ReadWrite<u32, MP_REGION::Register>; 8]),
+        (0x0070 => pub mp_region: [ReadWrite<u32, MP_REGION::Register>; 8]),
         /// Default region properties
-        (0x0090 => pub(crate) default_region: ReadWrite<u32, DEFAULT_REGION::Register>),
+        (0x0090 => pub default_region: ReadWrite<u32, DEFAULT_REGION::Register>),
         /// Memory region registers configuration enable.
-        (0x0094 => pub(crate) bank0_info0_regwen: [ReadWrite<u32, BANK0_INFO0_REGWEN::Register>; 10]),
+        (0x0094 => pub bank0_info0_regwen: [ReadWrite<u32, BANK0_INFO0_REGWEN::Register>; 10]),
         ///   Memory property configuration for info partition in bank0,
-        (0x00bc => pub(crate) bank0_info0_page_cfg: [ReadWrite<u32, BANK0_INFO0_PAGE_CFG::Register>; 10]),
+        (0x00bc => pub bank0_info0_page_cfg: [ReadWrite<u32, BANK0_INFO0_PAGE_CFG::Register>; 10]),
         /// Memory region registers configuration enable.
-        (0x00e4 => pub(crate) bank0_info1_regwen: [ReadWrite<u32, BANK0_INFO1_REGWEN::Register>; 1]),
+        (0x00e4 => pub bank0_info1_regwen: [ReadWrite<u32, BANK0_INFO1_REGWEN::Register>; 1]),
         ///   Memory property configuration for info partition in bank0,
-        (0x00e8 => pub(crate) bank0_info1_page_cfg: [ReadWrite<u32, BANK0_INFO1_PAGE_CFG::Register>; 1]),
+        (0x00e8 => pub bank0_info1_page_cfg: [ReadWrite<u32, BANK0_INFO1_PAGE_CFG::Register>; 1]),
         /// Memory region registers configuration enable.
-        (0x00ec => pub(crate) bank0_info2_regwen: [ReadWrite<u32, BANK0_INFO2_REGWEN::Register>; 2]),
+        (0x00ec => pub bank0_info2_regwen: [ReadWrite<u32, BANK0_INFO2_REGWEN::Register>; 2]),
         ///   Memory property configuration for info partition in bank0,
-        (0x00f4 => pub(crate) bank0_info2_page_cfg: [ReadWrite<u32, BANK0_INFO2_PAGE_CFG::Register>; 2]),
+        (0x00f4 => pub bank0_info2_page_cfg: [ReadWrite<u32, BANK0_INFO2_PAGE_CFG::Register>; 2]),
         /// Memory region registers configuration enable.
-        (0x00fc => pub(crate) bank1_info0_regwen: [ReadWrite<u32, BANK1_INFO0_REGWEN::Register>; 10]),
+        (0x00fc => pub bank1_info0_regwen: [ReadWrite<u32, BANK1_INFO0_REGWEN::Register>; 10]),
         ///   Memory property configuration for info partition in bank1,
-        (0x0124 => pub(crate) bank1_info0_page_cfg: [ReadWrite<u32, BANK1_INFO0_PAGE_CFG::Register>; 10]),
+        (0x0124 => pub bank1_info0_page_cfg: [ReadWrite<u32, BANK1_INFO0_PAGE_CFG::Register>; 10]),
         /// Memory region registers configuration enable.
-        (0x014c => pub(crate) bank1_info1_regwen: [ReadWrite<u32, BANK1_INFO1_REGWEN::Register>; 1]),
+        (0x014c => pub bank1_info1_regwen: [ReadWrite<u32, BANK1_INFO1_REGWEN::Register>; 1]),
         ///   Memory property configuration for info partition in bank1,
-        (0x0150 => pub(crate) bank1_info1_page_cfg: [ReadWrite<u32, BANK1_INFO1_PAGE_CFG::Register>; 1]),
+        (0x0150 => pub bank1_info1_page_cfg: [ReadWrite<u32, BANK1_INFO1_PAGE_CFG::Register>; 1]),
         /// Memory region registers configuration enable.
-        (0x0154 => pub(crate) bank1_info2_regwen: [ReadWrite<u32, BANK1_INFO2_REGWEN::Register>; 2]),
+        (0x0154 => pub bank1_info2_regwen: [ReadWrite<u32, BANK1_INFO2_REGWEN::Register>; 2]),
         ///   Memory property configuration for info partition in bank1,
-        (0x015c => pub(crate) bank1_info2_page_cfg: [ReadWrite<u32, BANK1_INFO2_PAGE_CFG::Register>; 2]),
+        (0x015c => pub bank1_info2_page_cfg: [ReadWrite<u32, BANK1_INFO2_PAGE_CFG::Register>; 2]),
         /// HW interface info configuration rule overrides
-        (0x0164 => pub(crate) hw_info_cfg_override: ReadWrite<u32, HW_INFO_CFG_OVERRIDE::Register>),
+        (0x0164 => pub hw_info_cfg_override: ReadWrite<u32, HW_INFO_CFG_OVERRIDE::Register>),
         /// Bank configuration registers configuration enable.
-        (0x0168 => pub(crate) bank_cfg_regwen: ReadWrite<u32, BANK_CFG_REGWEN::Register>),
+        (0x0168 => pub bank_cfg_regwen: ReadWrite<u32, BANK_CFG_REGWEN::Register>),
         /// Memory properties bank configuration
-        (0x016c => pub(crate) mp_bank_cfg_shadowed: [ReadWrite<u32, MP_BANK_CFG_SHADOWED::Register>; 1]),
+        (0x016c => pub mp_bank_cfg_shadowed: [ReadWrite<u32, MP_BANK_CFG_SHADOWED::Register>; 1]),
         /// Flash Operation Status
-        (0x0170 => pub(crate) op_status: ReadWrite<u32, OP_STATUS::Register>),
+        (0x0170 => pub op_status: ReadWrite<u32, OP_STATUS::Register>),
         /// Flash Controller Status
-        (0x0174 => pub(crate) status: ReadWrite<u32, STATUS::Register>),
+        (0x0174 => pub status: ReadWrite<u32, STATUS::Register>),
         /// Current flash fsm state
-        (0x0178 => pub(crate) debug_state: ReadWrite<u32, DEBUG_STATE::Register>),
+        (0x0178 => pub debug_state: ReadWrite<u32, DEBUG_STATE::Register>),
         /// Flash error code register.
-        (0x017c => pub(crate) err_code: ReadWrite<u32, ERR_CODE::Register>),
+        (0x017c => pub err_code: ReadWrite<u32, ERR_CODE::Register>),
         /// This register tabulates standard fault status of the flash.
-        (0x0180 => pub(crate) std_fault_status: ReadWrite<u32, STD_FAULT_STATUS::Register>),
+        (0x0180 => pub std_fault_status: ReadWrite<u32, STD_FAULT_STATUS::Register>),
         /// This register tabulates customized fault status of the flash.
-        (0x0184 => pub(crate) fault_status: ReadWrite<u32, FAULT_STATUS::Register>),
+        (0x0184 => pub fault_status: ReadWrite<u32, FAULT_STATUS::Register>),
         /// Synchronous error address
-        (0x0188 => pub(crate) err_addr: ReadWrite<u32, ERR_ADDR::Register>),
+        (0x0188 => pub err_addr: ReadWrite<u32, ERR_ADDR::Register>),
         /// Total number of single bit ECC error count
-        (0x018c => pub(crate) ecc_single_err_cnt: [ReadWrite<u32, ECC_SINGLE_ERR_CNT::Register>; 1]),
+        (0x018c => pub ecc_single_err_cnt: [ReadWrite<u32, ECC_SINGLE_ERR_CNT::Register>; 1]),
         /// Latest address of ECC single err
-        (0x0190 => pub(crate) ecc_single_err_addr: [ReadWrite<u32, ECC_SINGLE_ERR_ADDR::Register>; 2]),
+        (0x0190 => pub ecc_single_err_addr: [ReadWrite<u32, ECC_SINGLE_ERR_ADDR::Register>; 2]),
         /// Phy alert configuration
-        (0x0198 => pub(crate) phy_alert_cfg: ReadWrite<u32, PHY_ALERT_CFG::Register>),
+        (0x0198 => pub phy_alert_cfg: ReadWrite<u32, PHY_ALERT_CFG::Register>),
         /// Flash Phy Status
-        (0x019c => pub(crate) phy_status: ReadWrite<u32, PHY_STATUS::Register>),
+        (0x019c => pub phy_status: ReadWrite<u32, PHY_STATUS::Register>),
         /// Flash Controller Scratch
-        (0x01a0 => pub(crate) scratch: ReadWrite<u32, SCRATCH::Register>),
+        (0x01a0 => pub scratch: ReadWrite<u32, SCRATCH::Register>),
         /// Programmable depth where FIFOs should generate interrupts
-        (0x01a4 => pub(crate) fifo_lvl: ReadWrite<u32, FIFO_LVL::Register>),
+        (0x01a4 => pub fifo_lvl: ReadWrite<u32, FIFO_LVL::Register>),
         /// Reset for flash controller FIFOs
-        (0x01a8 => pub(crate) fifo_rst: ReadWrite<u32, FIFO_RST::Register>),
+        (0x01a8 => pub fifo_rst: ReadWrite<u32, FIFO_RST::Register>),
         /// Current program and read fifo depth
-        (0x01ac => pub(crate) curr_fifo_lvl: ReadWrite<u32, CURR_FIFO_LVL::Register>),
+        (0x01ac => pub curr_fifo_lvl: ReadWrite<u32, CURR_FIFO_LVL::Register>),
         /// Memory area: Flash program FIFO.
-        (0x01b0 => pub(crate) prog_fifo: [WriteOnly<u32>; 1]),
+        (0x01b0 => pub prog_fifo: [WriteOnly<u32>; 1]),
         /// Memory area: Flash read FIFO.
-        (0x01b4 => pub(crate) rd_fifo: [ReadOnly<u32>; 1]),
+        (0x01b4 => pub rd_fifo: [ReadOnly<u32>; 1]),
         (0x01b8 => @END),
     }
 }
 
 register_bitfields![u32,
     /// Common Interrupt Offsets
-    pub(crate) INTR [
+    pub INTR [
         PROG_EMPTY OFFSET(0) NUMBITS(1) [],
         PROG_LVL OFFSET(1) NUMBITS(1) [],
         RD_FULL OFFSET(2) NUMBITS(1) [],
@@ -162,26 +162,26 @@ register_bitfields![u32,
         OP_DONE OFFSET(4) NUMBITS(1) [],
         CORR_ERR OFFSET(5) NUMBITS(1) [],
     ],
-    pub(crate) ALERT_TEST [
+    pub ALERT_TEST [
         RECOV_ERR OFFSET(0) NUMBITS(1) [],
         FATAL_STD_ERR OFFSET(1) NUMBITS(1) [],
         FATAL_ERR OFFSET(2) NUMBITS(1) [],
         FATAL_PRIM_FLASH_ALERT OFFSET(3) NUMBITS(1) [],
         RECOV_PRIM_FLASH_ALERT OFFSET(4) NUMBITS(1) [],
     ],
-    pub(crate) DIS [
+    pub DIS [
         VAL OFFSET(0) NUMBITS(4) [],
     ],
-    pub(crate) EXEC [
+    pub EXEC [
         EN OFFSET(0) NUMBITS(32) [],
     ],
-    pub(crate) INIT [
+    pub INIT [
         VAL OFFSET(0) NUMBITS(1) [],
     ],
-    pub(crate) CTRL_REGWEN [
+    pub CTRL_REGWEN [
         EN OFFSET(0) NUMBITS(1) [],
     ],
-    pub(crate) CONTROL [
+    pub CONTROL [
         START OFFSET(0) NUMBITS(1) [],
         OP OFFSET(4) NUMBITS(2) [
             READ = 0,
@@ -200,23 +200,23 @@ register_bitfields![u32,
         INFO_SEL OFFSET(9) NUMBITS(2) [],
         NUM OFFSET(16) NUMBITS(12) [],
     ],
-    pub(crate) ADDR [
+    pub ADDR [
         START OFFSET(0) NUMBITS(20) [],
     ],
-    pub(crate) PROG_TYPE_EN [
+    pub PROG_TYPE_EN [
         NORMAL OFFSET(0) NUMBITS(1) [],
         REPAIR OFFSET(1) NUMBITS(1) [],
     ],
-    pub(crate) ERASE_SUSPEND [
+    pub ERASE_SUSPEND [
         REQ OFFSET(0) NUMBITS(1) [],
     ],
-    pub(crate) REGION_CFG_REGWEN [
+    pub REGION_CFG_REGWEN [
         REGION_0 OFFSET(0) NUMBITS(1) [
             REGION_LOCKED = 0,
             REGION_ENABLED = 1,
         ],
     ],
-    pub(crate) MP_REGION_CFG [
+    pub MP_REGION_CFG [
         EN_0 OFFSET(0) NUMBITS(4) [],
         RD_EN_0 OFFSET(4) NUMBITS(4) [],
         PROG_EN_0 OFFSET(8) NUMBITS(4) [],
@@ -225,11 +225,11 @@ register_bitfields![u32,
         ECC_EN_0 OFFSET(20) NUMBITS(4) [],
         HE_EN_0 OFFSET(24) NUMBITS(4) [],
     ],
-    pub(crate) MP_REGION [
+    pub MP_REGION [
         BASE_0 OFFSET(0) NUMBITS(9) [],
         SIZE_0 OFFSET(9) NUMBITS(10) [],
     ],
-    pub(crate) DEFAULT_REGION [
+    pub DEFAULT_REGION [
         RD_EN OFFSET(0) NUMBITS(4) [],
         PROG_EN OFFSET(4) NUMBITS(4) [],
         ERASE_EN OFFSET(8) NUMBITS(4) [],
@@ -237,13 +237,13 @@ register_bitfields![u32,
         ECC_EN OFFSET(16) NUMBITS(4) [],
         HE_EN OFFSET(20) NUMBITS(4) [],
     ],
-    pub(crate) BANK0_INFO0_REGWEN [
+    pub BANK0_INFO0_REGWEN [
         REGION_0 OFFSET(0) NUMBITS(1) [
             PAGE_LOCKED = 0,
             PAGE_ENABLED = 1,
         ],
     ],
-    pub(crate) BANK0_INFO0_PAGE_CFG [
+    pub BANK0_INFO0_PAGE_CFG [
         EN_0 OFFSET(0) NUMBITS(4) [],
         RD_EN_0 OFFSET(4) NUMBITS(4) [],
         PROG_EN_0 OFFSET(8) NUMBITS(4) [],
@@ -252,13 +252,13 @@ register_bitfields![u32,
         ECC_EN_0 OFFSET(20) NUMBITS(4) [],
         HE_EN_0 OFFSET(24) NUMBITS(4) [],
     ],
-    pub(crate) BANK0_INFO1_REGWEN [
+    pub BANK0_INFO1_REGWEN [
         REGION_0 OFFSET(0) NUMBITS(1) [
             PAGE_LOCKED = 0,
             PAGE_ENABLED = 1,
         ],
     ],
-    pub(crate) BANK0_INFO1_PAGE_CFG [
+    pub BANK0_INFO1_PAGE_CFG [
         EN_0 OFFSET(0) NUMBITS(4) [],
         RD_EN_0 OFFSET(4) NUMBITS(4) [],
         PROG_EN_0 OFFSET(8) NUMBITS(4) [],
@@ -267,13 +267,13 @@ register_bitfields![u32,
         ECC_EN_0 OFFSET(20) NUMBITS(4) [],
         HE_EN_0 OFFSET(24) NUMBITS(4) [],
     ],
-    pub(crate) BANK0_INFO2_REGWEN [
+    pub BANK0_INFO2_REGWEN [
         REGION_0 OFFSET(0) NUMBITS(1) [
             PAGE_LOCKED = 0,
             PAGE_ENABLED = 1,
         ],
     ],
-    pub(crate) BANK0_INFO2_PAGE_CFG [
+    pub BANK0_INFO2_PAGE_CFG [
         EN_0 OFFSET(0) NUMBITS(4) [],
         RD_EN_0 OFFSET(4) NUMBITS(4) [],
         PROG_EN_0 OFFSET(8) NUMBITS(4) [],
@@ -282,13 +282,13 @@ register_bitfields![u32,
         ECC_EN_0 OFFSET(20) NUMBITS(4) [],
         HE_EN_0 OFFSET(24) NUMBITS(4) [],
     ],
-    pub(crate) BANK1_INFO0_REGWEN [
+    pub BANK1_INFO0_REGWEN [
         REGION_0 OFFSET(0) NUMBITS(1) [
             PAGE_LOCKED = 0,
             PAGE_ENABLED = 1,
         ],
     ],
-    pub(crate) BANK1_INFO0_PAGE_CFG [
+    pub BANK1_INFO0_PAGE_CFG [
         EN_0 OFFSET(0) NUMBITS(4) [],
         RD_EN_0 OFFSET(4) NUMBITS(4) [],
         PROG_EN_0 OFFSET(8) NUMBITS(4) [],
@@ -297,13 +297,13 @@ register_bitfields![u32,
         ECC_EN_0 OFFSET(20) NUMBITS(4) [],
         HE_EN_0 OFFSET(24) NUMBITS(4) [],
     ],
-    pub(crate) BANK1_INFO1_REGWEN [
+    pub BANK1_INFO1_REGWEN [
         REGION_0 OFFSET(0) NUMBITS(1) [
             PAGE_LOCKED = 0,
             PAGE_ENABLED = 1,
         ],
     ],
-    pub(crate) BANK1_INFO1_PAGE_CFG [
+    pub BANK1_INFO1_PAGE_CFG [
         EN_0 OFFSET(0) NUMBITS(4) [],
         RD_EN_0 OFFSET(4) NUMBITS(4) [],
         PROG_EN_0 OFFSET(8) NUMBITS(4) [],
@@ -312,13 +312,13 @@ register_bitfields![u32,
         ECC_EN_0 OFFSET(20) NUMBITS(4) [],
         HE_EN_0 OFFSET(24) NUMBITS(4) [],
     ],
-    pub(crate) BANK1_INFO2_REGWEN [
+    pub BANK1_INFO2_REGWEN [
         REGION_0 OFFSET(0) NUMBITS(1) [
             PAGE_LOCKED = 0,
             PAGE_ENABLED = 1,
         ],
     ],
-    pub(crate) BANK1_INFO2_PAGE_CFG [
+    pub BANK1_INFO2_PAGE_CFG [
         EN_0 OFFSET(0) NUMBITS(4) [],
         RD_EN_0 OFFSET(4) NUMBITS(4) [],
         PROG_EN_0 OFFSET(8) NUMBITS(4) [],
@@ -327,25 +327,25 @@ register_bitfields![u32,
         ECC_EN_0 OFFSET(20) NUMBITS(4) [],
         HE_EN_0 OFFSET(24) NUMBITS(4) [],
     ],
-    pub(crate) HW_INFO_CFG_OVERRIDE [
+    pub HW_INFO_CFG_OVERRIDE [
         SCRAMBLE_DIS OFFSET(0) NUMBITS(4) [],
         ECC_DIS OFFSET(4) NUMBITS(4) [],
     ],
-    pub(crate) BANK_CFG_REGWEN [
+    pub BANK_CFG_REGWEN [
         BANK OFFSET(0) NUMBITS(1) [
             BANK_LOCKED = 0,
             BANK_ENABLED = 1,
         ],
     ],
-    pub(crate) MP_BANK_CFG_SHADOWED [
+    pub MP_BANK_CFG_SHADOWED [
         ERASE_EN_0 OFFSET(0) NUMBITS(1) [],
         ERASE_EN_1 OFFSET(1) NUMBITS(1) [],
     ],
-    pub(crate) OP_STATUS [
+    pub OP_STATUS [
         DONE OFFSET(0) NUMBITS(1) [],
         ERR OFFSET(1) NUMBITS(1) [],
     ],
-    pub(crate) STATUS [
+    pub STATUS [
         RD_FULL OFFSET(0) NUMBITS(1) [],
         RD_EMPTY OFFSET(1) NUMBITS(1) [],
         PROG_FULL OFFSET(2) NUMBITS(1) [],
@@ -353,10 +353,10 @@ register_bitfields![u32,
         INIT_WIP OFFSET(4) NUMBITS(1) [],
         INITIALIZED OFFSET(5) NUMBITS(1) [],
     ],
-    pub(crate) DEBUG_STATE [
+    pub DEBUG_STATE [
         LCMGR_STATE OFFSET(0) NUMBITS(11) [],
     ],
-    pub(crate) ERR_CODE [
+    pub ERR_CODE [
         OP_ERR OFFSET(0) NUMBITS(1) [],
         MP_ERR OFFSET(1) NUMBITS(1) [],
         RD_ERR OFFSET(2) NUMBITS(1) [],
@@ -366,7 +366,7 @@ register_bitfields![u32,
         UPDATE_ERR OFFSET(6) NUMBITS(1) [],
         MACRO_ERR OFFSET(7) NUMBITS(1) [],
     ],
-    pub(crate) STD_FAULT_STATUS [
+    pub STD_FAULT_STATUS [
         REG_INTG_ERR OFFSET(0) NUMBITS(1) [],
         PROG_INTG_ERR OFFSET(1) NUMBITS(1) [],
         LCMGR_ERR OFFSET(2) NUMBITS(1) [],
@@ -377,7 +377,7 @@ register_bitfields![u32,
         CTRL_CNT_ERR OFFSET(7) NUMBITS(1) [],
         FIFO_ERR OFFSET(8) NUMBITS(1) [],
     ],
-    pub(crate) FAULT_STATUS [
+    pub FAULT_STATUS [
         OP_ERR OFFSET(0) NUMBITS(1) [],
         MP_ERR OFFSET(1) NUMBITS(1) [],
         RD_ERR OFFSET(2) NUMBITS(1) [],
@@ -391,36 +391,36 @@ register_bitfields![u32,
         ARB_ERR OFFSET(10) NUMBITS(1) [],
         HOST_GNT_ERR OFFSET(11) NUMBITS(1) [],
     ],
-    pub(crate) ERR_ADDR [
+    pub ERR_ADDR [
         ERR_ADDR OFFSET(0) NUMBITS(20) [],
     ],
-    pub(crate) ECC_SINGLE_ERR_CNT [
+    pub ECC_SINGLE_ERR_CNT [
         ECC_SINGLE_ERR_CNT_0 OFFSET(0) NUMBITS(8) [],
         ECC_SINGLE_ERR_CNT_1 OFFSET(8) NUMBITS(8) [],
     ],
-    pub(crate) ECC_SINGLE_ERR_ADDR [
+    pub ECC_SINGLE_ERR_ADDR [
         ECC_SINGLE_ERR_ADDR_0 OFFSET(0) NUMBITS(20) [],
     ],
-    pub(crate) PHY_ALERT_CFG [
+    pub PHY_ALERT_CFG [
         ALERT_ACK OFFSET(0) NUMBITS(1) [],
         ALERT_TRIG OFFSET(1) NUMBITS(1) [],
     ],
-    pub(crate) PHY_STATUS [
+    pub PHY_STATUS [
         INIT_WIP OFFSET(0) NUMBITS(1) [],
         PROG_NORMAL_AVAIL OFFSET(1) NUMBITS(1) [],
         PROG_REPAIR_AVAIL OFFSET(2) NUMBITS(1) [],
     ],
-    pub(crate) SCRATCH [
+    pub SCRATCH [
         DATA OFFSET(0) NUMBITS(32) [],
     ],
-    pub(crate) FIFO_LVL [
+    pub FIFO_LVL [
         PROG OFFSET(0) NUMBITS(5) [],
         RD OFFSET(8) NUMBITS(5) [],
     ],
-    pub(crate) FIFO_RST [
+    pub FIFO_RST [
         EN OFFSET(0) NUMBITS(1) [],
     ],
-    pub(crate) CURR_FIFO_LVL [
+    pub CURR_FIFO_LVL [
         PROG OFFSET(0) NUMBITS(5) [],
         RD OFFSET(8) NUMBITS(5) [],
     ],

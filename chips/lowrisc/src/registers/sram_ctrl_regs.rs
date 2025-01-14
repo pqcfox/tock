@@ -14,26 +14,26 @@ pub const SRAM_CTRL_PARAM_REG_WIDTH: u32 = 32;
 register_structs! {
     pub SramCtrlRegisters {
         /// Alert Test Register
-        (0x0000 => pub(crate) alert_test: ReadWrite<u32, ALERT_TEST::Register>),
+        (0x0000 => pub alert_test: ReadWrite<u32, ALERT_TEST::Register>),
         /// SRAM status register.
-        (0x0004 => pub(crate) status: ReadWrite<u32, STATUS::Register>),
+        (0x0004 => pub status: ReadWrite<u32, STATUS::Register>),
         /// Lock register for execution enable register.
-        (0x0008 => pub(crate) exec_regwen: ReadWrite<u32, EXEC_REGWEN::Register>),
+        (0x0008 => pub exec_regwen: ReadWrite<u32, EXEC_REGWEN::Register>),
         /// Sram execution enable.
-        (0x000c => pub(crate) exec: ReadWrite<u32, EXEC::Register>),
+        (0x000c => pub exec: ReadWrite<u32, EXEC::Register>),
         /// Lock register for control register.
-        (0x0010 => pub(crate) ctrl_regwen: ReadWrite<u32, CTRL_REGWEN::Register>),
+        (0x0010 => pub ctrl_regwen: ReadWrite<u32, CTRL_REGWEN::Register>),
         /// SRAM ctrl register.
-        (0x0014 => pub(crate) ctrl: ReadWrite<u32, CTRL::Register>),
+        (0x0014 => pub ctrl: ReadWrite<u32, CTRL::Register>),
         (0x0018 => @END),
     }
 }
 
 register_bitfields![u32,
-    pub(crate) ALERT_TEST [
+    pub ALERT_TEST [
         FATAL_ERROR OFFSET(0) NUMBITS(1) [],
     ],
-    pub(crate) STATUS [
+    pub STATUS [
         BUS_INTEG_ERROR OFFSET(0) NUMBITS(1) [],
         INIT_ERROR OFFSET(1) NUMBITS(1) [],
         ESCALATED OFFSET(2) NUMBITS(1) [],
@@ -41,16 +41,16 @@ register_bitfields![u32,
         SCR_KEY_SEED_VALID OFFSET(4) NUMBITS(1) [],
         INIT_DONE OFFSET(5) NUMBITS(1) [],
     ],
-    pub(crate) EXEC_REGWEN [
+    pub EXEC_REGWEN [
         EXEC_REGWEN OFFSET(0) NUMBITS(1) [],
     ],
-    pub(crate) EXEC [
+    pub EXEC [
         EN OFFSET(0) NUMBITS(4) [],
     ],
-    pub(crate) CTRL_REGWEN [
+    pub CTRL_REGWEN [
         CTRL_REGWEN OFFSET(0) NUMBITS(1) [],
     ],
-    pub(crate) CTRL [
+    pub CTRL [
         RENEW_SCR_KEY OFFSET(0) NUMBITS(1) [],
         INIT OFFSET(1) NUMBITS(1) [],
     ],

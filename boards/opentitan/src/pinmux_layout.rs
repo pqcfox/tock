@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // Copyright Tock Contributors 2023.
 
+use earlgrey::pinmux::MuxedPadsWrapper;
 use earlgrey::pinmux_config::{EarlGreyPinmuxConfig, INPUT_NUM, OUTPUT_NUM};
 use earlgrey::registers::top_earlgrey::{PinmuxInsel, PinmuxOutsel};
 
@@ -224,13 +225,15 @@ pub fn prepare_wiring_sysrst_ctrl_tests() {
     // .connect();
 
     // this code should do exactly the same thing as the code above but this one works
-    PinmuxPeripheralIn::SysrstCtrlAonKey0In.connect_input(PinmuxInsel::from(key0_input));
+    PinmuxPeripheralIn::SysrstCtrlAonKey0In
+        .connect_input(PinmuxInsel::from(MuxedPadsWrapper(key0_input)));
     key0_input.connect_output(PinmuxOutsel::ConstantHighZ);
 
-    PinmuxPeripheralIn::SysrstCtrlAonPwrbIn.connect_input(PinmuxInsel::from(pwrb_input));
+    PinmuxPeripheralIn::SysrstCtrlAonPwrbIn
+        .connect_input(PinmuxInsel::from(MuxedPadsWrapper(pwrb_input)));
     pwrb_input.connect_output(PinmuxOutsel::ConstantHighZ);
 
-    PinmuxPeripheralIn::GpioGpio7.connect_input(PinmuxInsel::from(key0_sense));
+    PinmuxPeripheralIn::GpioGpio7.connect_input(PinmuxInsel::from(MuxedPadsWrapper(key0_sense)));
     key0_sense.connect_output(PinmuxOutsel::ConstantHighZ);
 
     // check that the pins have been correctly routed
@@ -241,8 +244,14 @@ pub fn prepare_wiring_sysrst_ctrl_tests() {
     assert!(key0_out.get_selector() == PinmuxOutsel::SysrstCtrlAonKey0Out);
     assert!(key0_sense.get_selector() == PinmuxOutsel::ConstantHighZ);
 
-    assert!(PinmuxPeripheralIn::SysrstCtrlAonKey0In.get_selector() == key0_input.into());
-    assert!(PinmuxPeripheralIn::SysrstCtrlAonPwrbIn.get_selector() == pwrb_input.into());
-    assert!(PinmuxPeripheralIn::GpioGpio7.get_selector() == key0_sense.into());
-    assert!(PinmuxPeripheralIn::GpioGpio2.get_selector() == key0_force.into());
+    assert!(
+        PinmuxPeripheralIn::SysrstCtrlAonKey0In.get_selector()
+            == MuxedPadsWrapper(key0_input).into()
+    );
+    assert!(
+        PinmuxPeripheralIn::SysrstCtrlAonPwrbIn.get_selector()
+            == MuxedPadsWrapper(pwrb_input).into()
+    );
+    assert!(PinmuxPeripheralIn::GpioGpio7.get_selector() == MuxedPadsWrapper(key0_sense).into());
+    assert!(PinmuxPeripheralIn::GpioGpio2.get_selector() == MuxedPadsWrapper(key0_force).into());
 }

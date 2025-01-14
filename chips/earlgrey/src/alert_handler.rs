@@ -18,13 +18,24 @@ use kernel::{
 
 use crate::registers::{
     alert_handler_regs::{
-        AlertHandlerRegisters, CLASSx_ACCUM_THRESH_SHADOWED, CLASSx_CLR_SHADOWED,
-        CLASSx_CRASHDUMP_TRIGGER_SHADOWED, CLASSx_CTRL_SHADOWED, CLASSx_PHASEx_CYC_SHADOWED,
-        CLASSx_REGWEN, CLASSx_STATE, CLASSx_TIMEOUT_CYC_SHADOWED, ALERT_CAUSE,
-        ALERT_CLASS_SHADOWED, ALERT_EN_SHADOWED, ALERT_HANDLER_PARAM_N_ALERTS,
-        ALERT_HANDLER_PARAM_N_LOC_ALERT, ALERT_REGWEN, INTR, LOC_ALERT_CAUSE,
-        LOC_ALERT_CLASS_SHADOWED, LOC_ALERT_EN_SHADOWED, LOC_ALERT_REGWEN,
-        PING_TIMEOUT_CYC_SHADOWED, PING_TIMER_EN_SHADOWED, PING_TIMER_REGWEN,
+        AlertHandlerRegisters, ALERT_CAUSE, ALERT_CLASS_SHADOWED, ALERT_EN_SHADOWED,
+        ALERT_HANDLER_PARAM_N_ALERTS, ALERT_HANDLER_PARAM_N_LOC_ALERT, ALERT_REGWEN,
+        CLASSA_ACCUM_THRESH_SHADOWED, CLASSA_CLR_SHADOWED, CLASSA_CRASHDUMP_TRIGGER_SHADOWED,
+        CLASSA_CTRL_SHADOWED, CLASSA_PHASE0_CYC_SHADOWED, CLASSA_PHASE1_CYC_SHADOWED,
+        CLASSA_PHASE2_CYC_SHADOWED, CLASSA_PHASE3_CYC_SHADOWED, CLASSA_REGWEN, CLASSA_STATE,
+        CLASSA_TIMEOUT_CYC_SHADOWED, CLASSB_ACCUM_THRESH_SHADOWED, CLASSB_CLR_SHADOWED,
+        CLASSB_CRASHDUMP_TRIGGER_SHADOWED, CLASSB_CTRL_SHADOWED, CLASSB_PHASE0_CYC_SHADOWED,
+        CLASSB_PHASE1_CYC_SHADOWED, CLASSB_PHASE2_CYC_SHADOWED, CLASSB_PHASE3_CYC_SHADOWED,
+        CLASSB_REGWEN, CLASSB_STATE, CLASSB_TIMEOUT_CYC_SHADOWED, CLASSC_ACCUM_THRESH_SHADOWED,
+        CLASSC_CLR_SHADOWED, CLASSC_CRASHDUMP_TRIGGER_SHADOWED, CLASSC_CTRL_SHADOWED,
+        CLASSC_PHASE0_CYC_SHADOWED, CLASSC_PHASE1_CYC_SHADOWED, CLASSC_PHASE2_CYC_SHADOWED,
+        CLASSC_PHASE3_CYC_SHADOWED, CLASSC_REGWEN, CLASSC_STATE, CLASSC_TIMEOUT_CYC_SHADOWED,
+        CLASSD_ACCUM_THRESH_SHADOWED, CLASSD_CLR_SHADOWED, CLASSD_CRASHDUMP_TRIGGER_SHADOWED,
+        CLASSD_CTRL_SHADOWED, CLASSD_PHASE0_CYC_SHADOWED, CLASSD_PHASE1_CYC_SHADOWED,
+        CLASSD_PHASE2_CYC_SHADOWED, CLASSD_PHASE3_CYC_SHADOWED, CLASSD_REGWEN, CLASSD_STATE,
+        CLASSD_TIMEOUT_CYC_SHADOWED, INTR, LOC_ALERT_CAUSE, LOC_ALERT_CLASS_SHADOWED,
+        LOC_ALERT_EN_SHADOWED, LOC_ALERT_REGWEN, PING_TIMEOUT_CYC_SHADOWED, PING_TIMER_EN_SHADOWED,
+        PING_TIMER_REGWEN,
     },
     top_earlgrey::AlertId,
 };
@@ -70,13 +81,13 @@ pub enum AlertClass {
     ClassD = 3,
 }
 
-impl From<ALERT_CLASS_SHADOWED::CLASS_x_0::Value> for AlertClass {
-    fn from(value: ALERT_CLASS_SHADOWED::CLASS_x_0::Value) -> Self {
+impl From<ALERT_CLASS_SHADOWED::CLASS_A_0::Value> for AlertClass {
+    fn from(value: ALERT_CLASS_SHADOWED::CLASS_A_0::Value) -> Self {
         match value {
-            ALERT_CLASS_SHADOWED::CLASS_x_0::Value::CLASSA => Self::ClassA,
-            ALERT_CLASS_SHADOWED::CLASS_x_0::Value::CLASSB => Self::ClassB,
-            ALERT_CLASS_SHADOWED::CLASS_x_0::Value::CLASSC => Self::ClassC,
-            ALERT_CLASS_SHADOWED::CLASS_x_0::Value::CLASSD => Self::ClassD,
+            ALERT_CLASS_SHADOWED::CLASS_A_0::Value::CLASSA => Self::ClassA,
+            ALERT_CLASS_SHADOWED::CLASS_A_0::Value::CLASSB => Self::ClassB,
+            ALERT_CLASS_SHADOWED::CLASS_A_0::Value::CLASSC => Self::ClassC,
+            ALERT_CLASS_SHADOWED::CLASS_A_0::Value::CLASSD => Self::ClassD,
         }
     }
 }
@@ -93,20 +104,28 @@ pub enum AlertState {
     Phase3 = 0x7,
 }
 
-impl From<CLASSx_STATE::CLASSx_STATE::Value> for AlertState {
-    fn from(value: CLASSx_STATE::CLASSx_STATE::Value) -> Self {
-        match value {
-            CLASSx_STATE::CLASSx_STATE::Value::IDLE => AlertState::Idle,
-            CLASSx_STATE::CLASSx_STATE::Value::TIMEOUT => AlertState::Timeout,
-            CLASSx_STATE::CLASSx_STATE::Value::FSMERROR => AlertState::FsmError,
-            CLASSx_STATE::CLASSx_STATE::Value::TERMINAL => AlertState::Terminal,
-            CLASSx_STATE::CLASSx_STATE::Value::PHASE0 => AlertState::Phase0,
-            CLASSx_STATE::CLASSx_STATE::Value::PHASE1 => AlertState::Phase1,
-            CLASSx_STATE::CLASSx_STATE::Value::PHASE2 => AlertState::Phase2,
-            CLASSx_STATE::CLASSx_STATE::Value::PHASE3 => AlertState::Phase3,
+macro_rules! into_alert_state {
+    {$class_state:ident} => {
+        impl From<$class_state::$class_state::Value> for AlertState {
+            fn from(value: $class_state::$class_state::Value) -> Self {
+                match value {
+                    $class_state::$class_state::Value::IDLE => AlertState::Idle,
+                    $class_state::$class_state::Value::TIMEOUT => AlertState::Timeout,
+                    $class_state::$class_state::Value::FSMERROR => AlertState::FsmError,
+                    $class_state::$class_state::Value::TERMINAL => AlertState::Terminal,
+                    $class_state::$class_state::Value::PHASE0 => AlertState::Phase0,
+                    $class_state::$class_state::Value::PHASE1 => AlertState::Phase1,
+                    $class_state::$class_state::Value::PHASE2 => AlertState::Phase2,
+                    $class_state::$class_state::Value::PHASE3 => AlertState::Phase3,
+                }
+            }
         }
     }
 }
+into_alert_state! {CLASSA_STATE}
+into_alert_state! {CLASSB_STATE}
+into_alert_state! {CLASSC_STATE}
+into_alert_state! {CLASSD_STATE}
 
 #[derive(Clone, Copy, Debug)]
 pub enum AlertPhaseSignalOutput {
@@ -229,6 +248,155 @@ pub struct AlertHandler {
     capsule_ref: OptionalCell<&'static dyn OpentTitanAlertHandlerClient>,
 }
 
+// Macro that avoids repeating class configuration logic for alert classes A-D.
+macro_rules! configure_class {
+    {
+        function = $function:ident,
+        class = $class:expr,
+        ctrl_shadowed = $ctrl_shadowed:ident,
+        accum_thresh_shadowed = $accum_thresh_shadowed:ident,
+        timeout_cyc_shadowed = $timeout_cyc_shadowed:ident,
+        phase0_cyc_shadowed = $phase0_cyc_shadowed:ident,
+        phase1_cyc_shadowed = $phase1_cyc_shadowed:ident,
+        phase2_cyc_shadowed = $phase2_cyc_shadowed:ident,
+        phase3_cyc_shadowed = $phase3_cyc_shadowed:ident,
+        crashdump_trigger_shadowed = $crashdump_trigger_shadowed:ident,
+        ACCUM_THRESH_SHADOWED = $ACCUM_THRESH_SHADOWED:ident,
+        TIMEOUT_CYC_SHADOWED = $TIMEOUT_CYC_SHADOWED:ident,
+        PHASE0_CYC_SHADOWED = $PHASE0_CYC_SHADOWED:ident,
+        PHASE1_CYC_SHADOWED = $PHASE1_CYC_SHADOWED:ident,
+        PHASE2_CYC_SHADOWED = $PHASE2_CYC_SHADOWED:ident,
+        PHASE3_CYC_SHADOWED = $PHASE3_CYC_SHADOWED:ident,
+        CTRL_SHADOWED = $CTRL_SHADOWED:ident,
+        CRASHDUMP_TRIGGER_SHADOWED = $CRASHDUMP_TRIGGER_SHADOWED:ident,
+    } => {
+        fn $function(
+            &self,
+            config: Option<AlertClassConfiguration>,
+            lock: bool,
+        ) -> Result<(), ()> {
+            if self.is_class_locked($class) {
+                return Err(());
+            }
+
+            let class_ctrl_reg = &self.registers.$ctrl_shadowed;
+
+            if let Some(configuration) = config {
+                // configure accumulation threshold for this class of alerts
+                let class_accumulation_threshold_reg = &self.registers.$accum_thresh_shadowed;
+                class_accumulation_threshold_reg.write(
+                    $ACCUM_THRESH_SHADOWED::$ACCUM_THRESH_SHADOWED
+                        .val(configuration.accumulation_threshold),
+                );
+
+                class_accumulation_threshold_reg.write(
+                    $ACCUM_THRESH_SHADOWED::$ACCUM_THRESH_SHADOWED
+                        .val(configuration.accumulation_threshold),
+                );
+
+                // configure timeout for this class of alerts
+                let class_timeout_reg = &self.registers.$timeout_cyc_shadowed;
+
+                // a timeout of None signifies that no timeout is needed for this class of alerts (0 in register)
+                class_timeout_reg.write(
+                    $TIMEOUT_CYC_SHADOWED::$TIMEOUT_CYC_SHADOWED
+                        .val(configuration.timeout.unwrap_or(0)),
+                );
+                class_timeout_reg.write(
+                    $TIMEOUT_CYC_SHADOWED::$TIMEOUT_CYC_SHADOWED
+                        .val(configuration.timeout.unwrap_or(0)),
+                );
+
+                let class_phase0_reg = &self.registers.$phase0_cyc_shadowed;
+                let class_phase1_reg = &self.registers.$phase1_cyc_shadowed;
+                let class_phase2_reg = &self.registers.$phase2_cyc_shadowed;
+                let class_phase3_reg = &self.registers.$phase3_cyc_shadowed;
+
+                class_phase0_reg.write(
+                    $PHASE0_CYC_SHADOWED::$PHASE0_CYC_SHADOWED
+                        .val(configuration.phase0_length),
+                );
+                class_phase0_reg.write(
+                    $PHASE0_CYC_SHADOWED::$PHASE0_CYC_SHADOWED
+                        .val(configuration.phase0_length),
+                );
+                class_phase1_reg.write(
+                    $PHASE1_CYC_SHADOWED::$PHASE1_CYC_SHADOWED
+                        .val(configuration.phase1_length),
+                );
+                class_phase1_reg.write(
+                    $PHASE1_CYC_SHADOWED::$PHASE1_CYC_SHADOWED
+                        .val(configuration.phase1_length),
+                );
+                class_phase2_reg.write(
+                    $PHASE2_CYC_SHADOWED::$PHASE2_CYC_SHADOWED
+                        .val(configuration.phase2_length),
+                );
+                class_phase2_reg.write(
+                    $PHASE2_CYC_SHADOWED::$PHASE2_CYC_SHADOWED
+                        .val(configuration.phase2_length),
+                );
+                class_phase3_reg.write(
+                    $PHASE3_CYC_SHADOWED::$PHASE3_CYC_SHADOWED
+                        .val(configuration.phase3_length),
+                );
+                class_phase3_reg.write(
+                    $PHASE3_CYC_SHADOWED::$PHASE3_CYC_SHADOWED
+                        .val(configuration.phase3_length),
+                );
+
+                let (signal0_en, signal0_phase) = configuration
+                    .signal0_phase
+                    .map_or_else(|| (0u32, 0u32), |x| (1u32, x as u32));
+                let (signal1_en, signal1_phase) = configuration
+                    .signal1_phase
+                    .map_or_else(|| (0u32, 0u32), |x| (1u32, x as u32));
+                let (signal2_en, signal2_phase) = configuration
+                    .signal2_phase
+                    .map_or_else(|| (0u32, 0u32), |x| (1u32, x as u32));
+                let (signal3_en, signal3_phase) = configuration
+                    .signal3_phase
+                    .map_or_else(|| (0u32, 0u32), |x| (1u32, x as u32));
+
+                let class_ctrl_value = $CTRL_SHADOWED::EN.val(1)
+                    + $CTRL_SHADOWED::EN_E0.val(signal0_en)
+                    + $CTRL_SHADOWED::MAP_E0.val(signal0_phase)
+                    + $CTRL_SHADOWED::EN_E1.val(signal1_en)
+                    + $CTRL_SHADOWED::MAP_E1.val(signal1_phase)
+                    + $CTRL_SHADOWED::EN_E2.val(signal2_en)
+                    + $CTRL_SHADOWED::MAP_E2.val(signal2_phase)
+                    + $CTRL_SHADOWED::EN_E3.val(signal3_en)
+                    + $CTRL_SHADOWED::MAP_E3.val(signal3_phase)
+                    + $CTRL_SHADOWED::LOCK.val(configuration.lock_escalation_counter as u32);
+
+                class_ctrl_reg.write(class_ctrl_value);
+                class_ctrl_reg.write(class_ctrl_value);
+
+                let class_crashdump_trigger = &self.registers.$crashdump_trigger_shadowed;
+
+                class_crashdump_trigger.write(
+                    $CRASHDUMP_TRIGGER_SHADOWED::$CRASHDUMP_TRIGGER_SHADOWED
+                        .val(configuration.crashdump_phase as u32),
+                );
+                class_crashdump_trigger.write(
+                    $CRASHDUMP_TRIGGER_SHADOWED::$CRASHDUMP_TRIGGER_SHADOWED
+                        .val(configuration.crashdump_phase as u32),
+                );
+            } else {
+                // disable escalation method for this class
+                // read, modify_no_read, modify_no_read is needed in order to modify a single bit in a shadowed register
+                let a = class_ctrl_reg.extract();
+                class_ctrl_reg.modify_no_read(a, $CTRL_SHADOWED::EN.val(0));
+                class_ctrl_reg.modify_no_read(a, $CTRL_SHADOWED::EN.val(0));
+            }
+            if lock {
+                self.lock_register_writeprotect_class($class);
+            }
+            Ok(())
+        }
+
+    }
+}
 impl AlertHandler {
     pub fn new() -> Self {
         Self {
@@ -264,10 +432,10 @@ impl AlertHandler {
 
         // configure alert class
         let class_fieldvalue = match class {
-            AlertClass::ClassA => ALERT_CLASS_SHADOWED::CLASS_x_0::CLASSA,
-            AlertClass::ClassB => ALERT_CLASS_SHADOWED::CLASS_x_0::CLASSB,
-            AlertClass::ClassC => ALERT_CLASS_SHADOWED::CLASS_x_0::CLASSC,
-            AlertClass::ClassD => ALERT_CLASS_SHADOWED::CLASS_x_0::CLASSD,
+            AlertClass::ClassA => ALERT_CLASS_SHADOWED::CLASS_A_0::CLASSA,
+            AlertClass::ClassB => ALERT_CLASS_SHADOWED::CLASS_A_0::CLASSB,
+            AlertClass::ClassC => ALERT_CLASS_SHADOWED::CLASS_A_0::CLASSC,
+            AlertClass::ClassD => ALERT_CLASS_SHADOWED::CLASS_A_0::CLASSD,
         };
         self.registers.alert_class_shadowed[alert_num as usize].write(class_fieldvalue);
         self.registers.alert_class_shadowed[alert_num as usize].write(class_fieldvalue);
@@ -387,6 +555,86 @@ impl AlertHandler {
     }
 
     /* CLASSES */
+    configure_class! {
+        function = configure_classa,
+        class = AlertClass::ClassA,
+        ctrl_shadowed = classa_ctrl_shadowed,
+        accum_thresh_shadowed = classa_accum_thresh_shadowed,
+        timeout_cyc_shadowed = classa_timeout_cyc_shadowed,
+        phase0_cyc_shadowed = classa_phase0_cyc_shadowed,
+        phase1_cyc_shadowed = classa_phase1_cyc_shadowed,
+        phase2_cyc_shadowed = classa_phase2_cyc_shadowed,
+        phase3_cyc_shadowed = classa_phase3_cyc_shadowed,
+        crashdump_trigger_shadowed = classa_crashdump_trigger_shadowed,
+        ACCUM_THRESH_SHADOWED = CLASSA_ACCUM_THRESH_SHADOWED,
+        TIMEOUT_CYC_SHADOWED = CLASSA_TIMEOUT_CYC_SHADOWED,
+        PHASE0_CYC_SHADOWED = CLASSA_PHASE0_CYC_SHADOWED,
+        PHASE1_CYC_SHADOWED = CLASSA_PHASE1_CYC_SHADOWED,
+        PHASE2_CYC_SHADOWED = CLASSA_PHASE2_CYC_SHADOWED,
+        PHASE3_CYC_SHADOWED = CLASSA_PHASE3_CYC_SHADOWED,
+        CTRL_SHADOWED = CLASSA_CTRL_SHADOWED,
+        CRASHDUMP_TRIGGER_SHADOWED = CLASSA_CRASHDUMP_TRIGGER_SHADOWED,
+    }
+    configure_class! {
+        function = configure_classb,
+        class = AlertClass::ClassB,
+        ctrl_shadowed = classb_ctrl_shadowed,
+        accum_thresh_shadowed = classb_accum_thresh_shadowed,
+        timeout_cyc_shadowed = classb_timeout_cyc_shadowed,
+        phase0_cyc_shadowed = classb_phase0_cyc_shadowed,
+        phase1_cyc_shadowed = classb_phase1_cyc_shadowed,
+        phase2_cyc_shadowed = classb_phase2_cyc_shadowed,
+        phase3_cyc_shadowed = classb_phase3_cyc_shadowed,
+        crashdump_trigger_shadowed = classb_crashdump_trigger_shadowed,
+        ACCUM_THRESH_SHADOWED = CLASSB_ACCUM_THRESH_SHADOWED,
+        TIMEOUT_CYC_SHADOWED = CLASSB_TIMEOUT_CYC_SHADOWED,
+        PHASE0_CYC_SHADOWED = CLASSB_PHASE0_CYC_SHADOWED,
+        PHASE1_CYC_SHADOWED = CLASSB_PHASE1_CYC_SHADOWED,
+        PHASE2_CYC_SHADOWED = CLASSB_PHASE2_CYC_SHADOWED,
+        PHASE3_CYC_SHADOWED = CLASSB_PHASE3_CYC_SHADOWED,
+        CTRL_SHADOWED = CLASSB_CTRL_SHADOWED,
+        CRASHDUMP_TRIGGER_SHADOWED = CLASSB_CRASHDUMP_TRIGGER_SHADOWED,
+    }
+    configure_class! {
+        function = configure_classc,
+        class = AlertClass::ClassC,
+        ctrl_shadowed = classc_ctrl_shadowed,
+        accum_thresh_shadowed = classc_accum_thresh_shadowed,
+        timeout_cyc_shadowed = classc_timeout_cyc_shadowed,
+        phase0_cyc_shadowed = classc_phase0_cyc_shadowed,
+        phase1_cyc_shadowed = classc_phase1_cyc_shadowed,
+        phase2_cyc_shadowed = classc_phase2_cyc_shadowed,
+        phase3_cyc_shadowed = classc_phase3_cyc_shadowed,
+        crashdump_trigger_shadowed = classc_crashdump_trigger_shadowed,
+        ACCUM_THRESH_SHADOWED = CLASSC_ACCUM_THRESH_SHADOWED,
+        TIMEOUT_CYC_SHADOWED = CLASSC_TIMEOUT_CYC_SHADOWED,
+        PHASE0_CYC_SHADOWED = CLASSC_PHASE0_CYC_SHADOWED,
+        PHASE1_CYC_SHADOWED = CLASSC_PHASE1_CYC_SHADOWED,
+        PHASE2_CYC_SHADOWED = CLASSC_PHASE2_CYC_SHADOWED,
+        PHASE3_CYC_SHADOWED = CLASSC_PHASE3_CYC_SHADOWED,
+        CTRL_SHADOWED = CLASSC_CTRL_SHADOWED,
+        CRASHDUMP_TRIGGER_SHADOWED = CLASSC_CRASHDUMP_TRIGGER_SHADOWED,
+    }
+    configure_class! {
+        function = configure_classd,
+        class = AlertClass::ClassD,
+        ctrl_shadowed = classd_ctrl_shadowed,
+        accum_thresh_shadowed = classd_accum_thresh_shadowed,
+        timeout_cyc_shadowed = classd_timeout_cyc_shadowed,
+        phase0_cyc_shadowed = classd_phase0_cyc_shadowed,
+        phase1_cyc_shadowed = classd_phase1_cyc_shadowed,
+        phase2_cyc_shadowed = classd_phase2_cyc_shadowed,
+        phase3_cyc_shadowed = classd_phase3_cyc_shadowed,
+        crashdump_trigger_shadowed = classd_crashdump_trigger_shadowed,
+        ACCUM_THRESH_SHADOWED = CLASSD_ACCUM_THRESH_SHADOWED,
+        TIMEOUT_CYC_SHADOWED = CLASSD_TIMEOUT_CYC_SHADOWED,
+        PHASE0_CYC_SHADOWED = CLASSD_PHASE0_CYC_SHADOWED,
+        PHASE1_CYC_SHADOWED = CLASSD_PHASE1_CYC_SHADOWED,
+        PHASE2_CYC_SHADOWED = CLASSD_PHASE2_CYC_SHADOWED,
+        PHASE3_CYC_SHADOWED = CLASSD_PHASE3_CYC_SHADOWED,
+        CTRL_SHADOWED = CLASSD_CTRL_SHADOWED,
+        CRASHDUMP_TRIGGER_SHADOWED = CLASSD_CRASHDUMP_TRIGGER_SHADOWED,
+    }
 
     /// try to configure how alerts of certain class (`class`) should behave during escalation.
     /// * `class` - the class that should be configured
@@ -405,197 +653,121 @@ impl AlertHandler {
         config: Option<AlertClassConfiguration>,
         lock: bool,
     ) -> Result<(), ()> {
-        if self.is_class_locked(class) {
-            return Err(());
+        match class {
+            AlertClass::ClassA => self.configure_classa(config, lock),
+            AlertClass::ClassB => self.configure_classb(config, lock),
+            AlertClass::ClassC => self.configure_classc(config, lock),
+            AlertClass::ClassD => self.configure_classd(config, lock),
         }
-
-        let class_ctrl_reg = match class {
-            AlertClass::ClassA => &self.registers.classa_ctrl_shadowed,
-            AlertClass::ClassB => &self.registers.classb_ctrl_shadowed,
-            AlertClass::ClassC => &self.registers.classc_ctrl_shadowed,
-            AlertClass::ClassD => &self.registers.classd_ctrl_shadowed,
-        };
-        if let Some(configuration) = config {
-            // configure accumulation threshold for this class of alerts
-            let class_accumulation_threshold_reg = match class {
-                AlertClass::ClassA => &self.registers.classa_accum_thresh_shadowed,
-                AlertClass::ClassB => &self.registers.classb_accum_thresh_shadowed,
-                AlertClass::ClassC => &self.registers.classc_accum_thresh_shadowed,
-                AlertClass::ClassD => &self.registers.classd_accum_thresh_shadowed,
-            };
-            class_accumulation_threshold_reg.write(
-                CLASSx_ACCUM_THRESH_SHADOWED::CLASSx_ACCUM_THRESH_SHADOWED
-                    .val(configuration.accumulation_threshold),
-            );
-
-            class_accumulation_threshold_reg.write(
-                CLASSx_ACCUM_THRESH_SHADOWED::CLASSx_ACCUM_THRESH_SHADOWED
-                    .val(configuration.accumulation_threshold),
-            );
-
-            // configure timeout for this class of alerts
-            let class_timeout_reg = match class {
-                AlertClass::ClassA => &self.registers.classa_timeout_cyc_shadowed,
-                AlertClass::ClassB => &self.registers.classb_timeout_cyc_shadowed,
-                AlertClass::ClassC => &self.registers.classc_timeout_cyc_shadowed,
-                AlertClass::ClassD => &self.registers.classd_timeout_cyc_shadowed,
-            };
-
-            // a timeout of None signifies that no timeout is needed for this class of alerts (0 in register)
-            class_timeout_reg.write(
-                CLASSx_TIMEOUT_CYC_SHADOWED::CLASSx_TIMEOUT_CYC_SHADOWED
-                    .val(configuration.timeout.unwrap_or(0)),
-            );
-            class_timeout_reg.write(
-                CLASSx_TIMEOUT_CYC_SHADOWED::CLASSx_TIMEOUT_CYC_SHADOWED
-                    .val(configuration.timeout.unwrap_or(0)),
-            );
-
-            let class_phasex_reg = match class {
-                AlertClass::ClassA => &self.registers.classa_phasex_cyc_shadowed,
-                AlertClass::ClassB => &self.registers.classb_phasex_cyc_shadowed,
-                AlertClass::ClassC => &self.registers.classc_phasex_cyc_shadowed,
-                AlertClass::ClassD => &self.registers.classd_phasex_cyc_shadowed,
-            };
-            class_phasex_reg[0].write(
-                CLASSx_PHASEx_CYC_SHADOWED::CLASSx_PHASEx_CYC_SHADOWED
-                    .val(configuration.phase0_length),
-            );
-            class_phasex_reg[0].write(
-                CLASSx_PHASEx_CYC_SHADOWED::CLASSx_PHASEx_CYC_SHADOWED
-                    .val(configuration.phase0_length),
-            );
-            class_phasex_reg[1].write(
-                CLASSx_PHASEx_CYC_SHADOWED::CLASSx_PHASEx_CYC_SHADOWED
-                    .val(configuration.phase1_length),
-            );
-            class_phasex_reg[1].write(
-                CLASSx_PHASEx_CYC_SHADOWED::CLASSx_PHASEx_CYC_SHADOWED
-                    .val(configuration.phase1_length),
-            );
-            class_phasex_reg[2].write(
-                CLASSx_PHASEx_CYC_SHADOWED::CLASSx_PHASEx_CYC_SHADOWED
-                    .val(configuration.phase2_length),
-            );
-            class_phasex_reg[2].write(
-                CLASSx_PHASEx_CYC_SHADOWED::CLASSx_PHASEx_CYC_SHADOWED
-                    .val(configuration.phase2_length),
-            );
-            class_phasex_reg[3].write(
-                CLASSx_PHASEx_CYC_SHADOWED::CLASSx_PHASEx_CYC_SHADOWED
-                    .val(configuration.phase3_length),
-            );
-            class_phasex_reg[3].write(
-                CLASSx_PHASEx_CYC_SHADOWED::CLASSx_PHASEx_CYC_SHADOWED
-                    .val(configuration.phase3_length),
-            );
-
-            let (signal0_en, signal0_phase) = configuration
-                .signal0_phase
-                .map_or_else(|| (0u32, 0u32), |x| (1u32, x as u32));
-            let (signal1_en, signal1_phase) = configuration
-                .signal1_phase
-                .map_or_else(|| (0u32, 0u32), |x| (1u32, x as u32));
-            let (signal2_en, signal2_phase) = configuration
-                .signal2_phase
-                .map_or_else(|| (0u32, 0u32), |x| (1u32, x as u32));
-            let (signal3_en, signal3_phase) = configuration
-                .signal3_phase
-                .map_or_else(|| (0u32, 0u32), |x| (1u32, x as u32));
-
-            let class_ctrl_value = CLASSx_CTRL_SHADOWED::EN.val(1)
-                + CLASSx_CTRL_SHADOWED::EN_E0.val(signal0_en)
-                + CLASSx_CTRL_SHADOWED::MAP_E0.val(signal0_phase)
-                + CLASSx_CTRL_SHADOWED::EN_E1.val(signal1_en)
-                + CLASSx_CTRL_SHADOWED::MAP_E1.val(signal1_phase)
-                + CLASSx_CTRL_SHADOWED::EN_E2.val(signal2_en)
-                + CLASSx_CTRL_SHADOWED::MAP_E2.val(signal2_phase)
-                + CLASSx_CTRL_SHADOWED::EN_E3.val(signal3_en)
-                + CLASSx_CTRL_SHADOWED::MAP_E3.val(signal3_phase)
-                + CLASSx_CTRL_SHADOWED::LOCK.val(configuration.lock_escalation_counter as u32);
-
-            class_ctrl_reg.write(class_ctrl_value);
-            class_ctrl_reg.write(class_ctrl_value);
-
-            let class_crashdump_trigger = match class {
-                AlertClass::ClassA => &self.registers.classa_crashdump_trigger_shadowed,
-                AlertClass::ClassB => &self.registers.classb_crashdump_trigger_shadowed,
-                AlertClass::ClassC => &self.registers.classc_crashdump_trigger_shadowed,
-                AlertClass::ClassD => &self.registers.classd_crashdump_trigger_shadowed,
-            };
-
-            class_crashdump_trigger.write(
-                CLASSx_CRASHDUMP_TRIGGER_SHADOWED::CLASSx_CRASHDUMP_TRIGGER_SHADOWED
-                    .val(configuration.crashdump_phase as u32),
-            );
-            class_crashdump_trigger.write(
-                CLASSx_CRASHDUMP_TRIGGER_SHADOWED::CLASSx_CRASHDUMP_TRIGGER_SHADOWED
-                    .val(configuration.crashdump_phase as u32),
-            );
-        } else {
-            // disable escalation method for this class
-            // read, modify_no_read, modify_no_read is needed in order to modify a single bit in a shadowed register
-            let a = class_ctrl_reg.extract();
-            class_ctrl_reg.modify_no_read(a, CLASSx_CTRL_SHADOWED::EN.val(0));
-            class_ctrl_reg.modify_no_read(a, CLASSx_CTRL_SHADOWED::EN.val(0));
-        }
-        if lock {
-            self.lock_register_writeprotect_class(class);
-        }
-        Ok(())
     }
 
     fn is_class_locked(&self, class: AlertClass) -> bool {
-        let class_regwen_reg = match class {
-            AlertClass::ClassA => &self.registers.classa_regwen,
-            AlertClass::ClassB => &self.registers.classb_regwen,
-            AlertClass::ClassC => &self.registers.classc_regwen,
-            AlertClass::ClassD => &self.registers.classd_regwen,
-        };
-
-        !class_regwen_reg.is_set(CLASSx_REGWEN::CLASSx_REGWEN)
+        match class {
+            AlertClass::ClassA => !&self
+                .registers
+                .classa_regwen
+                .is_set(CLASSA_REGWEN::CLASSA_REGWEN),
+            AlertClass::ClassB => !&self
+                .registers
+                .classb_regwen
+                .is_set(CLASSB_REGWEN::CLASSB_REGWEN),
+            AlertClass::ClassC => !&self
+                .registers
+                .classc_regwen
+                .is_set(CLASSC_REGWEN::CLASSC_REGWEN),
+            AlertClass::ClassD => !&self
+                .registers
+                .classd_regwen
+                .is_set(CLASSD_REGWEN::CLASSD_REGWEN),
+        }
     }
 
     fn lock_register_writeprotect_class(&self, class: AlertClass) {
-        let class_regwen_reg = match class {
-            AlertClass::ClassA => &self.registers.classa_regwen,
-            AlertClass::ClassB => &self.registers.classb_regwen,
-            AlertClass::ClassC => &self.registers.classc_regwen,
-            AlertClass::ClassD => &self.registers.classd_regwen,
-        };
-
-        class_regwen_reg.write(CLASSx_REGWEN::CLASSx_REGWEN.val(0));
+        match class {
+            AlertClass::ClassA => self
+                .registers
+                .classa_regwen
+                .write(CLASSA_REGWEN::CLASSA_REGWEN.val(0)),
+            AlertClass::ClassB => self
+                .registers
+                .classb_regwen
+                .write(CLASSB_REGWEN::CLASSB_REGWEN.val(0)),
+            AlertClass::ClassC => self
+                .registers
+                .classc_regwen
+                .write(CLASSC_REGWEN::CLASSC_REGWEN.val(0)),
+            AlertClass::ClassD => self
+                .registers
+                .classd_regwen
+                .write(CLASSD_REGWEN::CLASSD_REGWEN.val(0)),
+        }
     }
 
     pub fn class_state(&self, class: AlertClass) -> AlertState {
-        let state_reg = match class {
-            AlertClass::ClassA => &self.registers.classa_state,
-            AlertClass::ClassB => &self.registers.classb_state,
-            AlertClass::ClassC => &self.registers.classc_state,
-            AlertClass::ClassD => &self.registers.classd_state,
-        };
-
-        // all (8) variants of CLASSx_STATE register (3 bits) are encoded in a state
-        // in no case can the unwrap fail
-        unsafe {
-            state_reg
-                .read_as_enum::<CLASSx_STATE::CLASSx_STATE::Value>(CLASSx_STATE::CLASSx_STATE)
-                .unwrap_unchecked()
-                .into()
+        match class {
+            AlertClass::ClassA => {
+                // PANIC: all (8) variants of CLASSA_STATE register (3 bits) are
+                // encoded in a state in no case can the unwrap fail.
+                self.registers
+                    .classa_state
+                    .read_as_enum::<CLASSA_STATE::CLASSA_STATE::Value>(CLASSA_STATE::CLASSA_STATE)
+                    .unwrap()
+                    .into()
+            }
+            AlertClass::ClassB => {
+                // PANIC: all (8) variants of CLASSB_STATE register (3 bits) are
+                // encoded in a state in no case can the unwrap fail.
+                self.registers
+                    .classb_state
+                    .read_as_enum::<CLASSB_STATE::CLASSB_STATE::Value>(CLASSB_STATE::CLASSB_STATE)
+                    .unwrap()
+                    .into()
+            }
+            AlertClass::ClassC => {
+                // PANIC: all (8) variants of CLASSC_STATE register (3 bits) are
+                // encoded in a state in no case can the unwrap fail.
+                self.registers
+                    .classc_state
+                    .read_as_enum::<CLASSC_STATE::CLASSC_STATE::Value>(CLASSC_STATE::CLASSC_STATE)
+                    .unwrap()
+                    .into()
+            }
+            AlertClass::ClassD => {
+                // PANIC: all (8) variants of CLASSD_STATE register (3 bits) are
+                // encoded in a state in no case can the unwrap fail.
+                self.registers
+                    .classd_state
+                    .read_as_enum::<CLASSD_STATE::CLASSD_STATE::Value>(CLASSD_STATE::CLASSD_STATE)
+                    .unwrap()
+                    .into()
+            }
         }
     }
 
     pub fn clear_esclation(&self, class: AlertClass) {
-        let clr_reg = match class {
-            AlertClass::ClassA => &self.registers.classa_clr_shadowed,
-            AlertClass::ClassB => &self.registers.classb_clr_shadowed,
-            AlertClass::ClassC => &self.registers.classc_clr_shadowed,
-            AlertClass::ClassD => &self.registers.classd_clr_shadowed,
-        };
-
-        // write twice because register is shadowed
-        clr_reg.write(CLASSx_CLR_SHADOWED::CLASSx_CLR_SHADOWED.val(1));
-        clr_reg.write(CLASSx_CLR_SHADOWED::CLASSx_CLR_SHADOWED.val(1));
+        // Write twice because registers are shadowed.
+        match class {
+            AlertClass::ClassA => {
+                let reg = &self.registers.classa_clr_shadowed;
+                reg.write(CLASSA_CLR_SHADOWED::CLASSA_CLR_SHADOWED.val(1));
+                reg.write(CLASSA_CLR_SHADOWED::CLASSA_CLR_SHADOWED.val(1));
+            }
+            AlertClass::ClassB => {
+                let reg = &self.registers.classb_clr_shadowed;
+                reg.write(CLASSB_CLR_SHADOWED::CLASSB_CLR_SHADOWED.val(1));
+                reg.write(CLASSB_CLR_SHADOWED::CLASSB_CLR_SHADOWED.val(1));
+            }
+            AlertClass::ClassC => {
+                let reg = &self.registers.classc_clr_shadowed;
+                reg.write(CLASSC_CLR_SHADOWED::CLASSC_CLR_SHADOWED.val(1));
+                reg.write(CLASSC_CLR_SHADOWED::CLASSC_CLR_SHADOWED.val(1));
+            }
+            AlertClass::ClassD => {
+                let reg = &self.registers.classd_clr_shadowed;
+                reg.write(CLASSD_CLR_SHADOWED::CLASSD_CLR_SHADOWED.val(1));
+                reg.write(CLASSD_CLR_SHADOWED::CLASSD_CLR_SHADOWED.val(1));
+            }
+        }
     }
 
     /* PING TIMER */
@@ -638,14 +810,13 @@ impl AlertHandler {
     /* INTERRUPTS */
 
     pub fn enable_interrupt(&self, class: AlertClass) {
-        let field = match class {
-            AlertClass::ClassA => INTR::CLASSA,
-            AlertClass::ClassB => INTR::CLASSB,
-            AlertClass::ClassC => INTR::CLASSC,
-            AlertClass::ClassD => INTR::CLASSD,
-        };
-        // write 1 in INTR_ENABLE to enable an interrupt
-        self.registers.intr_enable.modify(field.val(1));
+        // Write 1 in INTR_ENABLE to enable an interrupt.
+        self.registers.intr_enable.modify(match class {
+            AlertClass::ClassA => INTR::CLASSA.val(1),
+            AlertClass::ClassB => INTR::CLASSB.val(1),
+            AlertClass::ClassC => INTR::CLASSC.val(1),
+            AlertClass::ClassD => INTR::CLASSD.val(1),
+        })
     }
 
     pub fn enable_all_interrupts(&self) {
@@ -656,14 +827,13 @@ impl AlertHandler {
     }
 
     pub fn clear_interrupt(&self, class: AlertClass) {
-        let field = match class {
-            AlertClass::ClassA => INTR::CLASSA,
-            AlertClass::ClassB => INTR::CLASSB,
-            AlertClass::ClassC => INTR::CLASSC,
-            AlertClass::ClassD => INTR::CLASSD,
-        };
-        // write 1 to INTR_STATE to clear the interrupt
-        self.registers.intr_state.modify(field.val(1));
+        // Write 1 to INTR_STATE to clear the interrupt.
+        self.registers.intr_state.modify(match class {
+            AlertClass::ClassA => INTR::CLASSA.val(1),
+            AlertClass::ClassB => INTR::CLASSB.val(1),
+            AlertClass::ClassC => INTR::CLASSC.val(1),
+            AlertClass::ClassD => INTR::CLASSD.val(1),
+        })
     }
 
     /* ALERT HANDLING and ALERT TESTING */
@@ -705,12 +875,16 @@ impl AlertHandler {
         kernel::debug_verbose!("dump_alert_config");
         for i in start..stop {
             kernel::debug!(
-                " cause{} en{} class{} rwen{} <- {:?} ",
+                " cause{} en{} class{} rwen{} <- {} ",
                 self.registers.alert_cause[i].get(),
                 self.registers.alert_en_shadowed[i].get(),
                 self.registers.alert_class_shadowed[i].get(),
                 self.registers.alert_regwen[i].get(),
-                AlertId::try_from(i as u32).unwrap(),
+                // TODO report alert name if `top_earlgrey` adds
+                // `#[derive(Debug)]` to `AlertId`.
+                //
+                //AlertId::try_from(i as u32).unwrap(),
+                i,
             );
         }
     }

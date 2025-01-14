@@ -11,6 +11,9 @@
 // and requires a deeper recursion limit than the default to fully expand.
 #![recursion_limit = "256"]
 
+#[cfg(feature = "ffi")]
+pub use earlgrey_registers as registers;
+
 pub mod chip_config;
 pub mod pinmux_config;
 
@@ -34,6 +37,7 @@ pub mod pattgen;
 pub mod pinmux;
 pub mod plic;
 pub mod pwrmgr;
+#[cfg(not(feature = "ffi"))]
 pub mod registers;
 pub mod rstmgr;
 pub mod rv_core_ibex;

@@ -242,14 +242,17 @@ pub trait SelectInput {
     fn get_selector(self) -> PinmuxInsel;
 }
 
+/// Wrapper type to get around the orphan rule.
+pub struct MuxedPadsWrapper(pub MuxedPads);
+
 /// MuxedPads names and values overlap with PinmuxInsel,
 /// function below is used to convert it to valid PinmuxInsel.
 /// OpenTitan documentation reference:
 /// <https://opentitan.org/book/hw/ip/pinmux/doc/programmers_guide.html#pinmux-configuration>
-impl From<MuxedPads> for PinmuxInsel {
-    fn from(pad: MuxedPads) -> Self {
+impl From<MuxedPadsWrapper> for PinmuxInsel {
+    fn from(pad: MuxedPadsWrapper) -> Self {
         // Add 2 to skip constant ConstantZero and ConstantOne.
-        match PinmuxInsel::try_from(pad as u32 + PINMUX_MIO_PERIPH_INSEL_IDX_OFFSET as u32) {
+        match PinmuxInsel::try_from(pad.0 as u32 + PINMUX_MIO_PERIPH_INSEL_IDX_OFFSET as u32) {
             Ok(select) => select,
             Err(_) => PinmuxInsel::ConstantZero,
         }
@@ -314,13 +317,13 @@ impl PadConfig {
         match *self {
             PadConfig::Unconnected => {}
             PadConfig::Input(pad, peripheral_in) => {
-                peripheral_in.connect_input(PinmuxInsel::from(pad));
+                peripheral_in.connect_input(PinmuxInsel::from(MuxedPadsWrapper(pad)));
             }
             PadConfig::Output(pad, peripheral_out) => {
                 pad.connect_output(peripheral_out);
             }
             PadConfig::InOut(pad, peripheral_in, peripheral_out) => {
-                peripheral_in.connect_input(PinmuxInsel::from(pad));
+                peripheral_in.connect_input(PinmuxInsel::from(MuxedPadsWrapper(pad)));
                 pad.connect_output(peripheral_out);
             }
         }

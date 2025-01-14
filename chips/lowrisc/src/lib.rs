@@ -9,7 +9,7 @@
 #![crate_type = "rlib"]
 
 #[cfg(feature = "ffi")]
-pub use registers;
+pub use multitop_registers as registers;
 
 pub mod aes;
 pub mod aon_timer;

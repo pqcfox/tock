@@ -15,6 +15,8 @@ rv32i = { path = "../../arch/rv32i" }
 kernel = { path = "../../kernel" }
 
 [features]
+# Enable when linking with OpenTitan FFI dependencies
+ffi = []
 clkmgr_tests = []
 sival = []
 qemu = []

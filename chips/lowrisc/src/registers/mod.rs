@@ -26,6 +26,7 @@ pub mod rv_core_ibex_regs;
 pub mod rv_timer_regs;
 pub mod spi_device_regs;
 pub mod spi_host_regs;
+pub mod sram_ctrl_regs;
 pub mod sysrst_ctrl_regs;
 pub mod uart_regs;
 pub mod usbdev_regs;
