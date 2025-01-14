@@ -49,6 +49,11 @@ use kernel::ErrorCode;
 use core::cell::Cell;
 use core::num::NonZeroUsize;
 
+/// Magic value to write to a 4-bit register that represents "CLEAR" or "DISABLED".
+const DISABLE_MAGIC_VALUE: u32 = 0x09;
+/// Magic value to write to a 4-bit register that represents "SET" or "ENABLED".
+const ENABLE_MAGIC_VALUE: u32 = 0x06;
+
 /// The base of flash registers
 pub(super) const FLASH_CTRL_BASE: StaticRef<FlashCtrlRegisters> =
     unsafe { StaticRef::new(FLASH_CTRL_CORE_BASE_ADDR as *const FlashCtrlRegisters) };
@@ -174,38 +179,38 @@ macro_rules! convert_info_memory_protection_region_to_register_value {
         fn $function(region: &InfoMemoryProtectionRegion) -> FieldValue<u32, $cfg::Register> {
             let high_endurance_enabled = match region.is_high_endurance_enabled()
             {
-                HighEnduranceEnabledStatus::Disabled => $cfg::HE_EN_0::CLEAR,
-                HighEnduranceEnabledStatus::Enabled => $cfg::HE_EN_0::SET,
+                HighEnduranceEnabledStatus::Disabled => $cfg::HE_EN_0.val(DISABLE_MAGIC_VALUE),
+                HighEnduranceEnabledStatus::Enabled => $cfg::HE_EN_0.val(ENABLE_MAGIC_VALUE),
             };
 
             let scramble_enabled = match region.is_scramble_enabled() {
-                ScrambleEnabledStatus::Disabled => $cfg::SCRAMBLE_EN_0::CLEAR,
-                ScrambleEnabledStatus::Enabled => $cfg::SCRAMBLE_EN_0::SET,
+                ScrambleEnabledStatus::Disabled => $cfg::SCRAMBLE_EN_0.val(DISABLE_MAGIC_VALUE),
+                ScrambleEnabledStatus::Enabled => $cfg::SCRAMBLE_EN_0.val(ENABLE_MAGIC_VALUE),
             };
 
             let ecc_enabled = match region.is_ecc_enabled() {
-                EccEnabledStatus::Disabled => $cfg::ECC_EN_0::CLEAR,
-                EccEnabledStatus::Enabled => $cfg::ECC_EN_0::SET,
+                EccEnabledStatus::Disabled => $cfg::ECC_EN_0.val(DISABLE_MAGIC_VALUE),
+                EccEnabledStatus::Enabled => $cfg::ECC_EN_0.val(ENABLE_MAGIC_VALUE),
             };
 
             let erase_enabled = match region.is_erase_enabled() {
-                EraseEnabledStatus::Disabled => $cfg::ERASE_EN_0::CLEAR,
-                EraseEnabledStatus::Enabled => $cfg::ERASE_EN_0::SET,
+                EraseEnabledStatus::Disabled => $cfg::ERASE_EN_0.val(DISABLE_MAGIC_VALUE),
+                EraseEnabledStatus::Enabled => $cfg::ERASE_EN_0.val(ENABLE_MAGIC_VALUE),
             };
 
             let write_enabled = match region.is_write_enabled() {
-                WriteEnabledStatus::Disabled => $cfg::PROG_EN_0::CLEAR,
-                WriteEnabledStatus::Enabled => $cfg::PROG_EN_0::SET,
+                WriteEnabledStatus::Disabled => $cfg::PROG_EN_0.val(DISABLE_MAGIC_VALUE),
+                WriteEnabledStatus::Enabled => $cfg::PROG_EN_0.val(ENABLE_MAGIC_VALUE),
             };
 
             let read_enabled = match region.is_read_enabled() {
-                ReadEnabledStatus::Disabled => $cfg::RD_EN_0::CLEAR,
-                ReadEnabledStatus::Enabled => $cfg::RD_EN_0::SET,
+                ReadEnabledStatus::Disabled => $cfg::RD_EN_0.val(DISABLE_MAGIC_VALUE),
+                ReadEnabledStatus::Enabled => $cfg::RD_EN_0.val(ENABLE_MAGIC_VALUE),
             };
 
             let is_region_enabled = match region.is_enabled() {
-                MemoryProtectionRegionStatus::Disabled => $cfg::EN_0::CLEAR,
-                MemoryProtectionRegionStatus::Enabled => $cfg::EN_0::SET,
+                MemoryProtectionRegionStatus::Disabled => $cfg::EN_0.val(DISABLE_MAGIC_VALUE),
+                MemoryProtectionRegionStatus::Enabled => $cfg::EN_0.val(ENABLE_MAGIC_VALUE),
             };
 
             high_endurance_enabled
@@ -310,35 +315,36 @@ impl FlashCtrl<'_> {
         &self,
         default_memory_protection_region: &DefaultMemoryProtectionRegion,
     ) {
-        let high_endurance_enabled =
-            match default_memory_protection_region.is_high_endurance_enabled() {
-                HighEnduranceEnabledStatus::Disabled => DEFAULT_REGION::HE_EN::CLEAR,
-                HighEnduranceEnabledStatus::Enabled => DEFAULT_REGION::HE_EN::SET,
-            };
+        let high_endurance_enabled = match default_memory_protection_region
+            .is_high_endurance_enabled()
+        {
+            HighEnduranceEnabledStatus::Disabled => DEFAULT_REGION::HE_EN.val(DISABLE_MAGIC_VALUE),
+            HighEnduranceEnabledStatus::Enabled => DEFAULT_REGION::HE_EN.val(ENABLE_MAGIC_VALUE),
+        };
 
         let scramble_enabled = match default_memory_protection_region.is_scramble_enabled() {
-            ScrambleEnabledStatus::Disabled => DEFAULT_REGION::SCRAMBLE_EN::CLEAR,
-            ScrambleEnabledStatus::Enabled => DEFAULT_REGION::SCRAMBLE_EN::SET,
+            ScrambleEnabledStatus::Disabled => DEFAULT_REGION::SCRAMBLE_EN.val(DISABLE_MAGIC_VALUE),
+            ScrambleEnabledStatus::Enabled => DEFAULT_REGION::SCRAMBLE_EN.val(ENABLE_MAGIC_VALUE),
         };
 
         let ecc_enabled = match default_memory_protection_region.is_ecc_enabled() {
-            EccEnabledStatus::Disabled => DEFAULT_REGION::ECC_EN::CLEAR,
-            EccEnabledStatus::Enabled => DEFAULT_REGION::ECC_EN::SET,
+            EccEnabledStatus::Disabled => DEFAULT_REGION::ECC_EN.val(DISABLE_MAGIC_VALUE),
+            EccEnabledStatus::Enabled => DEFAULT_REGION::ECC_EN.val(ENABLE_MAGIC_VALUE),
         };
 
         let erase_enabled = match default_memory_protection_region.is_erase_enabled() {
-            EraseEnabledStatus::Disabled => DEFAULT_REGION::ERASE_EN::CLEAR,
-            EraseEnabledStatus::Enabled => DEFAULT_REGION::ERASE_EN::SET,
+            EraseEnabledStatus::Disabled => DEFAULT_REGION::ERASE_EN.val(DISABLE_MAGIC_VALUE),
+            EraseEnabledStatus::Enabled => DEFAULT_REGION::ERASE_EN.val(ENABLE_MAGIC_VALUE),
         };
 
         let write_enabled = match default_memory_protection_region.is_write_enabled() {
-            WriteEnabledStatus::Disabled => DEFAULT_REGION::PROG_EN::CLEAR,
-            WriteEnabledStatus::Enabled => DEFAULT_REGION::PROG_EN::SET,
+            WriteEnabledStatus::Disabled => DEFAULT_REGION::PROG_EN.val(DISABLE_MAGIC_VALUE),
+            WriteEnabledStatus::Enabled => DEFAULT_REGION::PROG_EN.val(ENABLE_MAGIC_VALUE),
         };
 
         let read_enabled = match default_memory_protection_region.is_read_enabled() {
-            ReadEnabledStatus::Disabled => DEFAULT_REGION::RD_EN::CLEAR,
-            ReadEnabledStatus::Enabled => DEFAULT_REGION::RD_EN::SET,
+            ReadEnabledStatus::Disabled => DEFAULT_REGION::RD_EN.val(DISABLE_MAGIC_VALUE),
+            ReadEnabledStatus::Enabled => DEFAULT_REGION::RD_EN.val(ENABLE_MAGIC_VALUE),
         };
 
         self.registers.default_region.modify(
@@ -404,38 +410,40 @@ impl FlashCtrl<'_> {
         memory_protection_region: &DataMemoryProtectionRegion,
     ) {
         let high_endurance_enabled = match memory_protection_region.is_high_endurance_enabled() {
-            HighEnduranceEnabledStatus::Disabled => MP_REGION_CFG::HE_EN_0::CLEAR,
-            HighEnduranceEnabledStatus::Enabled => MP_REGION_CFG::HE_EN_0::SET,
+            HighEnduranceEnabledStatus::Disabled => MP_REGION_CFG::HE_EN_0.val(DISABLE_MAGIC_VALUE),
+            HighEnduranceEnabledStatus::Enabled => MP_REGION_CFG::HE_EN_0.val(ENABLE_MAGIC_VALUE),
         };
 
         let scramble_enabled = match memory_protection_region.is_scramble_enabled() {
-            ScrambleEnabledStatus::Disabled => MP_REGION_CFG::SCRAMBLE_EN_0::CLEAR,
-            ScrambleEnabledStatus::Enabled => MP_REGION_CFG::SCRAMBLE_EN_0::SET,
+            ScrambleEnabledStatus::Disabled => {
+                MP_REGION_CFG::SCRAMBLE_EN_0.val(DISABLE_MAGIC_VALUE)
+            }
+            ScrambleEnabledStatus::Enabled => MP_REGION_CFG::SCRAMBLE_EN_0.val(ENABLE_MAGIC_VALUE),
         };
 
         let ecc_enabled = match memory_protection_region.is_ecc_enabled() {
-            EccEnabledStatus::Disabled => MP_REGION_CFG::ECC_EN_0::CLEAR,
-            EccEnabledStatus::Enabled => MP_REGION_CFG::ECC_EN_0::SET,
+            EccEnabledStatus::Disabled => MP_REGION_CFG::ECC_EN_0.val(DISABLE_MAGIC_VALUE),
+            EccEnabledStatus::Enabled => MP_REGION_CFG::ECC_EN_0.val(ENABLE_MAGIC_VALUE),
         };
 
         let erase_enabled = match memory_protection_region.is_erase_enabled() {
-            EraseEnabledStatus::Disabled => MP_REGION_CFG::ERASE_EN_0::CLEAR,
-            EraseEnabledStatus::Enabled => MP_REGION_CFG::ERASE_EN_0::SET,
+            EraseEnabledStatus::Disabled => MP_REGION_CFG::ERASE_EN_0.val(DISABLE_MAGIC_VALUE),
+            EraseEnabledStatus::Enabled => MP_REGION_CFG::ERASE_EN_0.val(ENABLE_MAGIC_VALUE),
         };
 
         let write_enabled = match memory_protection_region.is_write_enabled() {
-            WriteEnabledStatus::Disabled => MP_REGION_CFG::PROG_EN_0::CLEAR,
-            WriteEnabledStatus::Enabled => MP_REGION_CFG::PROG_EN_0::SET,
+            WriteEnabledStatus::Disabled => MP_REGION_CFG::PROG_EN_0.val(DISABLE_MAGIC_VALUE),
+            WriteEnabledStatus::Enabled => MP_REGION_CFG::PROG_EN_0.val(ENABLE_MAGIC_VALUE),
         };
 
         let read_enabled = match memory_protection_region.is_read_enabled() {
-            ReadEnabledStatus::Disabled => MP_REGION_CFG::RD_EN_0::CLEAR,
-            ReadEnabledStatus::Enabled => MP_REGION_CFG::RD_EN_0::SET,
+            ReadEnabledStatus::Disabled => MP_REGION_CFG::RD_EN_0.val(DISABLE_MAGIC_VALUE),
+            ReadEnabledStatus::Enabled => MP_REGION_CFG::RD_EN_0.val(ENABLE_MAGIC_VALUE),
         };
 
         let is_region_enabled = match memory_protection_region.is_enabled() {
-            MemoryProtectionRegionStatus::Disabled => MP_REGION_CFG::EN_0::CLEAR,
-            MemoryProtectionRegionStatus::Enabled => MP_REGION_CFG::EN_0::SET,
+            MemoryProtectionRegionStatus::Disabled => MP_REGION_CFG::EN_0.val(DISABLE_MAGIC_VALUE),
+            MemoryProtectionRegionStatus::Enabled => MP_REGION_CFG::EN_0.val(ENABLE_MAGIC_VALUE),
         };
 
         memory_protection_region_register.modify(
