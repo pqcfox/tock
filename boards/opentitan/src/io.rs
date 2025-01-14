@@ -55,7 +55,7 @@ pub unsafe fn panic_fmt(pi: &PanicInfo) -> ! {
             earlgrey::registers::top_earlgrey::MuxedPads::Ioa6,
             earlgrey::registers::top_earlgrey::PinmuxOutsel::GpioGpio7,
         ),
-        earlgrey::gpio::pins::pin7,
+        7, // GPIO_7
     );
     first_led_pin.make_output();
     let first_led = &mut led::LedLow::new(first_led_pin);

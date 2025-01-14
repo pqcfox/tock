@@ -23,7 +23,7 @@ use kernel::{
         cells::OptionalCell,
         registers::{
             interfaces::{ReadWriteable, Readable, Writeable},
-            register_bitfields, Field, InMemoryRegister, LocalRegisterCopy,
+            Field, InMemoryRegister, LocalRegisterCopy,
         },
         StaticRef,
     },
@@ -91,12 +91,12 @@ impl<'a> SysRstCtrl<'a> {
     }
 
     /* KEY INTERRUPT */
-    pub fn key_interrupt_status(&self) -> LocalRegisterCopy<u32, KeyInterruptState::Register> {
+    pub fn key_interrupt_status(&self) -> LocalRegisterCopy<u32, KEY_INTR_STATUS::Register> {
         let value = self.registers.key_intr_status.get();
-        LocalRegisterCopy::<u32, KeyInterruptState::Register>::new(value)
+        LocalRegisterCopy::<u32, KEY_INTR_STATUS::Register>::new(value)
     }
 
-    pub fn key_interrupt_clear(&self, a: Field<u32, KeyInterruptState::Register>) {
+    pub fn key_interrupt_clear(&self, a: Field<u32, KEY_INTR_STATUS::Register>) {
         let b = Field::<u32, KEY_INTR_STATUS::Register>::new(a.mask, a.shift);
         self.registers.key_intr_status.modify(b.val(1));
     }
@@ -698,25 +698,6 @@ impl<'a> OpenTitanSysRstr for SysRstCtrl<'a> {
     }
 }
 
-register_bitfields![u32,
-pub KeyInterruptState [
-pwrb_h2l 0,
-key0_in_h2l 1,
-key1_in_h2l 2,
-key2_in_h2l 3,
-ac_present_h2l 4,
-ec_rst_h2l 5,
-flash_wp_h2l 6,
-pwrb_l2h 7,
-key0_in_l2h 8,
-key1_in_l2h 9,
-key2_in_l2h 10,
-ac_present_l2h 11,
-ec_rst_l2h 12,
-flash_wp_l2h 13,
-
-]];
-
 #[cfg(feature = "test_sysrst_ctrl")]
 pub mod tests {
     use kernel::hil::{
@@ -728,7 +709,7 @@ pub mod tests {
         time::{Alarm, AlarmClient},
     };
 
-    use super::{KeyInterruptState, SRCAllowedPinConfig, SysRstCtrl};
+    use super::{SRCAllowedPinConfig, SysRstCtrl, KEY_INTR_STATUS};
 
     /// wait for a small amount of time for a quick HW process to finish
     fn blocking_wait(ticks: u32) {
@@ -940,8 +921,8 @@ pub mod tests {
         // set initial pin state to (0,0) and clear relevant key interrupt status register as a possible high to low interrupt could have been generated
         key0_force.clear();
         pwrb_force.clear();
-        sysrst_ctrl.key_interrupt_clear(KeyInterruptState::key0_in_h2l);
-        sysrst_ctrl.key_interrupt_clear(KeyInterruptState::pwrb_h2l);
+        sysrst_ctrl.key_interrupt_clear(KEY_INTR_STATUS::KEY0_IN_H2L);
+        sysrst_ctrl.key_interrupt_clear(KEY_INTR_STATUS::PWRB_H2L);
         sysrst_ctrl.enable_interrupts();
 
         sysrst_ctrl
@@ -962,7 +943,7 @@ pub mod tests {
 
         // check that only the relevant Key0 transition was triggered
         let key_interrupt_status = sysrst_ctrl.key_interrupt_status();
-        assert!(key_interrupt_status.is_set(KeyInterruptState::key0_in_l2h));
+        assert!(key_interrupt_status.is_set(KEY_INTR_STATUS::KEY0_IN_L2H));
 
         // check that only Key0 transition was triggered
         assert_eq!(
@@ -975,7 +956,7 @@ pub mod tests {
         assert!(sysrst_ctrl.wakeup_detected());
 
         // clear state for next test
-        sysrst_ctrl.key_interrupt_clear(KeyInterruptState::key0_in_l2h);
+        sysrst_ctrl.key_interrupt_clear(KEY_INTR_STATUS::KEY0_IN_L2H);
         sysrst_ctrl.clear_wakeup();
 
         // force a L2H transition on PwrB pin and a H2L transition on Key0 pin
@@ -986,29 +967,29 @@ pub mod tests {
         let key_interrupt_status = sysrst_ctrl.key_interrupt_status();
         // check that the relevant transitions were triggered
         assert!(key_interrupt_status.matches_all(
-            KeyInterruptState::pwrb_l2h.val(1)
-                + KeyInterruptState::pwrb_h2l.val(0)
-                + KeyInterruptState::key0_in_h2l.val(1)
-                + KeyInterruptState::key0_in_l2h.val(0)
+            KEY_INTR_STATUS::PWRB_L2H.val(1)
+                + KEY_INTR_STATUS::PWRB_H2L.val(0)
+                + KEY_INTR_STATUS::KEY0_IN_H2L.val(1)
+                + KEY_INTR_STATUS::KEY0_IN_L2H.val(0)
         ));
 
         // check that only the relevant transitions were triggered
         assert!(
             key_interrupt_status.matches_all(
-                KeyInterruptState::pwrb_h2l.val(0)
-                    + KeyInterruptState::key0_in_h2l.val(1)
-                    + KeyInterruptState::key1_in_h2l.val(0)
-                    + KeyInterruptState::key2_in_h2l.val(0)
-                    + KeyInterruptState::ac_present_h2l.val(0)
-                    + KeyInterruptState::ec_rst_h2l.val(0)
-                    + KeyInterruptState::flash_wp_h2l.val(0)
-                    + KeyInterruptState::pwrb_l2h.val(1)
-                    + KeyInterruptState::key0_in_l2h.val(0)
-                    + KeyInterruptState::key1_in_l2h.val(0)
-                    + KeyInterruptState::key2_in_l2h.val(0)
-                    + KeyInterruptState::ac_present_l2h.val(0)
-                    + KeyInterruptState::ec_rst_l2h.val(0)
-                    + KeyInterruptState::flash_wp_l2h.val(0)
+                KEY_INTR_STATUS::PWRB_H2L.val(0)
+                    + KEY_INTR_STATUS::KEY0_IN_H2L.val(1)
+                    + KEY_INTR_STATUS::KEY1_IN_H2L.val(0)
+                    + KEY_INTR_STATUS::KEY2_IN_H2L.val(0)
+                    + KEY_INTR_STATUS::AC_PRESENT_H2L.val(0)
+                    + KEY_INTR_STATUS::EC_RST_L_H2L.val(0)
+                    + KEY_INTR_STATUS::FLASH_WP_L_H2L.val(0)
+                    + KEY_INTR_STATUS::PWRB_L2H.val(1)
+                    + KEY_INTR_STATUS::KEY0_IN_L2H.val(0)
+                    + KEY_INTR_STATUS::KEY1_IN_L2H.val(0)
+                    + KEY_INTR_STATUS::KEY2_IN_L2H.val(0)
+                    + KEY_INTR_STATUS::AC_PRESENT_L2H.val(0)
+                    + KEY_INTR_STATUS::EC_RST_L_L2H.val(0)
+                    + KEY_INTR_STATUS::FLASH_WP_L_L2H.val(0)
             ),
             "{:x}",
             key_interrupt_status.get()
@@ -1024,8 +1005,8 @@ pub mod tests {
         sysrst_ctrl
             .configure_keyinterrupt(&SRCKeyInterruptConfig::default())
             .expect("peripheral is locked");
-        sysrst_ctrl.key_interrupt_clear(KeyInterruptState::key0_in_h2l);
-        sysrst_ctrl.key_interrupt_clear(KeyInterruptState::pwrb_l2h);
+        sysrst_ctrl.key_interrupt_clear(KEY_INTR_STATUS::KEY0_IN_H2L);
+        sysrst_ctrl.key_interrupt_clear(KEY_INTR_STATUS::PWRB_L2H);
         sysrst_ctrl.clear_wakeup();
         key0_force.clear();
         pwrb_force.clear();

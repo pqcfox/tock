@@ -198,7 +198,7 @@ static mut TICKV: Option<
 static mut AES: Option<
     &aes_gcm::Aes128Gcm<
         'static,
-        virtual_aes_ccm::VirtualAES128CCM<'static, earlgrey::aes::Aes<'static>>,
+        virtual_aes_ccm::VirtualAES128CCM<'static, lowrisc::aes::Aes<'static>>,
     >,
 > = None;
 // Test access to SipHash
@@ -269,7 +269,7 @@ struct EarlGrey {
         'static,
         aes_gcm::Aes128Gcm<
             'static,
-            virtual_aes_ccm::VirtualAES128CCM<'static, earlgrey::aes::Aes<'static>>,
+            virtual_aes_ccm::VirtualAES128CCM<'static, lowrisc::aes::Aes<'static>>,
         >,
     >,
     pattgen: &'static capsules_extra::pattgen::PattGen<'static, lowrisc::pattgen::PattGen<'static>>,
@@ -1152,21 +1152,21 @@ unsafe fn setup() -> (
     const CRYPT_SIZE: usize = 7 * AES128_BLOCK_SIZE;
 
     let ccm_mux = static_init!(
-        virtual_aes_ccm::MuxAES128CCM<'static, earlgrey::aes::Aes<'static>>,
+        virtual_aes_ccm::MuxAES128CCM<'static, lowrisc::aes::Aes<'static>>,
         virtual_aes_ccm::MuxAES128CCM::new(&peripherals.aes)
     );
     kernel::deferred_call::DeferredCallClient::register(ccm_mux);
     peripherals.aes.set_client(ccm_mux);
 
     let ccm_client = components::aes::AesVirtualComponent::new(ccm_mux).finalize(
-        components::aes_virtual_component_static!(earlgrey::aes::Aes<'static>),
+        components::aes_virtual_component_static!(lowrisc::aes::Aes<'static>),
     );
 
     let crypt_buf2 = static_init!([u8; CRYPT_SIZE], [0x00; CRYPT_SIZE]);
     let gcm_client = static_init!(
         aes_gcm::Aes128Gcm<
             'static,
-            virtual_aes_ccm::VirtualAES128CCM<'static, earlgrey::aes::Aes<'static>>,
+            virtual_aes_ccm::VirtualAES128CCM<'static, lowrisc::aes::Aes<'static>>,
         >,
         aes_gcm::Aes128Gcm::new(ccm_client, crypt_buf2)
     );
@@ -1180,7 +1180,7 @@ unsafe fn setup() -> (
     .finalize(components::aes_driver_component_static!(
         aes_gcm::Aes128Gcm<
             'static,
-            virtual_aes_ccm::VirtualAES128CCM<'static, earlgrey::aes::Aes<'static>>,
+            virtual_aes_ccm::VirtualAES128CCM<'static, lowrisc::aes::Aes<'static>>,
         >,
     ));
 

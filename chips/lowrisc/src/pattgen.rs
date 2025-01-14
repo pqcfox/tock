@@ -109,8 +109,8 @@ impl PattGen<'_> {
     ) {
         // CAST: usize == u32 on RV32I
         self.registers.size.modify(
-            SIZE::LEN_CH0.val(pattern_length.as_u32() - 1)
-                + SIZE::REPS_CH0.val(repetion_count.as_u32() - 1),
+            SIZE::LEN_CH0.val(pattern_length.into_u32() - 1)
+                + SIZE::REPS_CH0.val(repetion_count.into_u32() - 1),
         );
     }
 
@@ -127,8 +127,8 @@ impl PattGen<'_> {
     ) {
         // CAST: usize == u32 on RV32I
         self.registers.size.modify(
-            SIZE::LEN_CH1.val(pattern_length.as_u32() - 1)
-                + SIZE::REPS_CH1.val(repetion_count.as_u32() - 1),
+            SIZE::LEN_CH1.val(pattern_length.into_u32() - 1)
+                + SIZE::REPS_CH1.val(repetion_count.into_u32() - 1),
         );
     }
 
@@ -279,7 +279,7 @@ impl PatternLength {
     /// # Return value
     ///
     /// The inner value of [PatternLength] casted to u32
-    const fn as_u32(self) -> u32 {
+    const fn into_u32(self) -> u32 {
         // CAST: usize == u32 on RV32I
         self.0.get() as u32
     }
@@ -321,7 +321,7 @@ impl PatternRepetitionCount {
     /// # Return value
     ///
     /// The inner value of [PatternRepetitionCount] casted to u32
-    const fn as_u32(self) -> u32 {
+    const fn into_u32(self) -> u32 {
         // CAST: usize == u32 on RV32I
         self.0.get() as u32
     }

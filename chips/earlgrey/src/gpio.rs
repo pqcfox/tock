@@ -7,8 +7,8 @@
 use core::ops::{Index, IndexMut};
 
 use kernel::utilities::StaticRef;
-use lowrisc::gpio::GpioRegisters;
-pub use lowrisc::gpio::{pins, GpioBitfield, GpioPin};
+pub use lowrisc::gpio::{GpioBitfield, GpioPin};
+use lowrisc::registers::gpio_regs::{GpioRegisters, INTR};
 
 use crate::pinmux::PadConfig;
 use crate::pinmux_config::EarlGreyPinmuxConfig;
@@ -75,38 +75,38 @@ impl<'a> Port<'a> {
             // Intentionally prevent splitting GpioPin to multiple line
             #[rustfmt::skip]
             pins: [
-                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(pins::pin0), pins::pin0),
-                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(pins::pin1), pins::pin1),
-                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(pins::pin2), pins::pin2),
-                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(pins::pin3), pins::pin3),
-                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(pins::pin4), pins::pin4),
-                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(pins::pin5), pins::pin5),
-                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(pins::pin6), pins::pin6),
-                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(pins::pin7), pins::pin7),
-                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(pins::pin8), pins::pin8),
-                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(pins::pin9), pins::pin9),
-                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(pins::pin10), pins::pin10),
-                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(pins::pin11), pins::pin11),
-                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(pins::pin12), pins::pin12),
-                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(pins::pin13), pins::pin13),
-                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(pins::pin14), pins::pin14),
-                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(pins::pin15), pins::pin15),
-                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(pins::pin16), pins::pin16),
-                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(pins::pin17), pins::pin17),
-                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(pins::pin18), pins::pin18),
-                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(pins::pin19), pins::pin19),
-                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(pins::pin20), pins::pin20),
-                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(pins::pin21), pins::pin21),
-                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(pins::pin22), pins::pin22),
-                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(pins::pin23), pins::pin23),
-                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(pins::pin24), pins::pin24),
-                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(pins::pin25), pins::pin25),
-                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(pins::pin26), pins::pin26),
-                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(pins::pin27), pins::pin27),
-                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(pins::pin28), pins::pin28),
-                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(pins::pin29), pins::pin29),
-                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(pins::pin30), pins::pin30),
-                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(pins::pin31), pins::pin31),
+                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(INTR::GPIO_0), 0),
+                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(INTR::GPIO_1), 1),
+                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(INTR::GPIO_2), 2),
+                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(INTR::GPIO_3), 3),
+                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(INTR::GPIO_4), 4),
+                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(INTR::GPIO_5), 5),
+                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(INTR::GPIO_6), 6),
+                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(INTR::GPIO_7), 7),
+                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(INTR::GPIO_8), 8),
+                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(INTR::GPIO_9), 9),
+                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(INTR::GPIO_10), 10),
+                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(INTR::GPIO_11), 11),
+                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(INTR::GPIO_12), 12),
+                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(INTR::GPIO_13), 13),
+                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(INTR::GPIO_14), 14),
+                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(INTR::GPIO_15), 15),
+                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(INTR::GPIO_16), 16),
+                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(INTR::GPIO_17), 17),
+                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(INTR::GPIO_18), 18),
+                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(INTR::GPIO_19), 19),
+                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(INTR::GPIO_20), 20),
+                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(INTR::GPIO_21), 21),
+                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(INTR::GPIO_22), 22),
+                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(INTR::GPIO_23), 23),
+                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(INTR::GPIO_24), 24),
+                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(INTR::GPIO_25), 25),
+                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(INTR::GPIO_26), 26),
+                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(INTR::GPIO_27), 27),
+                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(INTR::GPIO_28), 28),
+                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(INTR::GPIO_29), 29),
+                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(INTR::GPIO_30), 30),
+                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(INTR::GPIO_31), 31),
             ],
         }
     }

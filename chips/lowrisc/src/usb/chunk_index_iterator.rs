@@ -40,7 +40,7 @@ impl core::iter::Iterator for ChunkIndexIterator {
             let current_chunk_index = self.current_chunk_index;
             self.current_chunk_index = self
                 .current_chunk_index
-                .map_or(None, |current_chunk_index| current_chunk_index.next());
+                .and_then(|current_chunk_index| current_chunk_index.next());
             current_chunk_index
         } else {
             None

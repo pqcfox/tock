@@ -1,13 +1,14 @@
 // Licensed under the Apache License, Version 2.0 or the MIT License.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// Copyright lowRISC contributors 2023.
+// Copyright lowRISC contributors (OpenTitan project).
 
 // Generated register constants for usbdev.
 // Built for Earlgrey-M2.5.1-RC1-493-gedf5e35f5d
-// https://github.com/lowRISC/opentitan/tree/edf5e35f5d50a5377641c90a315109a351de7635
+// https://github.com/lowRISC/opentitan/tree/1290004bc3ec4b5cf4b091b55e94ad199c68efe2
 // Tree status: clean
-// Build date: 2023-10-18T10:11:37
+// Build date: 2024-12-16 17:33:48
 
+// Generated register constants for usbdev.
 // Original reference file: hw/ip/usbdev/data/usbdev.hjson
 use kernel::utilities::registers::ReadWrite;
 use kernel::utilities::registers::{register_bitfields, register_structs};
@@ -31,9 +32,9 @@ register_structs! {
         /// USB Control
         (0x0010 => pub(crate) usbctrl: ReadWrite<u32, USBCTRL::Register>),
         /// Enable an endpoint to respond to transactions in the downstream direction.
-        (0x0014 => pub(crate) ep_out_enable: ReadWrite<u32, EP_OUT_ENABLE::Register>),
+        (0x0014 => pub(crate) ep_out_enable: [ReadWrite<u32, EP_OUT_ENABLE::Register>; 1]),
         /// Enable an endpoint to respond to transactions in the upstream direction.
-        (0x0018 => pub(crate) ep_in_enable: ReadWrite<u32, EP_IN_ENABLE::Register>),
+        (0x0018 => pub(crate) ep_in_enable: [ReadWrite<u32, EP_IN_ENABLE::Register>; 1]),
         /// USB Status
         (0x001c => pub(crate) usbstat: ReadWrite<u32, USBSTAT::Register>),
         /// Available Buffer FIFO
@@ -41,13 +42,13 @@ register_structs! {
         /// Received Buffer FIFO
         (0x0024 => pub(crate) rxfifo: ReadWrite<u32, RXFIFO::Register>),
         /// Receive SETUP transaction enable
-        (0x0028 => pub(crate) rxenable_setup: ReadWrite<u32, RXENABLE_SETUP::Register>),
+        (0x0028 => pub(crate) rxenable_setup: [ReadWrite<u32, RXENABLE_SETUP::Register>; 1]),
         /// Receive OUT transaction enable
-        (0x002c => pub(crate) rxenable_out: ReadWrite<u32, RXENABLE_OUT::Register>),
+        (0x002c => pub(crate) rxenable_out: [ReadWrite<u32, RXENABLE_OUT::Register>; 1]),
         /// Set NAK after OUT transactions
         (0x0030 => pub(crate) set_nak_out: [ReadWrite<u32, SET_NAK_OUT::Register>; 1]),
         /// IN Transaction Sent
-        (0x0034 => pub(crate) in_sent: ReadWrite<u32, IN_SENT::Register>),
+        (0x0034 => pub(crate) in_sent: [ReadWrite<u32, IN_SENT::Register>; 1]),
         /// OUT Endpoint STALL control
         (0x0038 => pub(crate) out_stall: [ReadWrite<u32, OUT_STALL::Register>; 1]),
         /// IN Endpoint STALL control
@@ -55,9 +56,9 @@ register_structs! {
         /// Configure IN Transaction
         (0x0040 => pub(crate) configin: [ReadWrite<u32, CONFIGIN::Register>; 12]),
         /// OUT Endpoint isochronous setting
-        (0x0070 => pub(crate) out_iso: ReadWrite<u32, OUT_ISO::Register>),
+        (0x0070 => pub(crate) out_iso: [ReadWrite<u32, OUT_ISO::Register>; 1]),
         /// IN Endpoint isochronous setting
-        (0x0074 => pub(crate) in_iso: ReadWrite<u32, IN_ISO::Register>),
+        (0x0074 => pub(crate) in_iso: [ReadWrite<u32, IN_ISO::Register>; 1]),
         /// Clear the data toggle flag
         (0x0078 => pub(crate) data_toggle_clear: [ReadWrite<u32, DATA_TOGGLE_CLEAR::Register>; 1]),
         /// USB PHY pins sense.
