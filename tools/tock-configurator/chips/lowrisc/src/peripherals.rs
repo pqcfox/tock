@@ -24,17 +24,23 @@ pub struct Peripherals {
     timers: [Rc<crate::timer::RvTimer>; 1],
     uarts: [Rc<crate::uart::Uart>; 1],
     usbs: [Rc<crate::usb::Usb>; 1],
+    attestations: [Rc<
+        crate::attestation::EarlgreyAttestation<
+            parse::platform::capsules::info_flash::InfoFlashUser<crate::flash::FlashCtrl>,
+        >,
+    >; 1],
 }
 
 impl Peripherals {
     pub fn new() -> Self {
+        let flash = Rc::new(crate::flash::FlashCtrl::new());
         Self {
             aes: [Rc::new(crate::aes::Aes::new())],
             alert_handlers: [Rc::new(crate::alert_handler::AlertHandler::new())],
             flash_memory_protection_configuration: Rc::new(
                 super::flash_memory_protection::FlashMemoryProtectionConfiguration::new(),
             ),
-            flashes: [Rc::new(crate::flash::FlashCtrl::new())],
+            flashes: [flash.clone()],
             gpios: [Rc::new(crate::gpio::GpioPort::new())],
             hmacs: [Rc::new(crate::hmac::Hmac::new())],
             i2cs: [Rc::new(crate::i2c::I2c::new())],
@@ -48,6 +54,11 @@ impl Peripherals {
             timers: [Rc::new(crate::timer::RvTimer::new())],
             uarts: [Rc::new(crate::uart::Uart::new())],
             usbs: [Rc::new(crate::usb::Usb::new())],
+            attestations: [Rc::new(crate::attestation::EarlgreyAttestation::new(
+                Rc::new(parse::platform::capsules::info_flash::InfoFlashUser::new(
+                    flash,
+                )),
+            ))],
         }
     }
 }
@@ -121,6 +132,9 @@ impl parse::DefaultPeripherals for Peripherals {
     type AlertHandler = crate::alert_handler::AlertHandler;
     type Usb = crate::usb::Usb;
     type ResetManager = crate::reset_manager::ResetManager;
+    type Attestation = crate::attestation::EarlgreyAttestation<
+        parse::platform::capsules::info_flash::InfoFlashUser<crate::flash::FlashCtrl>,
+    >;
 
     fn aes(&self) -> Result<&[Rc<Self::Aes>], parse::Error> {
         Ok(&self.aes)
@@ -176,5 +190,9 @@ impl parse::DefaultPeripherals for Peripherals {
 
     fn usb(&self) -> Result<&[Rc<Self::Usb>], parse::Error> {
         Ok(&self.usbs)
+    }
+
+    fn attestation(&self) -> Result<&[Rc<Self::Attestation>], parse::Error> {
+        Ok(&self.attestations)
     }
 }

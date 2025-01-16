@@ -4,6 +4,7 @@
 
 mod aes;
 mod alert_handler;
+mod attestation;
 mod chip;
 mod epmp;
 mod flash;
