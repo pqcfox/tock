@@ -42,7 +42,7 @@ mod hmac;
 pub use hmac::HmacCapsule;
 
 // Avoid name conflicts
-mod info_flash;
+pub mod info_flash;
 pub use info_flash::InfoFlash;
 
 // Avoid name conflicts
@@ -83,3 +83,6 @@ pub use ipc::IPC;
 
 mod attestation;
 pub use attestation::*;
+
+pub mod oneshot_digest;
+pub use oneshot_digest::*;
