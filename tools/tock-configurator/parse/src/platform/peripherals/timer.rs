@@ -161,3 +161,9 @@ impl<T: Timer> crate::Component for MuxAlarm<T> {
         ))
     }
 }
+
+impl<T: Timer + 'static> std::fmt::Display for MuxAlarm<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "mux_alarm({})", self.peripheral)
+    }
+}

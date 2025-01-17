@@ -6,11 +6,12 @@
 // Author: Darius Jipa <darius.jipa@oxidos.io>
 
 use crate::Component;
+use clap::ValueEnum;
 use quote::quote;
 use std::rc::Rc;
 
 /// The types of schedulers supported by Tock.
-#[derive(serde::Serialize, serde::Deserialize, Clone, Copy, Default)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Copy, Debug, Default, ValueEnum)]
 pub enum SchedulerType {
     #[default]
     Cooperative,

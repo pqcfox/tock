@@ -10,10 +10,10 @@ use std::rc::Rc;
 
 use crate::config::{Capsule, Configuration};
 use crate::{
-    AesCapsule, AlarmDriver, AlertHandlerCapsule, AttestationCapsule, Console, HmacCapsule,
-    I2CMasterDriver, InfoFlash, KvDriver, Led, Lldb, MuxAlarm, MuxUart, OneshotDigestCapsule,
-    PattgenCapsule, ResetManagerCapsule, RngCapsule, SpiCapsule, SystemResetControllerCapsule,
-    TemperatureCapsule, UsbCapsule, GPIO, IPC,
+    AesCapsule, AlarmDriver, AlertHandlerCapsule, AsymmetricCryptoCapsule, AttestationCapsule,
+    Console, HmacCapsule, I2CMasterDriver, InfoFlash, KvDriver, Led, Lldb, MuxAlarm, MuxUart,
+    OneshotDigestCapsule, PattgenCapsule, ResetManagerCapsule, RngCapsule, SpiCapsule,
+    SystemResetControllerCapsule, TemperatureCapsule, UsbCapsule, GPIO, IPC,
 };
 use crate::{Chip, DefaultPeripherals, Platform, Scheduler};
 
@@ -122,6 +122,24 @@ impl<C: Chip> Context<C> {
                     capsules.push(
                         AttestationCapsule::get(attestation.clone()) as Rc<dyn crate::Capsule>
                     );
+                }
+                Capsule::P256 { p256 } => {
+                    capsules.push(AsymmetricCryptoCapsule::get(
+                        "DRIVER_NUM_P256".to_string(),
+                        "<kernel::hil::public_key_crypto::ecc::P256 as kernel::hil::public_key_crypto::ecc::EllipticCurve>::HASH_LEN".to_string(),
+                        "<kernel::hil::public_key_crypto::ecc::P256 as kernel::hil::public_key_crypto::ecc::EllipticCurve>::SIG_LEN".to_string(),
+                        "EcdsaP256".to_string(),
+                        p256.clone(),
+                    ) as Rc<dyn crate::Capsule>);
+                }
+                Capsule::P384 { p384 } => {
+                    capsules.push(AsymmetricCryptoCapsule::get(
+                        "DRIVER_NUM_P384".to_string(),
+                        "<kernel::hil::public_key_crypto::ecc::P384 as kernel::hil::public_key_crypto::ecc::EllipticCurve>::HASH_LEN".to_string(),
+                        "<kernel::hil::public_key_crypto::ecc::P384 as kernel::hil::public_key_crypto::ecc::EllipticCurve>::SIG_LEN".to_string(),
+                        "EcdsaP384".to_string(),
+                        p384.clone(),
+                    ) as Rc<dyn crate::Capsule>);
                 }
                 Capsule::OneshotDigest { oneshot_digest } => {
                     capsules

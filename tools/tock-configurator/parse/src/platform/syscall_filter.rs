@@ -5,8 +5,10 @@
 // Author: Irina Nita <irina.nita@oxidos.io>
 // Author: Darius Jipa <darius.jipa@oxidos.io>
 
+use clap::ValueEnum;
+
 /// Types of ssyscall filters available for Tock platforms.
-#[derive(serde::Serialize, serde::Deserialize, Default, Debug, Clone, Copy)]
+#[derive(serde::Serialize, serde::Deserialize, Default, Debug, Clone, Copy, ValueEnum)]
 pub enum SyscallFilterType {
     #[default]
     None,
