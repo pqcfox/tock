@@ -6,7 +6,7 @@
 
 use crate::registers::aon_timer_regs::{
     AonTimerRegisters, INTR_STATE, WDOG_BARK_THOLD, WDOG_BITE_THOLD, WDOG_CTRL, WDOG_REGWEN,
-    WKUP_COUNT, WKUP_CTRL, WKUP_THOLD,
+    WKUP_COUNT_HI, WKUP_COUNT_LO, WKUP_CTRL, WKUP_THOLD_HI, WKUP_THOLD_LO,
 };
 
 use kernel::utilities::cells::OptionalCell;
@@ -65,42 +65,55 @@ impl<'a> AonTimer<'a> {
     }
 
     // Enable wakeup after a number of milliseconds. This can fail if the ms number is out of range.
-    pub fn wakeup_enable_after_ms(&self, ms: u32) -> Result<(), ErrorCode> {
+    pub fn wakeup_enable_after_ms(&self, ms: u64) -> Result<(), ErrorCode> {
         let wakeup_cycles = self.ms_to_cycles(ms)?;
 
         self.wakeup_disable();
 
         self.reset_wkup();
 
-        self.registers
-            .wkup_thold
-            .write(WKUP_THOLD::THRESHOLD.val(wakeup_cycles));
+        // PANIC: These `unwrap` calls cannot panic because the partial values are constructed to
+        // be in the range of a `u32`.
+        self.registers.wkup_thold_lo.write(
+            WKUP_THOLD_LO::THRESHOLD_LO
+                .val(u32::try_from(wakeup_cycles & u64::from(u32::MAX)).unwrap()),
+        );
+        self.registers.wkup_thold_hi.write(
+            WKUP_THOLD_HI::THRESHOLD_HI.val(u32::try_from(wakeup_cycles >> u32::BITS).unwrap()),
+        );
 
         self.wakeup_set_prescaler_and_enable(0)
     }
 
     /// Reset  wake up timer count value.
     pub fn reset_wkup(&self) {
-        self.registers.wkup_count.set(0x00);
+        self.registers.wkup_count_lo.set(0x00);
+        self.registers.wkup_count_hi.set(0x00);
     }
 
     /// Get the ms remaining until wakeup will happen.
     ///
     /// Returns Ok(ms) if aon_clk_freq has been set via set_clk_freq,
     /// otherwise returns Err(ErrorCode::FAIL).
-    pub fn get_ms_to_wkup(&self) -> Result<u32, ErrorCode> {
-        self.cycles_to_ms(
-            // The wakeup register addition can not overflow because of the possible range of the prescaler register.
-            self.registers
-                .wkup_thold
-                .read(WKUP_THOLD::THRESHOLD)
-                .saturating_sub(
-                    self.registers
-                        .wkup_count
-                        .read(WKUP_COUNT::COUNT)
-                        .saturating_mul(self.registers.wkup_ctrl.read(WKUP_CTRL::PRESCALER) + 1),
-                ),
-        )
+    pub fn get_ms_to_wkup(&self) -> Result<u64, ErrorCode> {
+        let wkup_count_lo = self.registers.wkup_count_lo.read(WKUP_COUNT_LO::COUNT_LO);
+        let wkup_count_hi = self.registers.wkup_count_hi.read(WKUP_COUNT_HI::COUNT_HI);
+        let wkup_count = u64::from(wkup_count_lo)
+            + (u64::from(wkup_count_hi) << u32::BITS).saturating_mul(u64::from(
+                self.registers.wkup_ctrl.read(WKUP_CTRL::PRESCALER) + 1,
+            ));
+        let wkup_thold_lo = self
+            .registers
+            .wkup_thold_lo
+            .read(WKUP_THOLD_LO::THRESHOLD_LO);
+        let wkup_thold_hi = self
+            .registers
+            .wkup_thold_hi
+            .read(WKUP_THOLD_HI::THRESHOLD_HI);
+        let wkup_thold = u64::from(wkup_thold_lo) + (u64::from(wkup_thold_hi) << u32::BITS);
+        // The wakeup register addition can not overflow because of the
+        // possible range of the prescaler register.
+        self.cycles_to_ms(wkup_thold.saturating_sub(wkup_count))
     }
 
     /// Function to register a callback for the wakeup event.
@@ -133,7 +146,11 @@ impl<'a> AonTimer<'a> {
         // Watchdog period may need to be revised with kernel changes/updates
         // since the watchdog is `tickled()` at the start of every kernel loop
         // see: https://github.com/tock/tock/blob/eb3f7ce59434b7ac1b77ef1ab7dd2afad1a62ac5/kernel/src/kernel.rs#L448
-        let bite_cycles = self.ms_to_cycles(ms)?;
+        let bite_cycles = match u32::try_from(self.ms_to_cycles(u64::from(ms))?) {
+            Ok(c) => c,
+            // Value passed was too large for a 32-bit register.
+            Err(_) => return Err(ErrorCode::SIZE),
+        };
 
         self.registers
             .wdog_bite_thold
@@ -147,7 +164,11 @@ impl<'a> AonTimer<'a> {
         // Watchdog period may need to be revised with kernel changes/updates
         // since the watchdog is `tickled()` at the start of every kernel loop
         // see: https://github.com/tock/tock/blob/eb3f7ce59434b7ac1b77ef1ab7dd2afad1a62ac5/kernel/src/kernel.rs#L448
-        let bark_cycles = self.ms_to_cycles(ms)?;
+        let bark_cycles = match u32::try_from(self.ms_to_cycles(u64::from(ms))?) {
+            Ok(c) => c,
+            // Value passed was too large for a 32-bit register.
+            Err(_) => return Err(ErrorCode::SIZE),
+        };
 
         self.registers
             .wdog_bark_thold
@@ -185,10 +206,10 @@ impl<'a> AonTimer<'a> {
     ///
     /// Returns Ok(cycles) if aon_clk_freq has been set via set_clk_freq,
     /// otherwise returns Err(ErrorCode::FAIL).
-    fn ms_to_cycles(&self, ms: u32) -> Result<u32, ErrorCode> {
+    fn ms_to_cycles(&self, ms: u64) -> Result<u64, ErrorCode> {
         // 250kHZ CW310 or 125kHz Verilator (as specified in chip config)
         self.aon_clk_freq
-            .map(|freq| ms.saturating_mul(freq).saturating_div(1000))
+            .map(|freq| ms.saturating_mul(u64::from(freq)).saturating_div(1000))
             .ok_or(ErrorCode::FAIL)
     }
 
@@ -196,10 +217,10 @@ impl<'a> AonTimer<'a> {
     ///
     /// Returns Ok(ms) if aon_clk_freq has been set via set_clk_freq,
     /// otherwise returns Err(ErrorCode::FAIL).
-    fn cycles_to_ms(&self, cycles: u32) -> Result<u32, ErrorCode> {
+    fn cycles_to_ms(&self, cycles: u64) -> Result<u64, ErrorCode> {
         // 250kHZ CW310 or 125kHz Verilator (as specified in chip config)
         self.aon_clk_freq
-            .map(|freq| cycles.saturating_mul(1000).saturating_div(freq))
+            .map(|freq| cycles.saturating_mul(1000).saturating_div(u64::from(freq)))
             .ok_or(ErrorCode::FAIL)
     }
 
@@ -210,7 +231,7 @@ impl<'a> AonTimer<'a> {
         if intr.is_set(INTR_STATE::WKUP_TIMER_EXPIRED) {
             // Wake up timer has expired, sw must ack and clear
             regs.wkup_cause.set(0x00);
-            regs.wkup_count.set(0x00); // To avoid re-triggers
+            // To avoid re-triggers
             self.reset_wkup();
             // RW1C, clear the interrupt
             regs.intr_state.write(INTR_STATE::WKUP_TIMER_EXPIRED::SET);
