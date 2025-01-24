@@ -16,6 +16,7 @@ pub mod aon_timer;
 pub mod csrng;
 #[cfg(feature = "ffi")]
 pub mod ffi;
+#[cfg(not(feature = "ffi"))]
 pub mod flash_ctrl;
 pub mod gpio;
 pub mod hmac;
