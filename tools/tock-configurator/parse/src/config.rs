@@ -48,7 +48,22 @@ capsules_config!(
         RESET_MANAGER => ResetManager { reset_manager: Rc<P::ResetManager> },
         IPC => Ipc {},
         ATTESTATION => Attestation { attestation: Rc<P::Attestation> },
-        ONESHOT_DIGEST => OneshotDigest { oneshot_digest: Rc<P::OneshotDigest> },
+        ONESHOT_SHA256 => OneshotSha256 { oneshot_sha256: Rc<P::OneshotSha256> },
+        ONESHOT_SHA384 => OneshotSha384 { oneshot_sha384: Rc<P::OneshotSha384> },
+        ONESHOT_SHA512 => OneshotSha512 { oneshot_sha512: Rc<P::OneshotSha512> },
+        ONESHOT_SHA3_224 => OneshotSha3_224 { oneshot_sha3_224: Rc<P::OneshotSha3_224> },
+        ONESHOT_SHA3_256 => OneshotSha3_256 { oneshot_sha3_256: Rc<P::OneshotSha3_256> },
+        ONESHOT_SHA3_384 => OneshotSha3_384 { oneshot_sha3_384: Rc<P::OneshotSha3_384> },
+        ONESHOT_SHA3_512 => OneshotSha3_512 { oneshot_sha3_512: Rc<P::OneshotSha3_512> },
+        ONESHOT_SHAKE128 => OneshotShake128 { oneshot_shake128: Rc<P::OneshotShake128> },
+        ONESHOT_SHAKE256 => OneshotShake256 { oneshot_shake256: Rc<P::OneshotShake256> },
+        ONESHOT_CSHAKE128 => OneshotCshake128 { oneshot_cshake128: Rc<P::OneshotCshake128> },
+        ONESHOT_CSHAKE256 => OneshotCshake256 { oneshot_cshake256: Rc<P::OneshotCshake256> },
+        ONESHOT_HMAC_SHA256 => OneshotHmacSha256 { oneshot_hmac_sha256: Rc<P::OneshotHmacSha256> },
+        ONESHOT_HMAC_SHA384 => OneshotHmacSha384 { oneshot_hmac_sha384: Rc<P::OneshotHmacSha384> },
+        ONESHOT_HMAC_SHA512 => OneshotHmacSha512 { oneshot_hmac_sha512: Rc<P::OneshotHmacSha512> },
+        ONESHOT_KMAC128 => OneshotKmac128 { oneshot_kmac128: Rc<P::OneshotKmac128> },
+        ONESHOT_KMAC256 => OneshotKmac256 { oneshot_kmac256: Rc<P::OneshotKmac256> },
         P256 => P256 { p256: Rc<P::P256> },
         P384 => P384 { p384: Rc<P::P384> },
     }
@@ -255,11 +270,122 @@ impl<P: DefaultPeripherals> Configuration<P> {
             .insert(Index::ATTESTATION, Capsule::Attestation { attestation });
     }
 
-    /// Update the oneshot_digest configuration.`
-    pub fn update_oneshot_digest(&mut self, oneshot_digest: Rc<P::OneshotDigest>) {
+    /// Update the oneshot SHA-256 configuration.`
+    pub fn update_oneshot_sha256(&mut self, oneshot_sha256: Rc<P::OneshotSha256>) {
         self.capsules.insert(
-            Index::ONESHOT_DIGEST,
-            Capsule::OneshotDigest { oneshot_digest },
+            Index::ONESHOT_SHA256,
+            Capsule::OneshotSha256 { oneshot_sha256 },
+        );
+    }
+    /// Update the oneshot SHA-384 configuration.`
+    pub fn update_oneshot_sha384(&mut self, oneshot_sha384: Rc<P::OneshotSha384>) {
+        self.capsules.insert(
+            Index::ONESHOT_SHA384,
+            Capsule::OneshotSha384 { oneshot_sha384 },
+        );
+    }
+    /// Update the oneshot SHA-512 configuration.`
+    pub fn update_oneshot_sha512(&mut self, oneshot_sha512: Rc<P::OneshotSha512>) {
+        self.capsules.insert(
+            Index::ONESHOT_SHA512,
+            Capsule::OneshotSha512 { oneshot_sha512 },
+        );
+    }
+    /// Update the oneshot SHA3-224 configuration.`
+    pub fn update_oneshot_sha3_224(&mut self, oneshot_sha3_224: Rc<P::OneshotSha3_224>) {
+        self.capsules.insert(
+            Index::ONESHOT_SHA3_224,
+            Capsule::OneshotSha3_224 { oneshot_sha3_224 },
+        );
+    }
+    /// Update the oneshot SHA3-256 configuration.`
+    pub fn update_oneshot_sha3_256(&mut self, oneshot_sha3_256: Rc<P::OneshotSha3_256>) {
+        self.capsules.insert(
+            Index::ONESHOT_SHA3_256,
+            Capsule::OneshotSha3_256 { oneshot_sha3_256 },
+        );
+    }
+    /// Update the oneshot SHA3-384 configuration.`
+    pub fn update_oneshot_sha3_384(&mut self, oneshot_sha3_384: Rc<P::OneshotSha3_384>) {
+        self.capsules.insert(
+            Index::ONESHOT_SHA3_384,
+            Capsule::OneshotSha3_384 { oneshot_sha3_384 },
+        );
+    }
+    /// Update the oneshot SHA3-512 configuration.`
+    pub fn update_oneshot_sha3_512(&mut self, oneshot_sha3_512: Rc<P::OneshotSha3_512>) {
+        self.capsules.insert(
+            Index::ONESHOT_SHA3_512,
+            Capsule::OneshotSha3_512 { oneshot_sha3_512 },
+        );
+    }
+    /// Update the oneshot SHAKE-128 configuration.`
+    pub fn update_oneshot_shake128(&mut self, oneshot_shake128: Rc<P::OneshotShake128>) {
+        self.capsules.insert(
+            Index::ONESHOT_SHAKE128,
+            Capsule::OneshotShake128 { oneshot_shake128 },
+        );
+    }
+    /// Update the oneshot SHAKE-256 configuration.`
+    pub fn update_oneshot_shake256(&mut self, oneshot_shake256: Rc<P::OneshotShake256>) {
+        self.capsules.insert(
+            Index::ONESHOT_SHAKE256,
+            Capsule::OneshotShake256 { oneshot_shake256 },
+        );
+    }
+    /// Update the oneshot cSHAKE-128 configuration.
+    pub fn update_oneshot_cshake128(&mut self, oneshot_cshake128: Rc<P::OneshotCshake128>) {
+        self.capsules.insert(
+            Index::ONESHOT_CSHAKE128,
+            Capsule::OneshotCshake128 { oneshot_cshake128 },
+        );
+    }
+    /// Update the oneshot cSHAKE-256 configuration.
+    pub fn update_oneshot_cshake256(&mut self, oneshot_cshake256: Rc<P::OneshotCshake256>) {
+        self.capsules.insert(
+            Index::ONESHOT_CSHAKE256,
+            Capsule::OneshotCshake256 { oneshot_cshake256 },
+        );
+    }
+    /// Update the oneshot HMAC SHA-256 configuration.
+    pub fn update_oneshot_hmac_sha256(&mut self, oneshot_hmac_sha256: Rc<P::OneshotHmacSha256>) {
+        self.capsules.insert(
+            Index::ONESHOT_HMAC_SHA256,
+            Capsule::OneshotHmacSha256 {
+                oneshot_hmac_sha256,
+            },
+        );
+    }
+    /// Update the oneshot HMAC SHA-384 configuration.
+    pub fn update_oneshot_hmac_sha384(&mut self, oneshot_hmac_sha384: Rc<P::OneshotHmacSha384>) {
+        self.capsules.insert(
+            Index::ONESHOT_HMAC_SHA384,
+            Capsule::OneshotHmacSha384 {
+                oneshot_hmac_sha384,
+            },
+        );
+    }
+    /// Update the oneshot HMAC SHA-512 configuration.
+    pub fn update_oneshot_hmac_sha512(&mut self, oneshot_hmac_sha512: Rc<P::OneshotHmacSha512>) {
+        self.capsules.insert(
+            Index::ONESHOT_HMAC_SHA512,
+            Capsule::OneshotHmacSha512 {
+                oneshot_hmac_sha512,
+            },
+        );
+    }
+    /// Update the oneshot KMAC-128 configuration.
+    pub fn update_oneshot_kmac128(&mut self, oneshot_kmac128: Rc<P::OneshotKmac128>) {
+        self.capsules.insert(
+            Index::ONESHOT_KMAC128,
+            Capsule::OneshotKmac128 { oneshot_kmac128 },
+        );
+    }
+    /// Update the oneshot KMAC-256 configuration.
+    pub fn update_oneshot_kmac256(&mut self, oneshot_kmac256: Rc<P::OneshotKmac256>) {
+        self.capsules.insert(
+            Index::ONESHOT_KMAC256,
+            Capsule::OneshotKmac256 { oneshot_kmac256 },
         );
     }
 
@@ -397,8 +523,68 @@ impl<P: DefaultPeripherals> Configuration<P> {
         self.capsules.remove(&Index::ATTESTATION);
     }
 
-    pub fn remove_oneshot_digest(&mut self) {
-        self.capsules.remove(&Index::ONESHOT_DIGEST);
+    pub fn remove_oneshot_sha256(&mut self) {
+        self.capsules.remove(&Index::ONESHOT_SHA256);
+    }
+
+    pub fn remove_oneshot_sha384(&mut self) {
+        self.capsules.remove(&Index::ONESHOT_SHA384);
+    }
+
+    pub fn remove_oneshot_sha512(&mut self) {
+        self.capsules.remove(&Index::ONESHOT_SHA512);
+    }
+
+    pub fn remove_oneshot_sha3_224(&mut self) {
+        self.capsules.remove(&Index::ONESHOT_SHA3_224);
+    }
+
+    pub fn remove_oneshot_sha3_256(&mut self) {
+        self.capsules.remove(&Index::ONESHOT_SHA3_256);
+    }
+
+    pub fn remove_oneshot_sha3_384(&mut self) {
+        self.capsules.remove(&Index::ONESHOT_SHA3_384);
+    }
+
+    pub fn remove_oneshot_sha3_512(&mut self) {
+        self.capsules.remove(&Index::ONESHOT_SHA3_512);
+    }
+
+    pub fn remove_oneshot_shake128(&mut self) {
+        self.capsules.remove(&Index::ONESHOT_SHAKE128);
+    }
+
+    pub fn remove_oneshot_shake256(&mut self) {
+        self.capsules.remove(&Index::ONESHOT_SHAKE256);
+    }
+
+    pub fn remove_oneshot_cshake128(&mut self) {
+        self.capsules.remove(&Index::ONESHOT_CSHAKE128);
+    }
+
+    pub fn remove_oneshot_cshake256(&mut self) {
+        self.capsules.remove(&Index::ONESHOT_CSHAKE256);
+    }
+
+    pub fn remove_oneshot_hmac_sha256(&mut self) {
+        self.capsules.remove(&Index::ONESHOT_HMAC_SHA256);
+    }
+
+    pub fn remove_oneshot_hmac_sha384(&mut self) {
+        self.capsules.remove(&Index::ONESHOT_HMAC_SHA384);
+    }
+
+    pub fn remove_oneshot_hmac_sha512(&mut self) {
+        self.capsules.remove(&Index::ONESHOT_HMAC_SHA512);
+    }
+
+    pub fn remove_oneshot_kmac128(&mut self) {
+        self.capsules.remove(&Index::ONESHOT_KMAC128);
+    }
+
+    pub fn remove_oneshot_kmac256(&mut self) {
+        self.capsules.remove(&Index::ONESHOT_KMAC256);
     }
 
     pub fn remove_p256(&mut self) {

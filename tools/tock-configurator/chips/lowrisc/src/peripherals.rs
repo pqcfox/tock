@@ -29,7 +29,22 @@ pub struct Peripherals {
             parse::platform::capsules::info_flash::InfoFlashUser<crate::flash::FlashCtrl>,
         >,
     >; 1],
-    oneshot_digests: [Rc<crate::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest>; 1],
+    oneshot_sha256s: [Rc<crate::ffi::cryptolib::oneshot_digest::OtCryptoOneshotSha256>; 1],
+    oneshot_sha384s: [Rc<crate::ffi::cryptolib::oneshot_digest::OtCryptoOneshotSha384>; 1],
+    oneshot_sha512s: [Rc<crate::ffi::cryptolib::oneshot_digest::OtCryptoOneshotSha512>; 1],
+    oneshot_sha3_224s: [Rc<crate::ffi::cryptolib::oneshot_digest::OtCryptoOneshotSha3_224>; 1],
+    oneshot_sha3_256s: [Rc<crate::ffi::cryptolib::oneshot_digest::OtCryptoOneshotSha3_256>; 1],
+    oneshot_sha3_384s: [Rc<crate::ffi::cryptolib::oneshot_digest::OtCryptoOneshotSha3_384>; 1],
+    oneshot_sha3_512s: [Rc<crate::ffi::cryptolib::oneshot_digest::OtCryptoOneshotSha3_512>; 1],
+    oneshot_shake128s: [Rc<crate::ffi::cryptolib::oneshot_digest::OtCryptoOneshotShake128>; 1],
+    oneshot_shake256s: [Rc<crate::ffi::cryptolib::oneshot_digest::OtCryptoOneshotShake256>; 1],
+    oneshot_cshake128s: [Rc<crate::ffi::cryptolib::oneshot_digest::OtCryptoOneshotCshake128>; 1],
+    oneshot_cshake256s: [Rc<crate::ffi::cryptolib::oneshot_digest::OtCryptoOneshotCshake256>; 1],
+    oneshot_hmac_sha256s: [Rc<crate::ffi::cryptolib::oneshot_digest::OtCryptoOneshotHmacSha256>; 1],
+    oneshot_hmac_sha384s: [Rc<crate::ffi::cryptolib::oneshot_digest::OtCryptoOneshotHmacSha384>; 1],
+    oneshot_hmac_sha512s: [Rc<crate::ffi::cryptolib::oneshot_digest::OtCryptoOneshotHmacSha512>; 1],
+    oneshot_kmac128s: [Rc<crate::ffi::cryptolib::oneshot_digest::OtCryptoOneshotKmac128>; 1],
+    oneshot_kmac256s: [Rc<crate::ffi::cryptolib::oneshot_digest::OtCryptoOneshotKmac256>; 1],
     p256s: [Rc<crate::ffi::cryptolib::ecdsa::OtCryptoEcdsaP256<crate::timer::RvTimer>>; 1],
     p384s: [Rc<crate::ffi::cryptolib::ecdsa::OtCryptoEcdsaP384<crate::timer::RvTimer>>; 1],
 }
@@ -66,8 +81,53 @@ impl Peripherals {
                     flash,
                 )),
             ))],
-            oneshot_digests: [Rc::new(
-                crate::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest::new(),
+            oneshot_sha256s: [Rc::new(
+                crate::ffi::cryptolib::oneshot_digest::OtCryptoOneshotSha256::new(),
+            )],
+            oneshot_sha384s: [Rc::new(
+                crate::ffi::cryptolib::oneshot_digest::OtCryptoOneshotSha384::new(),
+            )],
+            oneshot_sha512s: [Rc::new(
+                crate::ffi::cryptolib::oneshot_digest::OtCryptoOneshotSha512::new(),
+            )],
+            oneshot_sha3_224s: [Rc::new(
+                crate::ffi::cryptolib::oneshot_digest::OtCryptoOneshotSha3_224::new(),
+            )],
+            oneshot_sha3_256s: [Rc::new(
+                crate::ffi::cryptolib::oneshot_digest::OtCryptoOneshotSha3_256::new(),
+            )],
+            oneshot_sha3_384s: [Rc::new(
+                crate::ffi::cryptolib::oneshot_digest::OtCryptoOneshotSha3_384::new(),
+            )],
+            oneshot_sha3_512s: [Rc::new(
+                crate::ffi::cryptolib::oneshot_digest::OtCryptoOneshotSha3_512::new(),
+            )],
+            oneshot_shake128s: [Rc::new(
+                crate::ffi::cryptolib::oneshot_digest::OtCryptoOneshotShake128::new(),
+            )],
+            oneshot_shake256s: [Rc::new(
+                crate::ffi::cryptolib::oneshot_digest::OtCryptoOneshotShake256::new(),
+            )],
+            oneshot_cshake128s: [Rc::new(
+                crate::ffi::cryptolib::oneshot_digest::OtCryptoOneshotCshake128::new(),
+            )],
+            oneshot_cshake256s: [Rc::new(
+                crate::ffi::cryptolib::oneshot_digest::OtCryptoOneshotCshake256::new(),
+            )],
+            oneshot_hmac_sha256s: [Rc::new(
+                crate::ffi::cryptolib::oneshot_digest::OtCryptoOneshotHmacSha256::new(),
+            )],
+            oneshot_hmac_sha384s: [Rc::new(
+                crate::ffi::cryptolib::oneshot_digest::OtCryptoOneshotHmacSha384::new(),
+            )],
+            oneshot_hmac_sha512s: [Rc::new(
+                crate::ffi::cryptolib::oneshot_digest::OtCryptoOneshotHmacSha512::new(),
+            )],
+            oneshot_kmac128s: [Rc::new(
+                crate::ffi::cryptolib::oneshot_digest::OtCryptoOneshotKmac128::new(),
+            )],
+            oneshot_kmac256s: [Rc::new(
+                crate::ffi::cryptolib::oneshot_digest::OtCryptoOneshotKmac256::new(),
             )],
             p256s: [Rc::new(
                 crate::ffi::cryptolib::ecdsa::OtCryptoEcdsaP256::new(cryptolib_mux.clone()),
@@ -151,7 +211,22 @@ impl parse::DefaultPeripherals for Peripherals {
     type Attestation = crate::attestation::EarlgreyAttestation<
         parse::platform::capsules::info_flash::InfoFlashUser<crate::flash::FlashCtrl>,
     >;
-    type OneshotDigest = crate::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest;
+    type OneshotSha256 = crate::ffi::cryptolib::oneshot_digest::OtCryptoOneshotSha256;
+    type OneshotSha384 = crate::ffi::cryptolib::oneshot_digest::OtCryptoOneshotSha384;
+    type OneshotSha512 = crate::ffi::cryptolib::oneshot_digest::OtCryptoOneshotSha512;
+    type OneshotSha3_224 = crate::ffi::cryptolib::oneshot_digest::OtCryptoOneshotSha3_224;
+    type OneshotSha3_256 = crate::ffi::cryptolib::oneshot_digest::OtCryptoOneshotSha3_256;
+    type OneshotSha3_384 = crate::ffi::cryptolib::oneshot_digest::OtCryptoOneshotSha3_384;
+    type OneshotSha3_512 = crate::ffi::cryptolib::oneshot_digest::OtCryptoOneshotSha3_512;
+    type OneshotShake128 = crate::ffi::cryptolib::oneshot_digest::OtCryptoOneshotShake128;
+    type OneshotShake256 = crate::ffi::cryptolib::oneshot_digest::OtCryptoOneshotShake256;
+    type OneshotCshake128 = crate::ffi::cryptolib::oneshot_digest::OtCryptoOneshotCshake128;
+    type OneshotCshake256 = crate::ffi::cryptolib::oneshot_digest::OtCryptoOneshotCshake256;
+    type OneshotHmacSha256 = crate::ffi::cryptolib::oneshot_digest::OtCryptoOneshotHmacSha256;
+    type OneshotHmacSha384 = crate::ffi::cryptolib::oneshot_digest::OtCryptoOneshotHmacSha384;
+    type OneshotHmacSha512 = crate::ffi::cryptolib::oneshot_digest::OtCryptoOneshotHmacSha512;
+    type OneshotKmac128 = crate::ffi::cryptolib::oneshot_digest::OtCryptoOneshotKmac128;
+    type OneshotKmac256 = crate::ffi::cryptolib::oneshot_digest::OtCryptoOneshotKmac256;
     type P256 = crate::ffi::cryptolib::ecdsa::OtCryptoEcdsaP256<crate::timer::RvTimer>;
     type P384 = crate::ffi::cryptolib::ecdsa::OtCryptoEcdsaP384<crate::timer::RvTimer>;
 
@@ -215,8 +290,53 @@ impl parse::DefaultPeripherals for Peripherals {
         Ok(&self.attestations)
     }
 
-    fn oneshot_digest(&self) -> Result<&[Rc<Self::OneshotDigest>], parse::Error> {
-        Ok(&self.oneshot_digests)
+    fn oneshot_sha256(&self) -> Result<&[Rc<Self::OneshotSha256>], parse::Error> {
+        Ok(&self.oneshot_sha256s)
+    }
+    fn oneshot_sha384(&self) -> Result<&[Rc<Self::OneshotSha384>], parse::Error> {
+        Ok(&self.oneshot_sha384s)
+    }
+    fn oneshot_sha512(&self) -> Result<&[Rc<Self::OneshotSha512>], parse::Error> {
+        Ok(&self.oneshot_sha512s)
+    }
+    fn oneshot_sha3_224(&self) -> Result<&[Rc<Self::OneshotSha3_224>], parse::Error> {
+        Ok(&self.oneshot_sha3_224s)
+    }
+    fn oneshot_sha3_256(&self) -> Result<&[Rc<Self::OneshotSha3_256>], parse::Error> {
+        Ok(&self.oneshot_sha3_256s)
+    }
+    fn oneshot_sha3_384(&self) -> Result<&[Rc<Self::OneshotSha3_384>], parse::Error> {
+        Ok(&self.oneshot_sha3_384s)
+    }
+    fn oneshot_sha3_512(&self) -> Result<&[Rc<Self::OneshotSha3_512>], parse::Error> {
+        Ok(&self.oneshot_sha3_512s)
+    }
+    fn oneshot_shake128(&self) -> Result<&[Rc<Self::OneshotShake128>], parse::Error> {
+        Ok(&self.oneshot_shake128s)
+    }
+    fn oneshot_shake256(&self) -> Result<&[Rc<Self::OneshotShake256>], parse::Error> {
+        Ok(&self.oneshot_shake256s)
+    }
+    fn oneshot_cshake128(&self) -> Result<&[Rc<Self::OneshotCshake128>], parse::Error> {
+        Ok(&self.oneshot_cshake128s)
+    }
+    fn oneshot_cshake256(&self) -> Result<&[Rc<Self::OneshotCshake256>], parse::Error> {
+        Ok(&self.oneshot_cshake256s)
+    }
+    fn oneshot_hmac_sha256(&self) -> Result<&[Rc<Self::OneshotHmacSha256>], parse::Error> {
+        Ok(&self.oneshot_hmac_sha256s)
+    }
+    fn oneshot_hmac_sha384(&self) -> Result<&[Rc<Self::OneshotHmacSha384>], parse::Error> {
+        Ok(&self.oneshot_hmac_sha384s)
+    }
+    fn oneshot_hmac_sha512(&self) -> Result<&[Rc<Self::OneshotHmacSha512>], parse::Error> {
+        Ok(&self.oneshot_hmac_sha512s)
+    }
+    fn oneshot_kmac128(&self) -> Result<&[Rc<Self::OneshotKmac128>], parse::Error> {
+        Ok(&self.oneshot_kmac128s)
+    }
+    fn oneshot_kmac256(&self) -> Result<&[Rc<Self::OneshotKmac256>], parse::Error> {
+        Ok(&self.oneshot_kmac256s)
     }
 
     fn p256(&self) -> Result<&[Rc<Self::P256>], parse::Error> {
