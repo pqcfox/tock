@@ -61,3 +61,6 @@ pub use reset_manager::*;
 
 pub mod attestation;
 pub use attestation::*;
+
+pub mod oneshot_digest;
+pub use oneshot_digest::*;

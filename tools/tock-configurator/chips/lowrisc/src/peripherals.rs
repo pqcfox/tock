@@ -29,6 +29,7 @@ pub struct Peripherals {
             parse::platform::capsules::info_flash::InfoFlashUser<crate::flash::FlashCtrl>,
         >,
     >; 1],
+    oneshot_digests: [Rc<crate::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest>; 1],
 }
 
 impl Peripherals {
@@ -59,6 +60,9 @@ impl Peripherals {
                     flash,
                 )),
             ))],
+            oneshot_digests: [Rc::new(
+                crate::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest::new(),
+            )],
         }
     }
 }
@@ -135,6 +139,7 @@ impl parse::DefaultPeripherals for Peripherals {
     type Attestation = crate::attestation::EarlgreyAttestation<
         parse::platform::capsules::info_flash::InfoFlashUser<crate::flash::FlashCtrl>,
     >;
+    type OneshotDigest = crate::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest;
 
     fn aes(&self) -> Result<&[Rc<Self::Aes>], parse::Error> {
         Ok(&self.aes)
@@ -194,5 +199,9 @@ impl parse::DefaultPeripherals for Peripherals {
 
     fn attestation(&self) -> Result<&[Rc<Self::Attestation>], parse::Error> {
         Ok(&self.attestations)
+    }
+
+    fn oneshot_digest(&self) -> Result<&[Rc<Self::OneshotDigest>], parse::Error> {
+        Ok(&self.oneshot_digests)
     }
 }

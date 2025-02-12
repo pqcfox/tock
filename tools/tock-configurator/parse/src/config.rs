@@ -48,6 +48,7 @@ capsules_config!(
         RESET_MANAGER => ResetManager { reset_manager: Rc<P::ResetManager> },
         IPC => Ipc {},
         ATTESTATION => Attestation { attestation: Rc<P::Attestation> },
+        ONESHOT_DIGEST => OneshotDigest { oneshot_digest: Rc<P::OneshotDigest> },
     }
 );
 
@@ -257,6 +258,14 @@ impl<P: DefaultPeripherals> Configuration<P> {
             .insert(Index::ATTESTATION, Capsule::Attestation { attestation });
     }
 
+    /// Update the oneshot_digest configuration.`
+    pub fn update_oneshot_digest(&mut self, oneshot_digest: Rc<P::OneshotDigest>) {
+        self.capsules.insert(
+            Index::ONESHOT_DIGEST,
+            Capsule::OneshotDigest { oneshot_digest },
+        );
+    }
+
     /// Update the scheduler configuration.
     pub fn update_scheduler(&mut self, scheduler_type: SchedulerType) {
         self.scheduler = scheduler_type;
@@ -379,5 +388,9 @@ impl<P: DefaultPeripherals> Configuration<P> {
 
     pub fn remove_attestation(&mut self) {
         self.capsules.remove(&Index::ATTESTATION);
+    }
+
+    pub fn remove_oneshot_digest(&mut self) {
+        self.capsules.remove(&Index::ONESHOT_DIGEST);
     }
 }

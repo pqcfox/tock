@@ -7,6 +7,7 @@ mod alert_handler;
 mod attestation;
 mod chip;
 mod epmp;
+mod ffi;
 mod flash;
 mod flash_memory_protection;
 mod gpio;
