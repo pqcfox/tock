@@ -8,7 +8,8 @@
 use super::{
     aes::Aes, alert_handler::AlertHandler, ble::BleAdvertisement, gpio::Gpio, pattgen::Pattgen,
     reset_manager::ResetManager, system_reset_controller::SystemResetController, timer::Timer,
-    uart::Uart, usb::Usb, Attestation, Flash, Hmac, I2c, OneshotDigest, Rng, Spi, Temperature,
+    uart::Uart, usb::Usb, AsymmetricCrypto, Attestation, Flash, Hmac, I2c, OneshotDigest, Rng, Spi,
+    Temperature,
 };
 use crate::Component;
 use std::rc::Rc;
@@ -56,6 +57,8 @@ pub trait DefaultPeripherals: Component {
         + for<'de> serde::Deserialize<'de>
         + serde::Serialize
         + 'static;
+    type P256: AsymmetricCrypto + for<'de> serde::Deserialize<'de> + serde::Serialize + 'static;
+    type P384: AsymmetricCrypto + for<'de> serde::Deserialize<'de> + serde::Serialize + 'static;
 
     /// Return an array slice of pointers to the `Gpio` peripherals or a [`crate::Error`]
     /// if the peripheral is non-existent.
@@ -144,6 +147,14 @@ pub trait DefaultPeripherals: Component {
     }
 
     fn oneshot_digest(&self) -> Result<&[Rc<Self::OneshotDigest>], crate::Error> {
+        Err(crate::Error::NoSupport)
+    }
+
+    fn p256(&self) -> Result<&[Rc<Self::P256>], crate::Error> {
+        Err(crate::Error::NoSupport)
+    }
+
+    fn p384(&self) -> Result<&[Rc<Self::P384>], crate::Error> {
         Err(crate::Error::NoSupport)
     }
 }

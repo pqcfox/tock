@@ -30,11 +30,17 @@ pub struct Peripherals {
         >,
     >; 1],
     oneshot_digests: [Rc<crate::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest>; 1],
+    p256s: [Rc<crate::ffi::cryptolib::ecdsa::OtCryptoEcdsaP256<crate::timer::RvTimer>>; 1],
+    p384s: [Rc<crate::ffi::cryptolib::ecdsa::OtCryptoEcdsaP384<crate::timer::RvTimer>>; 1],
 }
 
 impl Peripherals {
     pub fn new() -> Self {
+        let timer = Rc::new(crate::timer::RvTimer::new());
         let flash = Rc::new(crate::flash::FlashCtrl::new());
+        let mux_alarm = Rc::new(parse::peripherals::timer::MuxAlarm::new(timer.clone()));
+        let timeout_mux = Rc::new(parse::timeout_mux::TimeoutMux::new(mux_alarm));
+        let cryptolib_mux = Rc::new(crate::ffi::cryptolib::mux::CryptolibMux::new(timeout_mux));
         Self {
             aes: [Rc::new(crate::aes::Aes::new())],
             alert_handlers: [Rc::new(crate::alert_handler::AlertHandler::new())],
@@ -52,7 +58,7 @@ impl Peripherals {
                 crate::system_reset_controller::SystemResetController::new(),
             )],
             spis: [Rc::new(crate::spi::SpiHost::new())],
-            timers: [Rc::new(crate::timer::RvTimer::new())],
+            timers: [timer.clone()],
             uarts: [Rc::new(crate::uart::Uart::new())],
             usbs: [Rc::new(crate::usb::Usb::new())],
             attestations: [Rc::new(crate::attestation::EarlgreyAttestation::new(
@@ -62,6 +68,12 @@ impl Peripherals {
             ))],
             oneshot_digests: [Rc::new(
                 crate::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest::new(),
+            )],
+            p256s: [Rc::new(
+                crate::ffi::cryptolib::ecdsa::OtCryptoEcdsaP256::new(cryptolib_mux.clone()),
+            )],
+            p384s: [Rc::new(
+                crate::ffi::cryptolib::ecdsa::OtCryptoEcdsaP384::new(cryptolib_mux.clone()),
             )],
         }
     }
@@ -140,6 +152,8 @@ impl parse::DefaultPeripherals for Peripherals {
         parse::platform::capsules::info_flash::InfoFlashUser<crate::flash::FlashCtrl>,
     >;
     type OneshotDigest = crate::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest;
+    type P256 = crate::ffi::cryptolib::ecdsa::OtCryptoEcdsaP256<crate::timer::RvTimer>;
+    type P384 = crate::ffi::cryptolib::ecdsa::OtCryptoEcdsaP384<crate::timer::RvTimer>;
 
     fn aes(&self) -> Result<&[Rc<Self::Aes>], parse::Error> {
         Ok(&self.aes)
@@ -203,5 +217,13 @@ impl parse::DefaultPeripherals for Peripherals {
 
     fn oneshot_digest(&self) -> Result<&[Rc<Self::OneshotDigest>], parse::Error> {
         Ok(&self.oneshot_digests)
+    }
+
+    fn p256(&self) -> Result<&[Rc<Self::P256>], parse::Error> {
+        Ok(&self.p256s)
+    }
+
+    fn p384(&self) -> Result<&[Rc<Self::P384>], parse::Error> {
+        Ok(&self.p384s)
     }
 }

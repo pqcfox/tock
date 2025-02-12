@@ -59,6 +59,9 @@ pub use usb::*;
 pub mod reset_manager;
 pub use reset_manager::*;
 
+pub mod asymmetric_crypto;
+pub use asymmetric_crypto::*;
+
 pub mod attestation;
 pub use attestation::*;
 

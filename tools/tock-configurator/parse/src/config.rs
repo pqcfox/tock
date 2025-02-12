@@ -49,6 +49,8 @@ capsules_config!(
         IPC => Ipc {},
         ATTESTATION => Attestation { attestation: Rc<P::Attestation> },
         ONESHOT_DIGEST => OneshotDigest { oneshot_digest: Rc<P::OneshotDigest> },
+        P256 => P256 { p256: Rc<P::P256> },
+        P384 => P384 { p384: Rc<P::P384> },
     }
 );
 
@@ -266,6 +268,16 @@ impl<P: DefaultPeripherals> Configuration<P> {
         );
     }
 
+    /// Update the p256 configuration.
+    pub fn update_p256(&mut self, p256: Rc<P::P256>) {
+        self.capsules.insert(Index::P256, Capsule::P256 { p256 });
+    }
+
+    /// Update the p384 configuration.
+    pub fn update_p384(&mut self, p384: Rc<P::P384>) {
+        self.capsules.insert(Index::P384, Capsule::P384 { p384 });
+    }
+
     /// Update the scheduler configuration.
     pub fn update_scheduler(&mut self, scheduler_type: SchedulerType) {
         self.scheduler = scheduler_type;
@@ -392,5 +404,13 @@ impl<P: DefaultPeripherals> Configuration<P> {
 
     pub fn remove_oneshot_digest(&mut self) {
         self.capsules.remove(&Index::ONESHOT_DIGEST);
+    }
+
+    pub fn remove_p256(&mut self) {
+        self.capsules.remove(&Index::P256);
+    }
+
+    pub fn remove_p384(&mut self) {
+        self.capsules.remove(&Index::P384);
     }
 }

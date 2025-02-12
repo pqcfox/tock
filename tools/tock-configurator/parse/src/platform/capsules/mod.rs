@@ -81,8 +81,14 @@ pub use reset_manager::ResetManagerCapsule;
 mod ipc;
 pub use ipc::IPC;
 
-mod attestation;
+pub mod asymmetric_crypto;
+pub use asymmetric_crypto::*;
+
+pub mod attestation;
 pub use attestation::*;
 
 pub mod oneshot_digest;
 pub use oneshot_digest::*;
+
+pub mod timeout_mux;
+pub use timeout_mux::*;
