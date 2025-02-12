@@ -10,9 +10,10 @@ use std::rc::Rc;
 
 use crate::config::{Capsule, Configuration};
 use crate::{
-    AesCapsule, AlarmDriver, AlertHandlerCapsule, Console, HmacCapsule, I2CMasterDriver, InfoFlash,
-    KvDriver, Led, Lldb, MuxAlarm, MuxUart, PattgenCapsule, ResetManagerCapsule, RngCapsule,
-    SpiCapsule, SystemResetControllerCapsule, TemperatureCapsule, UsbCapsule, GPIO, IPC,
+    AesCapsule, AlarmDriver, AlertHandlerCapsule, AttestationCapsule, Console, HmacCapsule,
+    I2CMasterDriver, InfoFlash, KvDriver, Led, Lldb, MuxAlarm, MuxUart, PattgenCapsule,
+    ResetManagerCapsule, RngCapsule, SpiCapsule, SystemResetControllerCapsule, TemperatureCapsule,
+    UsbCapsule, GPIO, IPC,
 };
 use crate::{Chip, DefaultPeripherals, Platform, Scheduler};
 
@@ -114,10 +115,15 @@ impl<C: Chip> Context<C> {
                         .push(ResetManagerCapsule::get(reset_manager.clone())
                             as Rc<dyn crate::Capsule>);
                 }
-                Capsule::IPC {} => {
+                Capsule::Ipc {} => {
                     capsules.push(IPC::get() as Rc<dyn crate::Capsule>);
                 }
-                _ => {}
+                Capsule::Attestation { attestation } => {
+                    capsules.push(
+                        AttestationCapsule::get(attestation.clone()) as Rc<dyn crate::Capsule>
+                    );
+                }
+                _ => unreachable!("Capsule context branch not set."),
             };
         }
 

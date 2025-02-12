@@ -19,7 +19,7 @@ impl Page for NoSupport {
     }
 }
 
-pub trait Flash: Component + std::fmt::Display {
+pub trait Flash: Component + std::fmt::Debug + std::fmt::Display {
     type Page: Page;
 
     fn page() -> Self::Page;

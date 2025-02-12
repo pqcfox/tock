@@ -58,3 +58,6 @@ pub use usb::*;
 
 pub mod reset_manager;
 pub use reset_manager::*;
+
+pub mod attestation;
+pub use attestation::*;

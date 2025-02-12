@@ -80,3 +80,6 @@ pub use reset_manager::ResetManagerCapsule;
 // Avoid name conflicts
 mod ipc;
 pub use ipc::IPC;
+
+mod attestation;
+pub use attestation::*;

@@ -46,7 +46,8 @@ capsules_config!(
         ALERT_HANDLER => AlertHandler { alert_handler: Rc<P::AlertHandler> },
         USB => Usb { usb: Rc<P::Usb> },
         RESET_MANAGER => ResetManager { reset_manager: Rc<P::ResetManager> },
-        IPC => IPC {},
+        IPC => Ipc {},
+        ATTESTATION => Attestation { attestation: Rc<P::Attestation> },
     }
 );
 
@@ -247,7 +248,13 @@ impl<P: DefaultPeripherals> Configuration<P> {
     }
 
     pub fn update_ipc(&mut self) {
-        self.capsules.insert(Index::IPC, Capsule::IPC {});
+        self.capsules.insert(Index::IPC, Capsule::Ipc {});
+    }
+
+    /// Update the attestation configuration.
+    pub fn update_attestation(&mut self, attestation: Rc<P::Attestation>) {
+        self.capsules
+            .insert(Index::ATTESTATION, Capsule::Attestation { attestation });
     }
 
     /// Update the scheduler configuration.
@@ -368,5 +375,9 @@ impl<P: DefaultPeripherals> Configuration<P> {
 
     pub fn remove_ipc(&mut self) {
         self.capsules.remove(&Index::IPC);
+    }
+
+    pub fn remove_attestation(&mut self) {
+        self.capsules.remove(&Index::ATTESTATION);
     }
 }

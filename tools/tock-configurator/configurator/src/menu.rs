@@ -61,6 +61,7 @@ pub(crate) fn capsules_menu<C: Chip + 'static + serde::ser::Serialize>(
                 items::SupportedCapsule::SPI.to_menu_item(),
                 items::SupportedCapsule::SYSTEM_RESET_CONTROLLER.to_menu_item(),
                 items::SupportedCapsule::USB.to_menu_item(),
+                items::SupportedCapsule::ATTESTATION.to_menu_item(),
             ],
             state::on_capsule_submit::<C>,
         ))),

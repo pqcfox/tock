@@ -48,6 +48,7 @@ fn define_struct(
         .collect::<Vec<_>>();
 
     // Retrieve information from the struct for redefining.
+    let struct_attrs = struct_item.attrs;
     let struct_ty = struct_item.ident;
     let struct_generics = struct_item.generics;
 
@@ -117,6 +118,7 @@ fn define_struct(
             quote! {
                 #derive_default
                 #derive_serde
+                #(#struct_attrs)*
                 #struct_vis struct #struct_ty #struct_generics (#(#field_types,)*
                 #serde_skip
                 #_crate::Uuid);
@@ -130,12 +132,13 @@ fn define_struct(
             quote! {
                 #derive_default
                 #derive_serde
+                #(#struct_attrs)*
                 #struct_vis struct #struct_ty #struct_generics (#(#field_types,)*);
             },
         ),
         (false, None) => (
             quote! {Self {
-                 #(#field_names,)*
+                #(#field_names,)*
                 __ident: #_crate::Uuid::new_v4()
             }
             },
@@ -147,6 +150,7 @@ fn define_struct(
             #derive_default
             #derive_serde
             #[derive(Clone)]
+            #(#struct_attrs)*
             #struct_vis struct #struct_ty #struct_generics {
                 #(#fields,)*
                 #serde_skip
@@ -165,6 +169,7 @@ fn define_struct(
             quote! {
             #derive_default
             #derive_serde
+            #(#struct_attrs)*
             #struct_vis struct #struct_ty #struct_generics {
                 #(#fields,)*
             }

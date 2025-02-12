@@ -6,8 +6,9 @@ use crate::{peripherals::flash, Capsule, Component, Ident as _};
 use parse_macros::component;
 use std::rc::Rc;
 
-#[component(curr, ident = "info_flash_user")]
-struct InfoFlashUser<F: flash::Flash + 'static> {
+#[component(curr, ident = "info_flash_user", serde)]
+#[derive(Debug)]
+pub struct InfoFlashUser<F: flash::Flash + 'static> {
     peripheral: Rc<F>,
 }
 
@@ -43,9 +44,29 @@ impl<F: flash::Flash + 'static> Component for InfoFlashUser<F> {
     }
 }
 
+impl<F: flash::Flash + 'static> std::fmt::Display for InfoFlashUser<F> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "InfoFlashUser({})", &self.peripheral)
+    }
+}
+
+// Implement `Flash` for `InfoFlashUser` so it can be used as a type parameter
+// to other peripherals.
+impl<F: flash::Flash + 'static> flash::Flash for InfoFlashUser<F> {
+    type Page = F::Page;
+
+    fn page() -> Self::Page {
+        F::page()
+    }
+
+    fn pages_per_bank() -> proc_macro2::TokenStream {
+        F::pages_per_bank()
+    }
+}
+
 #[component(curr, ident = "info_flash")]
 pub struct InfoFlash<F: flash::Flash + 'static> {
-    peripheral: Rc<F>,
+    _peripheral: Rc<F>,
     info_flash_user: Rc<InfoFlashUser<F>>,
 }
 
