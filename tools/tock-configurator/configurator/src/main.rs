@@ -5,7 +5,16 @@
 // Author: Irina Nita <irina.nita@oxidos.io>
 // Author: Darius Jipa <darius.jipa@oxidos.io>
 
+use clap::Parser;
+use tock_configurator::{init, run_cli_mode, Mode, Opts};
+
 fn main() {
-    let mut configurator = tock_configurator::init();
-    configurator.run();
+    let opts = Opts::parse();
+    match opts.mode {
+        Mode::Gui => {
+            let mut configurator = init();
+            configurator.run()
+        }
+        Mode::Cli => run_cli_mode(opts),
+    };
 }
