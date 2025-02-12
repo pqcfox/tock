@@ -14,6 +14,7 @@ use parse::syscall_filter::SyscallFilterType;
 use std::fs::File;
 use std::io::Write;
 use std::num::NonZeroUsize;
+use std::path::PathBuf;
 use std::rc::Rc;
 
 use cursive::views::EditView;
@@ -71,6 +72,9 @@ pub(crate) struct Data<C: Chip> {
 
     /// List of pins with their usage.
     pub gpio_list: Option<Vec<GpioHelper<C>>>,
+
+    /// Path to write the output to.
+    pub out: Option<PathBuf>,
 }
 
 impl<C: Chip> Data<C> {
@@ -85,6 +89,7 @@ impl<C: Chip> Data<C> {
                     .map(|gpio| GpioHelper::new(Rc::clone(gpio)))
                     .collect()
             }),
+            out: None,
         }
     }
 
@@ -138,6 +143,11 @@ impl<C: Chip> Data<C> {
                 }
             });
         });
+    }
+
+    /// Set the path to write the JSON output to.
+    pub fn set_out(&mut self, out: PathBuf) {
+        self.out = Some(out);
     }
 }
 

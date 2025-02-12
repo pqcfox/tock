@@ -5,6 +5,7 @@
 // Author: Irina Nita <irina.nita@oxidos.io>
 // Author: Darius Jipa <darius.jipa@oxidos.io>
 
+use clap::ValueEnum;
 pub(crate) use parse::config::Index as SupportedCapsule;
 
 /// Trait for a type (usually an `enum`) that can be converted to a menu
@@ -61,21 +62,10 @@ impl ToMenuItem for KernelResources {
 /// Enum for supported chips by the configurator.
 ///
 /// Each chip that implements the `blueprint` traits could be defined in the enum.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, Default, ValueEnum)]
 pub(crate) enum SupportedChip {
+    #[default]
     EarlgreyCw310,
-}
-
-impl ToMenuItem for SupportedChip {
-    type Item = Self;
-    fn to_menu_item(self) -> (String, Self::Item) {
-        (
-            match self {
-                SupportedChip::EarlgreyCw310 => crate::submenu!("Earlgrey CW310"),
-            },
-            self,
-        )
-    }
 }
 
 impl<T> ToMenuItem for T

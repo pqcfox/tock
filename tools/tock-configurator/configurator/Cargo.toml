@@ -12,6 +12,7 @@ edition.workspace = true
 rust-version = "1.61"
 
 [dependencies]
+clap = { version = "4.5.23", features = ["derive"] }
 cursive = "0.20.0"
 parse = { path = "../parse" }
 cursive-aligned-view = "0.6.0"
