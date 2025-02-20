@@ -601,10 +601,10 @@ fn get_flash_memory_protection_configuration() -> flash_ctrl::MemoryProtectionCo
     {
         // SAFETY: &_stext represents a valid flash address in the host address space.
         let starting_address =
-            flash_ctrl::FlashAddress::new_from_host_address(unsafe { from_ref(&_stext) }).unwrap();
+            unsafe { flash_ctrl::FlashAddress::new_from_host_address(from_ref(&_stext)).unwrap() };
         // SAFETY: &_etext represents a valid flash address in the host address space.
         let ending_address =
-            flash_ctrl::FlashAddress::new_from_host_address(unsafe { from_ref(&_etext) }).unwrap();
+            unsafe { flash_ctrl::FlashAddress::new_from_host_address(from_ref(&_etext)).unwrap() };
 
         // Setup flash memory protection for the kernel
         // PANIC: the unwrap panics only if Flash(_stext) < FlashAddress(_etext), which occurs
@@ -1231,8 +1231,8 @@ unsafe fn setup() -> (
     // Flash
     #[cfg(not(feature = "test_flash_ctrl"))]
     let flash_ctrl_read_buf = static_init!(
-        [u8; lowrisc::flash_ctrl::PAGE_SIZE],
-        [0; lowrisc::flash_ctrl::PAGE_SIZE]
+        [u8; earlgrey::flash_ctrl::EARLGREY_PAGE_SIZE.get()],
+        [0; earlgrey::flash_ctrl::EARLGREY_PAGE_SIZE.get()],
     );
 
     #[cfg(not(feature = "test_flash_ctrl"))]
@@ -1262,10 +1262,11 @@ unsafe fn setup() -> (
         // TicKV
         let tickv = components::tickv::TicKVComponent::new(
             sip_hash,
-            mux_flash,                                     // Flash controller
-            lowrisc::flash_ctrl::FLASH_PAGES_PER_BANK - 1, // Region offset (End of Bank0/Use Bank1)
+            mux_flash,                                           // Flash controller
+            earlgrey::flash_ctrl::DATA_PAGES_PER_BANK.get() - 1, // Region offset (End of Bank0/Use Bank1)
             // Region Size
-            lowrisc::flash_ctrl::FLASH_PAGES_PER_BANK * lowrisc::flash_ctrl::PAGE_SIZE,
+            earlgrey::flash_ctrl::DATA_PAGES_PER_BANK.get()
+                * earlgrey::flash_ctrl::EARLGREY_PAGE_SIZE.get(),
             flash_ctrl_read_buf, // Buffer used internally in TicKV
             page_buffer,         // Buffer used with the flash controller
         )

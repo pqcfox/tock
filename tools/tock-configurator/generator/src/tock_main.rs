@@ -467,11 +467,15 @@ impl<C: Chip + 'static> TockMain<C> {
                 #[cfg(not(feature = "test_flash_ctrl"))]
                 {
                     // SAFETY: &_stext represents a valid flash address in the host address space.
-                    let starting_address =
-                        earlgrey::flash_ctrl::FlashAddress::new_from_host_address(unsafe { core::ptr::from_ref(&_stext) }).unwrap();
+                    let starting_address = unsafe {
+                        earlgrey::flash_ctrl::FlashAddress::new_from_host_address(&_stext as *const u8)
+                            .unwrap()
+                    };
                     // SAFETY: &_etext represents a valid flash address in the host address space.
-                    let ending_address =
-                        earlgrey::flash_ctrl::FlashAddress::new_from_host_address(unsafe { core::ptr::from_ref(&_etext) }).unwrap();
+                    let ending_address = unsafe {
+                        earlgrey::flash_ctrl::FlashAddress::new_from_host_address(&_etext as *const u8)
+                            .unwrap()
+                    };
 
                     // Setup flash memory protection for the kernel
                     // PANIC: the unwrap panics only if Flash(_stext) < FlashAddress(_etext), which occurs

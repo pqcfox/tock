@@ -18,7 +18,7 @@ impl parse::Component for FlashPage {
 
 impl parse::flash::Page for FlashPage {
     fn size() -> proc_macro2::TokenStream {
-        quote::quote!(lowrisc::flash_ctrl::PAGE_SIZE)
+        quote::quote!(earlgrey::flash_ctrl::EARLGREY_PAGE_SIZE)
     }
 }
 
@@ -57,6 +57,6 @@ impl parse::peripherals::Flash for FlashCtrl {
     }
 
     fn pages_per_bank() -> proc_macro2::TokenStream {
-        quote::quote!(lowrisc::flash_ctrl::FLASH_PAGES_PER_BANK)
+        quote::quote!(earlgrey::flash_ctrl::DATA_PAGES_PER_BANK)
     }
 }

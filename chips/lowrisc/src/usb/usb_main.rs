@@ -173,7 +173,8 @@ impl<'a> Usb<'a> {
                 + INTR::LINK_RESET::SET
                 + INTR::LINK_SUSPEND::SET
                 + INTR::LINK_RESUME::SET
-                + INTR::AV_EMPTY::SET
+                + INTR::AV_OUT_EMPTY::SET
+                + INTR::AV_SETUP_EMPTY::SET
                 + INTR::RX_FULL::SET
                 + INTR::AV_OVERFLOW::SET
                 + INTR::LINK_IN_ERR::SET
@@ -195,7 +196,8 @@ impl<'a> Usb<'a> {
                 + INTR::LINK_RESET::CLEAR
                 + INTR::LINK_SUSPEND::CLEAR
                 + INTR::LINK_RESUME::CLEAR
-                + INTR::AV_EMPTY::CLEAR
+                + INTR::AV_OUT_EMPTY::CLEAR
+                + INTR::AV_SETUP_EMPTY::CLEAR
                 + INTR::RX_FULL::CLEAR
                 + INTR::AV_OVERFLOW::CLEAR
                 + INTR::LINK_IN_ERR::CLEAR

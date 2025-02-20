@@ -5,7 +5,8 @@
 //! I2C Master Driver
 
 use crate::registers::i2c_regs::{
-    CTRL, FDATA, FIFO_CTRL, INTR, RDATA, STATUS, TIMING0, TIMING1, TIMING2, TIMING3, TIMING4, HOST_FIFO_CONFIG,
+    CTRL, FDATA, FIFO_CTRL, HOST_FIFO_CONFIG, INTR, RDATA, STATUS, TIMING0, TIMING1, TIMING2,
+    TIMING3, TIMING4,
 };
 use core::cell::Cell;
 use kernel::hil;
@@ -71,7 +72,7 @@ impl<'a> I2c<'_> {
                 + INTR::SDA_INTERFERENCE::SET
                 + INTR::STRETCH_TIMEOUT::SET
                 + INTR::SDA_UNSTABLE::SET
-                + INTR::CMD_COMPLETE::SET                
+                + INTR::CMD_COMPLETE::SET
                 + INTR::TX_STRETCH::SET
                 + INTR::TX_THRESHOLD::SET
                 + INTR::ACQ_STRETCH::SET
@@ -156,7 +157,9 @@ impl<'a> I2c<'_> {
                 // Update the FIFO depth
                 //
                 // CAST: |u32| == |usize| on RV32I
-                regs.host_fifo_config.modify(HOST_FIFO_CONFIG::RX_THRESH.val((len - 1).min(MAX_EMPTY_THRESH) as u32));                
+                regs.host_fifo_config.modify(
+                    HOST_FIFO_CONFIG::RX_THRESH.val((len - 1).min(MAX_EMPTY_THRESH) as u32),
+                );
             }
         });
     }
@@ -197,8 +200,10 @@ impl<'a> I2c<'_> {
                 self.write_index.set(data_pushed + 1);
                 // Update the FIFO depth
                 //
-                // CAST: |u32| == |usize| on RV32I        
-                regs.host_fifo_config.modify(HOST_FIFO_CONFIG::FMT_THRESH.val((len - 1).min(MAX_EMPTY_THRESH) as u32));
+                // CAST: |u32| == |usize| on RV32I
+                regs.host_fifo_config.modify(
+                    HOST_FIFO_CONFIG::FMT_THRESH.val((len - 1).min(MAX_EMPTY_THRESH) as u32),
+                );
             }
         });
     }
@@ -246,8 +251,10 @@ impl<'a> I2c<'_> {
 
                 // Update the FIFO depth
                 //
-                // CAST: |u32| == |usize| on RV32I        
-                regs.host_fifo_config.modify(HOST_FIFO_CONFIG::FMT_THRESH.val((len - 1).min(MAX_EMPTY_THRESH) as u32));
+                // CAST: |u32| == |usize| on RV32I
+                regs.host_fifo_config.modify(
+                    HOST_FIFO_CONFIG::FMT_THRESH.val((len - 1).min(MAX_EMPTY_THRESH) as u32),
+                );
             }
         });
     }
@@ -269,9 +276,8 @@ impl<'a> hil::i2c::I2CMaster<'a> for I2c<'a> {
             INTR::FMT_THRESHOLD::SET
                 + INTR::RX_THRESHOLD::SET
                 + INTR::ACQ_THRESHOLD::SET
-                + INTR::FMT_OVERFLOW::SET
+                + INTR::FMT_THRESHOLD::SET
                 + INTR::RX_OVERFLOW::SET
-                + INTR::NAK::SET
                 + INTR::SCL_INTERFERENCE::SET
                 + INTR::SDA_INTERFERENCE::SET
                 + INTR::STRETCH_TIMEOUT::SET
@@ -299,10 +305,12 @@ impl<'a> hil::i2c::I2CMaster<'a> for I2c<'a> {
 
         // Set the FIFO depth and reset the FIFO
         //
-        // CAST: |u32| == |usize| on RV32I        
-        regs.host_fifo_config.modify(HOST_FIFO_CONFIG::FMT_THRESH.val((write_len - 1).min(MAX_EMPTY_THRESH) as u32));
-        // CAST: |u32| == |usize| on RV32I        
-        regs.host_fifo_config.modify(HOST_FIFO_CONFIG::RX_THRESH.val((read_len - 1).min(MAX_EMPTY_THRESH) as u32));
+        // CAST: |u32| == |usize| on RV32I
+        regs.host_fifo_config
+            .modify(HOST_FIFO_CONFIG::FMT_THRESH.val((write_len - 1).min(MAX_EMPTY_THRESH) as u32));
+        // CAST: |u32| == |usize| on RV32I
+        regs.host_fifo_config
+            .modify(HOST_FIFO_CONFIG::RX_THRESH.val((read_len - 1).min(MAX_EMPTY_THRESH) as u32));
 
         self.fifo_reset();
 
@@ -333,11 +341,12 @@ impl<'a> hil::i2c::I2CMaster<'a> for I2c<'a> {
         len: usize,
     ) -> Result<(), (hil::i2c::Error, &'static mut [u8])> {
         let regs = self.registers;
-        
+
         // Set the FIFO depth and reset the FIFO
         //
         // CAST: |u32| == |usize| on RV32I
-        regs.host_fifo_config.modify(HOST_FIFO_CONFIG::FMT_THRESH.val((len - 1).min(MAX_EMPTY_THRESH) as u32));
+        regs.host_fifo_config
+            .modify(HOST_FIFO_CONFIG::FMT_THRESH.val((len - 1).min(MAX_EMPTY_THRESH) as u32));
         self.fifo_reset();
 
         // Zero out the LSB to signal a write
@@ -365,11 +374,12 @@ impl<'a> hil::i2c::I2CMaster<'a> for I2c<'a> {
         len: usize,
     ) -> Result<(), (hil::i2c::Error, &'static mut [u8])> {
         let regs = self.registers;
-        
+
         // Set the FIFO depth and reset the FIFO
         //
         // CAST: |u32| == |usize| on RV32I
-        regs.host_fifo_config.modify(HOST_FIFO_CONFIG::RX_THRESH.val((len - 1).min(MAX_EMPTY_THRESH) as u32));
+        regs.host_fifo_config
+            .modify(HOST_FIFO_CONFIG::RX_THRESH.val((len - 1).min(MAX_EMPTY_THRESH) as u32));
         self.fifo_reset();
 
         // Set the LSB to signal a read
