@@ -10,7 +10,11 @@ pub mod pwrmgr_regs;
 pub mod rstmgr_regs;
 pub mod rv_plic_regs;
 pub mod sensor_ctrl_regs;
+
+#[cfg(not(feature = "ffi"))]
 pub mod top_earlgrey;
+#[cfg(feature = "ffi")]
+pub use top_earlgrey;
 
 // Import multitop registers for use in top-specific drivers.
 pub use lowrisc::registers::{
