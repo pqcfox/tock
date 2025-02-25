@@ -1588,7 +1588,7 @@ impl<'a> Usb<'a> {
             UsbInterrupt::LinkReset => self.handle_link_reset_interrupt(),
             UsbInterrupt::LinkSuspended => self.handle_link_suspended_interrupt(),
             UsbInterrupt::LinkResume => self.handle_link_resume_interrupt(),
-            UsbInterrupt::AvEmpty => unimplemented!(),
+            UsbInterrupt::AvOutEmpty => unimplemented!(),
             UsbInterrupt::RxFull => unimplemented!(),
             UsbInterrupt::AvOverflow => unimplemented!(),
             UsbInterrupt::LinkInErr => self.handle_link_in_err_interrupt(),
@@ -1598,6 +1598,7 @@ impl<'a> Usb<'a> {
             UsbInterrupt::Frame => self.handle_frame_interrupt(),
             UsbInterrupt::Powered => self.handle_powered_interrupt(),
             UsbInterrupt::LinkOutErr => self.handle_link_out_err_interrupt(),
+            UsbInterrupt::AvSetupEmpty => unimplemented!(),
         }
     }
 }

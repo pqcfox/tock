@@ -18,6 +18,59 @@ use kernel::utilities::StaticRef;
 
 pub use crate::registers::i2c_regs::I2cRegisters;
 
+#[derive(Clone, Copy)]
+pub enum I2cInterrupt {
+    /// host mode interrupt: asserted whilst the FMT FIFO level is below the low
+    /// threshold. This is a level status interrupt.
+    FmtThreshold,
+    /// host mode interrupt: asserted whilst the RX FIFO level is above the high
+    /// threshold. This is a level status interrupt.
+    RxThreshold,
+    /// target mode interrupt: asserted whilst the ACQ FIFO level is above the
+    /// high threshold. This is a level status interrupt.
+    AcqThreshold,
+    /// host mode interrupt: raised if the RX FIFO has overflowed.
+    RxOverflow,
+    /// host mode interrupt: raised if the controller FSM is halted, such as on
+    /// an unexpected NACK or lost arbitration. Check `CONTROLLER_EVENTS` for
+    /// the reason. The interrupt will be released when the bits in
+    /// `CONTROLLER_EVENTS` are cleared.
+    ControllerHalt,
+    /// host mode interrupt: raised if the SCL line drops early (not supported
+    /// without clock synchronization).
+    SclInterference,
+    /// host mode interrupt: raised if the SDA line goes low when host is trying
+    /// to assert high
+    SdaInterference,
+    /// host mode interrupt: raised if target stretches the clock beyond the
+    /// allowed timeout period
+    StretchTimeout,
+    /// host mode interrupt: raised if the target does not assert a constant
+    /// value of SDA during transmission.
+    SdaUnstable,
+    /// host and target mode interrupt. In host mode, raised if the host issues
+    /// a repeated START or terminates the transaction by issuing STOP. In
+    /// target mode, raised if the external host issues a STOP or repeated
+    /// START.
+    CmdComplete,
+    /// target mode interrupt: raised if the target is stretching clocks for a
+    /// read command. This is a level status interrup.t
+    TxStretch,
+    /// target mode interrupt: asserted whilst the TX FIFO level is below the
+    /// low threshold. This is a level status interrupt.
+    TxThreshold,
+    /// target mode interrupt: raised if the target is stretching clocks due to
+    /// full ACQ FIFO or zero count in `TARGET_ACK_CTRL.NBYTES` (if
+    /// enabled). This is a level status interrupt.
+    AcqStretch,
+    /// target mode interrupt: raised if STOP is received without a preceding
+    /// NACK during an external host read.
+    UnexpStop,
+    /// target mode interrupt: raised if the host stops sending the clock during
+    /// an ongoing transaction.
+    HostTimeout,
+}
+
 /// Number of bytes remaining in a outgoing buffer when the hardware should
 /// trigger an interrupt notifying the buffer is nearly empty, provided the
 /// message written is not even smaller.
@@ -57,41 +110,75 @@ impl<'a> I2c<'_> {
         }
     }
 
-    pub fn handle_interrupt(&self) {
+    pub fn handle_interrupt(&self, interrupt: I2cInterrupt) {
         let regs = self.registers;
-        let irqs = regs.intr_state.extract();
-
-        // Clear all interrupts
-        regs.intr_state.modify(
-            INTR::FMT_THRESHOLD::SET
-                + INTR::RX_THRESHOLD::SET
-                + INTR::ACQ_THRESHOLD::SET
-                + INTR::RX_OVERFLOW::SET
-                + INTR::CONTROLLER_HALT::SET
-                + INTR::SCL_INTERFERENCE::SET
-                + INTR::SDA_INTERFERENCE::SET
-                + INTR::STRETCH_TIMEOUT::SET
-                + INTR::SDA_UNSTABLE::SET
-                + INTR::CMD_COMPLETE::SET
-                + INTR::TX_STRETCH::SET
-                + INTR::TX_THRESHOLD::SET
-                + INTR::ACQ_STRETCH::SET
-                + INTR::UNEXP_STOP::SET
-                + INTR::HOST_TIMEOUT::SET,
-        );
-
-        if irqs.is_set(INTR::FMT_THRESHOLD) {
-            // FMT Watermark
-            if self.slave_read_address.get() != 0 {
-                self.write_read_data();
-            } else {
-                self.write_data();
+        match interrupt {
+            I2cInterrupt::FmtThreshold => {
+                // FMT Watermark
+                regs.intr_state.modify(INTR::FMT_THRESHOLD::SET);
+                if self.slave_read_address.get() != 0 {
+                    self.write_read_data();
+                } else {
+                    self.write_data();
+                }
             }
-        }
-
-        if irqs.is_set(INTR::RX_THRESHOLD) {
-            // RX Watermark
-            self.read_data();
+            I2cInterrupt::RxThreshold => {
+                // RX Watermark
+                regs.intr_state.modify(INTR::RX_THRESHOLD::SET);
+                self.read_data();
+            }
+            I2cInterrupt::AcqThreshold => {
+                regs.intr_state.modify(INTR::ACQ_THRESHOLD::SET);
+                // TODO: Handle this interrupt
+            }
+            I2cInterrupt::RxOverflow => {
+                regs.intr_state.modify(INTR::RX_OVERFLOW::SET);
+                // TODO: Handle this interrupt
+            }
+            I2cInterrupt::ControllerHalt => {
+                regs.intr_state.modify(INTR::CONTROLLER_HALT::SET);
+                // TODO: Handle this interrupt
+            }
+            I2cInterrupt::SclInterference => {
+                regs.intr_state.modify(INTR::SCL_INTERFERENCE::SET);
+                // TODO: Handle this interrupt
+            }
+            I2cInterrupt::SdaInterference => {
+                regs.intr_state.modify(INTR::SDA_INTERFERENCE::SET);
+                // TODO: Handle this interrupt
+            }
+            I2cInterrupt::StretchTimeout => {
+                regs.intr_state.modify(INTR::STRETCH_TIMEOUT::SET);
+                // TODO: Handle this interrupt
+            }
+            I2cInterrupt::SdaUnstable => {
+                regs.intr_state.modify(INTR::SDA_UNSTABLE::SET);
+                // TODO: Handle this interrupt
+            }
+            I2cInterrupt::CmdComplete => {
+                regs.intr_state.modify(INTR::CMD_COMPLETE::SET);
+                // TODO: Handle this interrupt
+            }
+            I2cInterrupt::TxStretch => {
+                regs.intr_state.modify(INTR::TX_STRETCH::SET);
+                // TODO: Handle this interrupt
+            }
+            I2cInterrupt::TxThreshold => {
+                regs.intr_state.modify(INTR::TX_THRESHOLD::SET);
+                // TODO: Handle this interrupt
+            }
+            I2cInterrupt::AcqStretch => {
+                regs.intr_state.modify(INTR::ACQ_STRETCH::SET);
+                // TODO: Handle this interrupt
+            }
+            I2cInterrupt::UnexpStop => {
+                regs.intr_state.modify(INTR::UNEXP_STOP::SET);
+                // TODO: Handle this interrupt
+            }
+            I2cInterrupt::HostTimeout => {
+                regs.intr_state.modify(INTR::HOST_TIMEOUT::SET);
+                // TODO: Handle this interrupt
+            }
         }
     }
 

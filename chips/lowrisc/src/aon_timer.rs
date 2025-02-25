@@ -10,7 +10,7 @@ use crate::registers::aon_timer_regs::{
 };
 
 use kernel::utilities::cells::OptionalCell;
-use kernel::utilities::registers::interfaces::{Readable, Writeable};
+use kernel::utilities::registers::interfaces::{ReadWriteable, Readable, Writeable};
 use kernel::utilities::StaticRef;
 use kernel::{platform, ErrorCode};
 
@@ -50,6 +50,14 @@ pub struct AonTimer<'a> {
     // initialization types. This type should be able to be reverted to a `u64`
     // if the root cause is found.
     aon_clk_freq: OptionalCell<[u32; 2]>, //Hz, this differs for FPGA/Verilator
+}
+
+#[derive(Clone, Copy)]
+pub enum AonTimerInterrupt {
+    /// Raised if the wakeup timer has hit the specified threshold
+    AonWkupTimerExpired,
+    /// Raised if the watchdog timer has hit the bark threshold
+    AonWdogTimerBark,
 }
 
 impl<'a> AonTimer<'a> {
@@ -243,24 +251,24 @@ impl<'a> AonTimer<'a> {
     }
 
     /// Function for handling interrupts related to wakeup and watchdog barks.
-    pub fn handle_interrupt(&self) {
+    pub fn handle_interrupt(&self, interrupt: AonTimerInterrupt) {
         let regs = self.registers;
-        let intr = self.registers.intr_state.extract();
-        if intr.is_set(INTR_STATE::WKUP_TIMER_EXPIRED) {
-            // Wake up timer has expired, sw must ack and clear
-            regs.wkup_cause.set(0x00);
-            // To avoid re-triggers
-            self.reset_wkup();
-            // RW1C, clear the interrupt
-            regs.intr_state.write(INTR_STATE::WKUP_TIMER_EXPIRED::SET);
-            self.wakeup_notification.map(|a| a());
-        }
-
-        if intr.is_set(INTR_STATE::WDOG_TIMER_BARK) {
-            // Clear the bark (RW1C) and pet doggo
-            regs.intr_state.write(INTR_STATE::WDOG_TIMER_BARK::SET);
-            self.wdog_pet();
-            self.bark_notification.map(|a| a());
+        match interrupt {
+            AonTimerInterrupt::AonWkupTimerExpired => {
+                // Wake up timer has expired, sw must ack and clear
+                regs.wkup_cause.set(0x00);
+                // To avoid re-triggers
+                self.reset_wkup();
+                // RW1C, clear the interrupt
+                regs.intr_state.modify(INTR_STATE::WKUP_TIMER_EXPIRED::SET);
+                self.wakeup_notification.map(|a| a());
+            }
+            AonTimerInterrupt::AonWdogTimerBark => {
+                // Clear the bark (RW1C) and pet doggo
+                regs.intr_state.modify(INTR_STATE::WDOG_TIMER_BARK::SET);
+                self.wdog_pet();
+                self.bark_notification.map(|a| a());
+            }
         }
     }
 

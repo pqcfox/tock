@@ -8,7 +8,7 @@
 use kernel::utilities::helpers::create_non_zero_usize;
 
 use crate::registers::otp_ctrl_regs::{
-    OtpCtrlRegisters, CHECK_REGWEN, DIRECT_ACCESS_ADDRESS, DIRECT_ACCESS_CMD,
+    OtpCtrlRegisters, CHECK_REGWEN, DIRECT_ACCESS_ADDRESS, DIRECT_ACCESS_CMD, INTR,
     OTP_CTRL_PARAM_DEVICE_ID_OFFSET, OTP_CTRL_PARAM_DEVICE_ID_SIZE,
     OTP_CTRL_PARAM_EN_SRAM_IFETCH_OFFSET, OTP_CTRL_PARAM_HW_CFG0_DIGEST_OFFSET,
     OTP_CTRL_PARAM_HW_CFG1_DIGEST_OFFSET, OTP_CTRL_PARAM_MANUF_STATE_OFFSET,
@@ -237,6 +237,12 @@ const HW_CFG1_DIGEST_FIELD_ADDRESS: OtpAddress64 =
 /// OTP peripheral driver
 pub struct Otp {
     registers: StaticRef<OtpCtrlRegisters>,
+}
+
+#[derive(Clone, Copy)]
+pub enum OtpCtrlInterrupt {
+    OtpOperationDone,
+    OtpError,
 }
 
 impl Otp {
@@ -577,6 +583,21 @@ impl Otp {
     /// + Err(ErrorCode): an error occurred during reading
     pub fn read_hw_cfg1_digest(&self) -> Result<u64, ErrorCode> {
         self.read_word64(HW_CFG1_DIGEST_FIELD_ADDRESS)
+    }
+
+    pub fn handle_interrupt(&self, interrupt: OtpCtrlInterrupt) {
+        match interrupt {
+            OtpCtrlInterrupt::OtpOperationDone => {
+                self.registers
+                    .intr_state
+                    .modify(INTR::OTP_OPERATION_DONE::SET);
+                // TODO: handle this interrupt
+            }
+            OtpCtrlInterrupt::OtpError => {
+                self.registers.intr_state.modify(INTR::OTP_ERROR::SET);
+                // TODO: handle this interrupt
+            }
+        }
     }
 }
 

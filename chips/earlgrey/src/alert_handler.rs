@@ -836,6 +836,16 @@ impl AlertHandler {
         })
     }
 
+    pub fn handle_interrupt(&self, class: AlertClass) {
+        // TODO: implement this
+        match class {
+            AlertClass::ClassA => {}
+            AlertClass::ClassB => {}
+            AlertClass::ClassC => {}
+            AlertClass::ClassD => {}
+        }
+    }
+
     /* ALERT HANDLING and ALERT TESTING */
 
     /// test alert handling by generating a ShadowRegisterUpdateError
