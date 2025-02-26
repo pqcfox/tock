@@ -48,7 +48,7 @@ fn led_type_popup<C: Chip + 'static + serde::ser::Serialize>(
             ("LedHigh", parse::capsules::led::LedType::LedHigh),
             ("LedLow", parse::capsules::led::LedType::LedLow),
         ],
-        move |siv, choice| on_led_type_submit::<C>(siv, gpio.clone(), choice.clone()),
+        move |siv, choice| on_led_type_submit::<C>(siv, gpio.clone(), *choice),
     ))
 }
 
@@ -62,14 +62,11 @@ fn led_pins_popup<C: Chip + 'static + serde::ser::Serialize>(
 ) -> cursive::views::LinearLayout {
     let view = pin_list_disabled::<C>(pin_list, PinFunction::Led, "led_pins");
     let gpio_clone = Rc::clone(&gpio);
-    let led_type_clone = led_type.clone();
     crate::menu::checkbox_popup(
         view,
+        move |siv: &mut Cursive| on_led_pin_submit::<C>(siv, Rc::clone(&gpio), led_type, false),
         move |siv: &mut Cursive| {
-            on_led_pin_submit::<C>(siv, Rc::clone(&gpio), led_type.clone(), false)
-        },
-        move |siv: &mut Cursive| {
-            on_led_pin_submit::<C>(siv, Rc::clone(&gpio_clone), led_type_clone.clone(), true)
+            on_led_pin_submit::<C>(siv, Rc::clone(&gpio_clone), led_type, true)
         },
     )
 }

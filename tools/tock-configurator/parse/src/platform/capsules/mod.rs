@@ -81,13 +81,16 @@ pub use reset_manager::ResetManagerCapsule;
 mod ipc;
 pub use ipc::IPC;
 
-pub mod asymmetric_crypto;
+// Avoid name conflicts
+mod asymmetric_crypto;
 pub use asymmetric_crypto::*;
 
-pub mod attestation;
+// Avoid name conflicts
+mod attestation;
 pub use attestation::*;
 
-pub mod oneshot_digest;
+// Avoid name conflicts
+mod oneshot_digest;
 pub use oneshot_digest::*;
 
 pub mod timeout_mux;

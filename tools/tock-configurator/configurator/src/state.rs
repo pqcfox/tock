@@ -410,7 +410,7 @@ pub(crate) fn on_capsule_submit<C: Chip + 'static + serde::ser::Serialize>(
                 Some(config::Capsule::Ipc {}) => Some(()),
                 _ => None,
             };
-            push_layer::<_, C>(siv, crate::capsule::ipc::config::<C>(chip, previous_state))
+            push_layer::<_, C>(siv, crate::capsule::ipc::config::<C>(previous_state))
         }
         config::Index::ONESHOT_DIGEST => {
             let previous_state = match data.platform.capsule(submit) {

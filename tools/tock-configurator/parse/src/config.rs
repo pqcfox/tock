@@ -176,13 +176,8 @@ impl<P: DefaultPeripherals> Configuration<P> {
     }
 
     pub fn update_led(&mut self, led_type: LedType, pins: Vec<<P::Gpio as crate::Gpio>::PinId>) {
-        self.capsules.insert(
-            Index::LED,
-            Capsule::Led {
-                led_type: led_type,
-                pins,
-            },
-        );
+        self.capsules
+            .insert(Index::LED, Capsule::Led { led_type, pins });
     }
 
     pub fn update_hmac(&mut self, hmac: Rc<P::Hmac>, length: usize) {

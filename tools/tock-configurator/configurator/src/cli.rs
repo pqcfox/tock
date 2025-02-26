@@ -400,7 +400,9 @@ pub fn run_cli_mode(mut opts: Opts) {
     }
     let mut data = run_cli_inner(&mut opts, &capsules);
     // Write JSON output
-    opts.out.map(|out| data.set_out(out));
+    if let Some(out) = opts.out {
+        data.set_out(out);
+    }
     state::write_json(&mut data);
 }
 

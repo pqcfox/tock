@@ -9,7 +9,7 @@
 name = "tock-configurator"
 version.workspace = true
 edition.workspace = true
-rust-version = "1.61"
+rust-version = "1.70"
 
 [dependencies]
 clap = { version = "4.5.23", features = ["derive"] }
