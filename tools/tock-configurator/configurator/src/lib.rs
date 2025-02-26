@@ -8,6 +8,7 @@
 //! Utils used for the configurator TUI.
 
 use clap::{Parser, ValueEnum};
+use parse::config;
 use std::path::PathBuf;
 mod capsule;
 mod cli;

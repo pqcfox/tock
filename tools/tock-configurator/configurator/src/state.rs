@@ -412,6 +412,48 @@ pub(crate) fn on_capsule_submit<C: Chip + 'static + serde::ser::Serialize>(
             };
             push_layer::<_, C>(siv, crate::capsule::ipc::config::<C>(chip, previous_state))
         }
+        config::Index::ONESHOT_DIGEST => {
+            let previous_state = match data.platform.capsule(submit) {
+                Some(config::Capsule::OneshotDigest { oneshot_digest }) => {
+                    Some(oneshot_digest.clone())
+                }
+                _ => None,
+            };
+            push_layer::<_, C>(
+                siv,
+                crate::capsule::oneshot_digest::config::<C>(chip, previous_state),
+            )
+        }
+        config::Index::P256 => {
+            let previous_state = match data.platform.capsule(submit) {
+                Some(config::Capsule::P256 { p256 }) => Some(p256.clone()),
+                _ => None,
+            };
+            push_layer::<_, C>(
+                siv,
+                crate::capsule::asymmetric_crypto::config_p256::<C>(chip, previous_state),
+            )
+        }
+        config::Index::P384 => {
+            let previous_state = match data.platform.capsule(submit) {
+                Some(config::Capsule::P384 { p384 }) => Some(p384.clone()),
+                _ => None,
+            };
+            push_layer::<_, C>(
+                siv,
+                crate::capsule::asymmetric_crypto::config_p384::<C>(chip, previous_state),
+            )
+        }
+        config::Index::ATTESTATION => {
+            let previous_state = match data.platform.capsule(submit) {
+                Some(config::Capsule::Attestation { attestation }) => Some(attestation.clone()),
+                _ => None,
+            };
+            push_layer::<_, C>(
+                siv,
+                crate::capsule::attestation::config::<C>(chip, previous_state),
+            )
+        }
         _ => unreachable!(),
     }
 }
@@ -510,11 +552,21 @@ pub(crate) fn on_count_submit_stack<C: Chip + 'static + serde::Serialize>(
     }
 }
 
-/// Write the contents of the inner Data to a JSON file
+/// Write the contents of the inner Data to a JSON file.
+///
+/// Note: This function replaces `data.out` with an empty `PathBuf`.
 pub(crate) fn write_json<C: Chip + 'static + serde::ser::Serialize>(data: &mut Data<C>) {
     let board_config = serde_json::to_string_pretty(&data.platform).unwrap();
-    let mut file = File::create(".config.json").unwrap();
-    file.write_all(board_config.as_bytes()).unwrap();
+    match &mut data.out {
+        Some(out) => {
+            let mut file = File::create(std::mem::take(out)).unwrap();
+            file.write_all(board_config.as_bytes()).unwrap();
+        }
+        None => {
+            // No path, write to stdout instead.
+            println!("{}", board_config);
+        }
+    }
 }
 
 /// Exit the current window and go back to the previous one.
