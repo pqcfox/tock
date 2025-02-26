@@ -15,7 +15,6 @@
 #![reexport_test_harness_main = "test_main"]
 
 use crate::hil::symmetric_encryption::AES128_BLOCK_SIZE;
-use crate::otbn::OtbnComponent;
 use crate::pinmux_layout::BoardPinmuxLayout;
 use capsules_aes_gcm::aes_gcm;
 use capsules_core::driver;
@@ -33,6 +32,7 @@ use core::ptr::{addr_of, from_ref};
 use earlgrey::alert_handler;
 use earlgrey::attestation::Attestation as EarlgreyAttestation;
 use earlgrey::chip::EarlGreyDefaultPeripherals;
+use earlgrey::chip::EarlgreyDriverConfig;
 use earlgrey::chip_config::EarlGreyConfig;
 use earlgrey::flash_ctrl;
 use earlgrey::pinmux_config::EarlGreyPinmuxConfig;
@@ -46,8 +46,6 @@ use kernel::component::Component;
 use kernel::hil;
 use kernel::hil::entropy::Entropy32;
 use kernel::hil::flash::HasInfoClient;
-#[cfg(not(feature = "test_flash_ctrl"))]
-use kernel::hil::hasher::Hasher;
 use kernel::hil::i2c::I2CMaster;
 use kernel::hil::led::LedHigh;
 use kernel::hil::opentitan_attestation::CertificateReader;
@@ -132,6 +130,43 @@ impl EarlGreyConfig for ChipConfig {
     const UART_BAUDRATE: u32 = 7200;
 }
 
+/// Default driver configuration for Earlgrey.
+const DRIVER_CONFIG: EarlgreyDriverConfig = EarlgreyDriverConfig {
+    sram_ret: cfg!(not(feature = "qemu")),
+    adc_ctrl: true,
+    aes: true,
+    csrng: true,
+    edn0: true,
+    edn1: true,
+    entropy_src: true,
+    hmac: true,
+    keymgr: true,
+    kmac: true,
+    clkmgr: true,
+    usb: true,
+    uart0: true,
+    uart1: false,
+    uart2: false,
+    uart3: false,
+    otbn: true,
+    otp: true,
+    gpio_port: true,
+    i2c0: true,
+    i2c1: true,
+    i2c2: true,
+    spi_host0: true,
+    spi_host1: false,
+    spi_device: true,
+    flash_ctrl: true,
+    watchdog: true,
+    sensor_ctrl: true,
+    sysreset: cfg!(not(feature = "qemu")),
+    timer: true,
+    alert_handler: true,
+    pattgen: true,
+    rst_mgmt: true,
+};
+
 // Whether to check for a proper ePMP handover configuration prior to ePMP
 // initialization:
 pub const EPMP_HANDOVER_CONFIG_CHECK: bool = false;
@@ -182,19 +217,6 @@ static mut PLATFORM: Option<&'static EarlGrey> = None;
 static mut MAIN_CAP: Option<&dyn kernel::capabilities::MainLoopCapability> = None;
 // Test access to alarm
 static mut ALARM: Option<&'static MuxAlarm<'static, RvTimer<'static>>> = None;
-// Test access to TicKV
-#[cfg(not(feature = "test_flash_ctrl"))]
-static mut TICKV: Option<
-    &capsules_extra::tickv::TicKVSystem<
-        'static,
-        capsules_core::virtualizers::virtual_flash::FlashUser<
-            'static,
-            earlgrey::flash_ctrl::FlashCtrl<'static>,
-        >,
-        capsules_extra::sip_hash::SipHasher24<'static>,
-        2048,
-    >,
-> = None;
 // Test access to AES
 static mut AES: Option<
     &aes_gcm::Aes128Gcm<
@@ -204,8 +226,6 @@ static mut AES: Option<
 > = None;
 // Test access to SipHash
 static mut SIPHASH: Option<&capsules_extra::sip_hash::SipHasher24<'static>> = None;
-// Test access to RSA
-static mut RSA_HARDWARE: Option<&lowrisc::rsa::OtbnRsa<'static>> = None;
 
 // Test access to a software SHA256
 #[cfg(test)]
@@ -322,7 +342,7 @@ struct EarlGrey {
             lowrisc::spi_host::SpiHost<'static>,
         >,
     >,
-    rng: &'static capsules_core::rng::RngDriver<
+    csrng: &'static capsules_core::rng::RngDriver<
         'static,
         capsules_core::rng::Entropy32ToRandom<'static, lowrisc::csrng::CsRng<'static>>,
     >,
@@ -424,7 +444,7 @@ impl SyscallDriverLookup for EarlGrey {
             capsules_core::low_level_debug::DRIVER_NUM => f(Some(self.lldb)),
             capsules_core::i2c_master::DRIVER_NUM => f(Some(self.i2c_master)),
             capsules_core::spi_controller::DRIVER_NUM => f(Some(self.spi_controller)),
-            capsules_core::rng::DRIVER_NUM => f(Some(self.rng)),
+            capsules_core::rng::DRIVER_NUM => f(Some(self.csrng)),
             capsules_extra::symmetric_encryption::aes::DRIVER_NUM => f(Some(self.aes)),
             capsules_extra::info_flash::DRIVER_NUMBER => f(Some(self.info_flash)),
             capsules_extra::usb::usb_user2::DRIVER_NUM => f(Some(self.usb)),
@@ -732,14 +752,16 @@ unsafe fn setup() -> (
 
     let peripherals = static_init!(
         EarlGreyDefaultPeripherals<ChipConfig, BoardPinmuxLayout>,
-        EarlGreyDefaultPeripherals::new(flash_memory_protection_configuration)
+        EarlGreyDefaultPeripherals::new(flash_memory_protection_configuration, DRIVER_CONFIG)
     );
     peripherals.init();
 
+    // PANIC: RST_MGMT is present in `DRIVER_CONFIG`.
+    let rst_mgmt_peripheral = peripherals.rst_mgmt.as_ref().unwrap();
     let reset_manager = kernel::static_init!(
         capsules_extra::reset_manager::ResetManager<'static, earlgrey::rstmgr::RstMgr>,
         ResetManager::new(
-            &peripherals.rst_mgmt,
+            rst_mgmt_peripheral,
             board_kernel.create_grant(
                 capsules_extra::reset_manager::DRIVER_NUM,
                 &memory_allocation_cap
@@ -747,30 +769,37 @@ unsafe fn setup() -> (
         )
     );
 
+    // PANIC: GPIO is present in `DRIVER_CONFIG`.
+    let gpio_port_peripheral = peripherals.gpio_port.as_ref().unwrap();
     // Configure kernel debug gpios as early as possible
     kernel::debug::assign_gpios(
-        Some(&peripherals.gpio_port[7]), // First LED
+        Some(&gpio_port_peripheral[7]), // First LED
         None,
         None,
     );
 
     // Create a shared UART channel for the console and for kernel debug.
+    //
+    // PANIC: UART0 is present in `DRIVER_CONFIG`.
+    let uart0_peripheral = peripherals.uart0.as_ref().unwrap();
     let uart_mux =
-        components::console::UartMuxComponent::new(&peripherals.uart0, ChipConfig::UART_BAUDRATE)
+        components::console::UartMuxComponent::new(uart0_peripheral, ChipConfig::UART_BAUDRATE)
             .finalize(components::uart_mux_component_static!());
 
     // LEDs
     // Start with half on and half off
+    //
+    // PANIC: GPIO is present in `DRIVER_CONFIG`.
     let led = components::led::LedsComponent::new().finalize(components::led_component_static!(
         LedHigh<'static, earlgrey::gpio::GpioPin<earlgrey::pinmux::PadConfig>>,
-        LedHigh::new(&peripherals.gpio_port[8]),
-        LedHigh::new(&peripherals.gpio_port[9]),
-        LedHigh::new(&peripherals.gpio_port[10]),
-        LedHigh::new(&peripherals.gpio_port[11]),
-        LedHigh::new(&peripherals.gpio_port[12]),
-        LedHigh::new(&peripherals.gpio_port[13]),
-        LedHigh::new(&peripherals.gpio_port[14]),
-        LedHigh::new(&peripherals.gpio_port[15]),
+        LedHigh::new(&gpio_port_peripheral[8]),
+        LedHigh::new(&gpio_port_peripheral[9]),
+        LedHigh::new(&gpio_port_peripheral[10]),
+        LedHigh::new(&gpio_port_peripheral[11]),
+        LedHigh::new(&gpio_port_peripheral[12]),
+        LedHigh::new(&gpio_port_peripheral[13]),
+        LedHigh::new(&gpio_port_peripheral[14]),
+        LedHigh::new(&gpio_port_peripheral[15]),
     ));
 
     let gpio = components::gpio::GpioComponent::new(
@@ -778,31 +807,30 @@ unsafe fn setup() -> (
         capsules_core::gpio::DRIVER_NUM,
         components::gpio_component_helper!(
             earlgrey::gpio::GpioPin<earlgrey::pinmux::PadConfig>,
-            0 => &peripherals.gpio_port[0],
-            1 => &peripherals.gpio_port[1],
-            2 => &peripherals.gpio_port[2],
-            3 => &peripherals.gpio_port[3],
-            4 => &peripherals.gpio_port[4],
-            5 => &peripherals.gpio_port[5],
-            6 => &peripherals.gpio_port[6],
-            7 => &peripherals.gpio_port[15],
-            8 => &peripherals.gpio_port[7],
-            9 => &peripherals.gpio_port[20],
+            0 => &gpio_port_peripheral[0],
+            1 => &gpio_port_peripheral[1],
+            2 => &gpio_port_peripheral[2],
+            3 => &gpio_port_peripheral[3],
+            4 => &gpio_port_peripheral[4],
+            5 => &gpio_port_peripheral[5],
+            6 => &gpio_port_peripheral[6],
+            7 => &gpio_port_peripheral[15],
+            8 => &gpio_port_peripheral[7],
+            9 => &gpio_port_peripheral[20],
         ),
     )
     .finalize(components::gpio_component_static!(
         earlgrey::gpio::GpioPin<earlgrey::pinmux::PadConfig>
     ));
 
-    peripherals.timer.setup();
+    // PANIC: RvTimer is present in `DRIVER_CONFIG`.
+    let timer_peripheral = peripherals.timer.as_ref().unwrap();
+    timer_peripheral.setup();
 
     // Create a shared virtualization mux layer on top of a single hardware
     // alarm.
-    let mux_alarm = static_init!(
-        MuxAlarm<'static, RvTimer>,
-        MuxAlarm::new(&peripherals.timer)
-    );
-    hil::time::Alarm::set_alarm_client(&peripherals.timer, mux_alarm);
+    let mux_alarm = static_init!(MuxAlarm<'static, RvTimer>, MuxAlarm::new(timer_peripheral));
+    hil::time::Alarm::set_alarm_client(timer_peripheral, mux_alarm);
 
     ALARM = Some(mux_alarm);
 
@@ -840,7 +868,7 @@ unsafe fn setup() -> (
     CHIP = Some(chip);
 
     // Need to enable all interrupts for Tock Kernel
-    chip.enable_plic_interrupts();
+    chip.enable_plic_interrupts(DRIVER_CONFIG);
     // enable interrupts globally
     csr::CSR.mie.modify(
         csr::mie::mie::msoft::SET + csr::mie::mie::mtimer::CLEAR + csr::mie::mie::mext::SET,
@@ -1105,6 +1133,8 @@ unsafe fn setup() -> (
             )
         )
     );
+    // PANIC: I2C0 is included in `DRIVER_CONFIG`.
+    let i2c0_peripheral = peripherals.i2c0.as_ref().unwrap();
     let i2c_master_buffer = static_init!(
         [u8; capsules_core::i2c_master::BUFFER_LENGTH],
         [0; capsules_core::i2c_master::BUFFER_LENGTH]
@@ -1112,7 +1142,7 @@ unsafe fn setup() -> (
     let i2c_master = static_init!(
         capsules_core::i2c_master::I2CMasterDriver<'static, lowrisc::i2c::I2c<'static>>,
         capsules_core::i2c_master::I2CMasterDriver::new(
-            &peripherals.i2c0,
+            i2c0_peripheral,
             i2c_master_buffer,
             board_kernel.create_grant(
                 capsules_core::i2c_master::DRIVER_NUM,
@@ -1121,10 +1151,13 @@ unsafe fn setup() -> (
         )
     );
 
-    peripherals.i2c0.set_master_client(i2c_master);
+    i2c0_peripheral.set_master_client(i2c_master);
 
-    //SPI
-    let mux_spi = components::spi::SpiMuxComponent::new(&peripherals.spi_host0).finalize(
+    // SPI
+    //
+    // PANIC: spi_host0 is included in `DRIVER_CONFIG`.
+    let spi_host0_peripheral = peripherals.spi_host0.as_ref().unwrap();
+    let mux_spi = components::spi::SpiMuxComponent::new(spi_host0_peripheral).finalize(
         components::spi_mux_component_static!(lowrisc::spi_host::SpiHost),
     );
 
@@ -1142,12 +1175,15 @@ unsafe fn setup() -> (
         .finalize(components::process_printer_text_component_static!());
     PROCESS_PRINTER = Some(process_printer);
 
+    let usb_peripheral = peripherals.usb.as_ref().unwrap();
+
     // USB support is currently broken in the OpenTitan hardware
     // See https://github.com/lowRISC/opentitan/issues/2598 for more details
+    // let usb_peripheral = peripherals.usb.as_ref().unwrap();
     // let usb = components::usb::UsbComponent::new(
     //     board_kernel,
     //     capsules_extra::usb::usb_user::DRIVER_NUM,
-    //     &peripherals.usb,
+    //     usb_peripheral,
     // )
     // .finalize(components::usb_component_static!(earlgrey::usbdev::Usb));
 
@@ -1157,25 +1193,26 @@ unsafe fn setup() -> (
     use kernel::hil::usb::Client;
     let usb_client = static_init!(
         capsules_extra::usb::usbc_client::Client<lowrisc::usb::Usb>,
-        capsules_extra::usb::usbc_client::Client::new(&peripherals.usb, 64),
+        capsules_extra::usb::usbc_client::Client::new(usb_peripheral, 64),
     );
 
     use kernel::hil::usb::UsbController;
-    peripherals.usb.set_client(usb_client);
+    usb_peripheral.set_client(usb_client);
     usb_client.enable();
     usb_client.attach();
     */
 
+    // PANIC: USB is included in `DRIVER_CONFIG`.
     let usb_client = static_init!(
         capsules_extra::usb::usb_user2::UsbClient<
             'static,
             lowrisc::usb::Usb,
             { lowrisc::usb::MAXIMUM_PACKET_SIZE.get() },
         >,
-        capsules_extra::usb::usb_user2::UsbClient::new(&peripherals.usb)
+        capsules_extra::usb::usb_user2::UsbClient::new(usb_peripheral)
     );
 
-    peripherals.usb.set_client(usb_client);
+    usb_peripheral.set_client(usb_client);
 
     let usb = static_init!(
         capsules_extra::usb::usb_user2::UsbSyscallDriver<
@@ -1201,6 +1238,8 @@ unsafe fn setup() -> (
         static _estorage: u8;
     }
 
+    // PANIC: flash_ctrl is included in `DRIVER_CONFIG`.
+    let flash_ctrl_peripheral = peripherals.flash_ctrl.as_ref().unwrap();
     /*
     // Flash setup memory protection for the ROM/Kernel
     // Only allow reads for this region, any other ops will cause an MP fault
@@ -1214,7 +1253,7 @@ unsafe fn setup() -> (
     };
 
     // Allocate a flash protection region (associated cfg number: 0), for the code section.
-    if let Err(e) = peripherals.flash_ctrl.mp_set_region_perms(
+    if let Err(e) = flash_ctrl_peripheral.mp_set_region_perms(
         core::ptr::addr_of!(_manifest) as usize,
         core::ptr::addr_of!(_etext) as usize,
         0,
@@ -1223,29 +1262,17 @@ unsafe fn setup() -> (
         debug!("Failed to set flash memory protection: {:?}", e);
     } else {
         // Lock region 0, until next system reset.
-        if let Err(e) = peripherals.flash_ctrl.mp_lock_region_cfg(0) {
+        if let Err(e) = flash_ctrl_peripheral.mp_lock_region_cfg(0) {
             debug!("Failed to lock memory protection config: {:?}", e);
         }
     }
     */
 
     // Flash
-    #[cfg(not(feature = "test_flash_ctrl"))]
-    let flash_ctrl_read_buf = static_init!(
-        [u8; earlgrey::flash_ctrl::EARLGREY_PAGE_SIZE.get()],
-        [0; earlgrey::flash_ctrl::EARLGREY_PAGE_SIZE.get()],
-    );
-
-    #[cfg(not(feature = "test_flash_ctrl"))]
-    let page_buffer = static_init!(
-        earlgrey::flash_ctrl::RawFlashCtrlPage,
-        earlgrey::flash_ctrl::RawFlashCtrlPage::default()
-    );
-
-    let mux_flash = components::flash::FlashMuxComponent::new(&peripherals.flash_ctrl).finalize(
+    let mux_flash = components::flash::FlashMuxComponent::new(flash_ctrl_peripheral).finalize(
         components::flash_mux_component_static!(earlgrey::flash_ctrl::FlashCtrl),
     );
-    let mux_info_flash = components::flash::InfoFlashMuxComponent::new(&peripherals.flash_ctrl)
+    let mux_info_flash = components::flash::InfoFlashMuxComponent::new(flash_ctrl_peripheral)
         .finalize(components::info_flash_mux_component_static!(
             earlgrey::flash_ctrl::FlashCtrl
         ));
@@ -1257,28 +1284,6 @@ unsafe fn setup() -> (
     );
     kernel::deferred_call::DeferredCallClient::register(sip_hash);
     SIPHASH = Some(sip_hash);
-
-    #[cfg(not(feature = "test_flash_ctrl"))]
-    {
-        // TicKV
-        let tickv = components::tickv::TicKVComponent::new(
-            sip_hash,
-            mux_flash,                                           // Flash controller
-            earlgrey::flash_ctrl::DATA_PAGES_PER_BANK.get() - 1, // Region offset (End of Bank0/Use Bank1)
-            // Region Size
-            earlgrey::flash_ctrl::DATA_PAGES_PER_BANK.get()
-                * earlgrey::flash_ctrl::EARLGREY_PAGE_SIZE.get(),
-            flash_ctrl_read_buf, // Buffer used internally in TicKV
-            page_buffer,         // Buffer used with the flash controller
-        )
-        .finalize(components::tickv_component_static!(
-            earlgrey::flash_ctrl::FlashCtrl,
-            capsules_extra::sip_hash::SipHasher24,
-            2048
-        ));
-        sip_hash.set_client(tickv);
-        TICKV = Some(tickv);
-    }
 
     // Info flash multiplexer user endpoint
     let virtual_info_flash = components::flash::InfoFlashUserComponent::new(mux_info_flash)
@@ -1305,50 +1310,16 @@ unsafe fn setup() -> (
     );
     virtual_info_flash.set_info_client(info_flash);
 
-    let mux_otbn = crate::otbn::AccelMuxComponent::new(&peripherals.otbn)
-        .finalize(otbn_mux_component_static!());
-
-    let otbn = OtbnComponent::new(mux_otbn).finalize(crate::otbn_component_static!());
-
-    let otbn_rsa_internal_buf = static_init!([u8; 512], [0; 512]);
-
-    // Use the OTBN to create an RSA engine
-    if let Ok((rsa_imem_start, rsa_imem_length, rsa_dmem_start, rsa_dmem_length)) =
-        crate::otbn::find_app(
-            "otbn-rsa",
-            core::slice::from_raw_parts(
-                core::ptr::addr_of!(_sapps),
-                core::ptr::addr_of!(_eapps) as usize - core::ptr::addr_of!(_sapps) as usize,
-            ),
-        )
-    {
-        let rsa_hardware = static_init!(
-            lowrisc::rsa::OtbnRsa<'static>,
-            lowrisc::rsa::OtbnRsa::new(
-                otbn,
-                lowrisc::rsa::AppAddresses {
-                    imem_start: rsa_imem_start,
-                    imem_size: rsa_imem_length,
-                    dmem_start: rsa_dmem_start,
-                    dmem_size: rsa_dmem_length
-                },
-                otbn_rsa_internal_buf,
-            )
-        );
-        peripherals.otbn.set_client(rsa_hardware);
-        RSA_HARDWARE = Some(rsa_hardware);
-    } else {
-        debug!("Unable to find otbn-rsa, disabling RSA support");
-    }
-
+    // PANIC: RNG is included in `DRIVER_CONFIG`.
+    let csrng_peripheral = peripherals.csrng.as_ref().unwrap();
     // Convert hardware RNG to the Random interface.
     let entropy_to_random = static_init!(
         capsules_core::rng::Entropy32ToRandom<'static, lowrisc::csrng::CsRng<'static>>,
-        capsules_core::rng::Entropy32ToRandom::new(&peripherals.rng)
+        capsules_core::rng::Entropy32ToRandom::new(csrng_peripheral)
     );
-    peripherals.rng.set_client(entropy_to_random);
+    csrng_peripheral.set_client(entropy_to_random);
     // Setup RNG for userspace
-    let rng = static_init!(
+    let csrng = static_init!(
         capsules_core::rng::RngDriver<
             'static,
             capsules_core::rng::Entropy32ToRandom<'static, lowrisc::csrng::CsRng<'static>>,
@@ -1358,16 +1329,18 @@ unsafe fn setup() -> (
             board_kernel.create_grant(capsules_core::rng::DRIVER_NUM, &memory_allocation_cap)
         )
     );
-    entropy_to_random.set_client(rng);
+    entropy_to_random.set_client(csrng);
 
     const CRYPT_SIZE: usize = 7 * AES128_BLOCK_SIZE;
 
+    // PANIC: AES is included in `DRIVER_CONFIG`.
+    let aes_peripheral = peripherals.aes.as_ref().unwrap();
     let ccm_mux = static_init!(
         virtual_aes_ccm::MuxAES128CCM<'static, lowrisc::aes::Aes<'static>>,
-        virtual_aes_ccm::MuxAES128CCM::new(&peripherals.aes)
+        virtual_aes_ccm::MuxAES128CCM::new(aes_peripheral)
     );
     kernel::deferred_call::DeferredCallClient::register(ccm_mux);
-    peripherals.aes.set_client(ccm_mux);
+    aes_peripheral.set_client(ccm_mux);
 
     let ccm_client = components::aes::AesVirtualComponent::new(ccm_mux).finalize(
         components::aes_virtual_component_static!(lowrisc::aes::Aes<'static>),
@@ -1410,19 +1383,23 @@ unsafe fn setup() -> (
     hil::symmetric_encryption::AES128GCM::set_client(gcm_client, aes);
     hil::symmetric_encryption::AES128::set_client(gcm_client, ccm_client);
 
+    // PANIC: pattgen is included in `DRIVER_CONFIG`.
+    let pattgen_peripheral = peripherals.pattgen.as_ref().unwrap();
     let pattgen = static_init!(
         capsules_extra::pattgen::PattGen<lowrisc::pattgen::PattGen<'static>>,
         capsules_extra::pattgen::PattGen::new(
-            &peripherals.pattgen,
+            pattgen_peripheral,
             board_kernel.create_grant(capsules_extra::pattgen::DRIVER_NUM, &memory_allocation_cap)
         )
     );
-    peripherals.pattgen.set_client(pattgen);
+    pattgen_peripheral.set_client(pattgen);
 
     let syscall_filter = static_init!(TbfHeaderFilterDefaultAllow, TbfHeaderFilterDefaultAllow {});
     let scheduler = components::sched::priority::PriorityComponent::new(board_kernel)
         .finalize(components::priority_component_static!());
-    let watchdog = &peripherals.watchdog;
+
+    // PANIC: watchdog is included in `DRIVER_CONFIG`.
+    let watchdog_peripheral = peripherals.watchdog.as_ref().unwrap();
 
     let alert_handler_capsule = static_init!(
         AlertHandlerCapsule,
@@ -1431,22 +1408,26 @@ unsafe fn setup() -> (
             &memory_allocation_cap
         ))
     );
-    peripherals.alert_handler.set_client(alert_handler_capsule);
+
+    // PANIC: ALERT_HANDLER is included in `DRIVER_CONFIG`.
+    let alert_handler_peripheral = peripherals.alert_handler.as_ref().unwrap();
+    alert_handler_peripheral.set_client(alert_handler_capsule);
 
     #[cfg(not(feature = "qemu"))]
     let opentitan_sysrst = {
+        let sysreset_peripheral = peripherals.sysreset.as_ref().unwrap();
         let opentitan_sysrst: &'static SystemReset<'static, SysRstCtrl> = static_init!(
             SystemReset<'static, SysRstCtrl>,
             SystemReset::new(
-                &peripherals.sysreset,
+                &sysreset_peripheral,
                 board_kernel.create_grant(
                     driver::NUM::OpenTitanSysRst as usize,
                     &memory_allocation_cap
                 ),
             )
         );
-        peripherals.sysreset.set_client(Some(opentitan_sysrst));
-        peripherals.sysreset.enable_interrupts();
+        sysreset_peripheral.set_client(Some(opentitan_sysrst));
+        sysreset_peripheral.enable_interrupts();
         opentitan_sysrst
     };
 
@@ -1674,10 +1655,10 @@ unsafe fn setup() -> (
             console,
             alarm,
             info_flash,
+            csrng,
             lldb,
             i2c_master,
             spi_controller,
-            rng,
             aes,
             usb,
             #[cfg(feature = "ffi")]
@@ -1718,7 +1699,7 @@ unsafe fn setup() -> (
             scheduler_timer,
             #[cfg(not(feature = "qemu"))]
             opentitan_sysrst,
-            watchdog,
+            watchdog: watchdog_peripheral,
             reset_manager,
             opentitan_alerthandler: alert_handler_capsule,
             ipc,
@@ -1733,15 +1714,16 @@ unsafe fn setup() -> (
     // If the feature is selected, run flash tests before setting the flash clients to the
     // multiplexers.
     #[cfg(feature = "test_flash_ctrl")]
-    test_flash(&peripherals.flash_ctrl, &peripherals.uart0);
+    test_flash(flash_ctrl_peripheral, uart0_peripheral);
 
-    hil::flash::HasClient::set_client(&peripherals.flash_ctrl, mux_flash);
-    hil::flash::HasInfoClient::set_info_client(&peripherals.flash_ctrl, mux_info_flash);
+    hil::flash::HasClient::set_client(flash_ctrl_peripheral, mux_flash);
+    hil::flash::HasInfoClient::set_info_client(flash_ctrl_peripheral, mux_info_flash);
 
     // OTP tests (currently broken on sival)
     #[cfg(all(not(feature = "sival"), feature = "test_otp"))]
     {
-        lowrisc::otp::tests::run_all(&peripherals.otp);
+        let otp_peripheral = peripherals.otp.as_ref().unwrap();
+        lowrisc::otp::tests::run_all(otp_peripheral);
     }
 
     // Pattern generation tests
@@ -1749,7 +1731,7 @@ unsafe fn setup() -> (
     {
         let pattgen_test = static_init!(
             lowrisc::pattgen::tests::PattGenTest,
-            lowrisc::pattgen::tests::PattGenTest::new(&peripherals.pattgen),
+            lowrisc::pattgen::tests::PattGenTest::new(pattgen_peripheral),
         );
         lowrisc::pattgen::tests::run_all(pattgen_test);
     }
@@ -1757,19 +1739,23 @@ unsafe fn setup() -> (
     // when running with ROM, reset reason is cleared from HW and stored inside RetentionRAM
     #[cfg(not(feature = "qemu"))]
     {
-        let reset_reason = earlgrey::rstmgr::RstMgr::get_rr_from_rram(&peripherals.sram_ret);
+        let sram_ret_peripheral = peripherals.sram_ret.as_ref().unwrap();
+        let reset_reason = earlgrey::rstmgr::RstMgr::get_rr_from_rram(sram_ret_peripheral);
         earlgrey.reset_manager.startup();
         earlgrey.reset_manager.populate_reset_reason(reset_reason);
     }
 
     /* TESTs */
     #[cfg(all(not(feature = "qemu"), feature = "test_resetmanager"))]
-    capsules_extra::reset_manager::test::test_software_reset(
-        &peripherals.sram_ret,
-        earlgrey.reset_manager,
-        core::ptr::addr_of!(_sflash) as usize,
-        core::ptr::addr_of!(_eflash) as usize,
-    );
+    {
+        let sram_ret_peripheral = peripherals.sram_ret.as_ref().unwrap();
+        capsules_extra::reset_manager::test::test_software_reset(
+            sram_ret_peripheral,
+            earlgrey.reset_manager,
+            core::ptr::addr_of!(_sflash) as usize,
+            core::ptr::addr_of!(_eflash) as usize,
+        );
+    }
 
     #[cfg(all(not(feature = "qemu"), feature = "test_sysrst_ctrl"))]
     {
@@ -1802,33 +1788,30 @@ unsafe fn setup() -> (
     }
 
     #[cfg(all(not(feature = "qemu"), feature = "test_sram_ret"))]
-    peripherals
-        .sram_ret
-        .test(&peripherals.rst_mgmt, &peripherals.uart0);
+    {
+        let sram_ret_peripheral = peripherals.sram_ret.as_ref().unwrap();
+        sram_ret_peripheral.test(rst_mgmt_peripheral, uart0_peripheral)
+    }
 
     #[cfg(all(not(feature = "qemu"), feature = "test_aon_timer"))]
     {
-        peripherals.watchdog.test(
-            &peripherals.uart0,
-            &peripherals.sram_ret,
-            &peripherals.sram_ret,
-        );
+        let sram_ret_peripheral = peripherals.sram_ret.as_ref().unwrap();
+        watchdog_peripheral.test(uart0_peripheral, sram_ret_peripheral, sram_ret_peripheral);
         test_aon_timer(peripherals, mux_alarm);
     }
 
     #[cfg(all(not(feature = "qemu"), feature = "test_rv_timer"))]
     {
-        peripherals.timer.test(
-            &peripherals.uart0,
-            &peripherals.sram_ret,
-            &peripherals.sram_ret,
-        );
+        let sram_ret_peripheral = peripherals.sram_ret.as_ref().unwrap();
+        peripherals
+            .timer
+            .test(uart0_peripheral, sram_ret_peripheral, sram_ret_peripheral);
         test_rv_timer(mux_alarm);
     }
 
     #[cfg(all(not(feature = "qemu"), feature = "test_clkmgr"))]
     {
-        peripherals.clkmgr.run_tests();
+        clkmgr_peripheral.run_tests();
     }
 
     debug!("OpenTitan initialisation complete. Entering main loop");
@@ -1839,11 +1822,13 @@ unsafe fn setup() -> (
 #[cfg(all(not(feature = "qemu"), feature = "test_sysrst_ctrl"))]
 fn test_sysrst_ctrl(peripherals: &EarlGreyDefaultPeripherals<ChipConfig, BoardPinmuxLayout>) {
     pinmux_layout::prepare_wiring_sysrst_ctrl_tests();
+    let sysreset_peripheral = peripherals.sysreset.as_ref().unwrap();
+    let gpio_port_peripheral = peripherals.gpio_port.as_ref().unwrap();
     lowrisc::sysrst_ctrl::tests::test_all(
-        &peripherals.sysreset,
-        &peripherals.gpio_port[7],
-        &peripherals.gpio_port[2],
-        &peripherals.gpio_port[20],
+        sysreset_peripheral,
+        &gpio_port_peripheral[7],
+        &gpio_port_peripheral[2],
+        &gpio_port_peripheral[20],
     );
 }
 
@@ -1904,12 +1889,14 @@ unsafe fn test_alerthandler(
     );
     virtual_alarm_tests.setup();
 
+    let alert_handler_peripheral = peripherals.alert_handler.as_ref().unwrap();
+    let uart0_peripheral = peripherals.uart0.as_ref().unwrap();
     let alert_handler_tests = static_init!(
         alert_handler::tests::Tests<VirtualMuxAlarm<'static, RvTimer>>,
         alert_handler::tests::Tests::new(
-            &peripherals.alert_handler,
+            alert_handler_peripheral,
             virtual_alarm_tests,
-            &peripherals.uart0
+            &uart0_peripheral,
         )
     );
 
@@ -1935,9 +1922,10 @@ unsafe fn test_aon_timer(
     );
     virtual_alarm_tests.setup();
 
+    let watchdog_peripheral = peripherals.watchdog.as_ref().unwrap();
     let aon_timer_tests = static_init!(
         aon_timer::tests::Tests<VirtualMuxAlarm<'static, RvTimer>>,
-        aon_timer::tests::Tests::new(&peripherals.watchdog, virtual_alarm_tests,)
+        aon_timer::tests::Tests::new(&watchdog_peripheral, virtual_alarm_tests,)
     );
 
     hil::time::Alarm::set_alarm_client(virtual_alarm_tests, aon_timer_tests);
