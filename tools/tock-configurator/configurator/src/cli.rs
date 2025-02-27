@@ -141,7 +141,7 @@ macro_rules! process_gpio_capsule {
                 let (pin, existing) = match pins.get(pin_id) {
                     Some(p) => p,
                     // Selected pin out of range, ignore.
-                    None => continue,
+                    None => panic!("GPIO out of range: {}", pin_id),
                 };
                 if setting == "on" {
                     // Check the pin is not already in use for another purpose.
@@ -238,6 +238,8 @@ fn process_capsule_config<C: parse::Chip>(
             );
             check_baud_rate(data);
         }
+        // Ignored, bazel workaround.
+        "__dummy" => {}
         "flash" => capsule_single_field!(
             capsule_config,
             data,
@@ -400,7 +402,9 @@ pub fn run_cli_mode(mut opts: Opts) {
     }
     let mut data = run_cli_inner(&mut opts, &capsules);
     // Write JSON output
-    opts.out.map(|out| data.set_out(out));
+    if let Some(out) = opts.out {
+        data.set_out(out);
+    }
     state::write_json(&mut data);
 }
 

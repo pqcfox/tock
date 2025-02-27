@@ -10,14 +10,17 @@
 use clap::{Parser, ValueEnum};
 use parse::config;
 use std::path::PathBuf;
+#[cfg(feature = "gui")]
 mod capsule;
 mod cli;
+#[cfg(feature = "gui")]
 mod menu;
 mod state;
 mod utils;
 
 // Reimports
 pub use cli::run_cli_mode;
+#[cfg(feature = "gui")]
 pub use menu::init_configurator as init;
 pub(crate) use utils::*;
 
@@ -65,8 +68,10 @@ pub struct Opts {
 #[derive(Clone, Copy, Debug, Default, ValueEnum)]
 pub enum Mode {
     /// Run the graphical interface.
+    #[cfg(feature = "gui")]
     #[default]
     Gui,
     /// Run the command-line interface.
+    #[cfg_attr(not(feature = "gui"), default)]
     Cli,
 }

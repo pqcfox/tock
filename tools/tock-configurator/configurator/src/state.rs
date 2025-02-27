@@ -5,25 +5,35 @@
 // Author: Irina Nita <irina.nita@oxidos.io>
 // Author: Darius Jipa <darius.jipa@oxidos.io>
 
+#[cfg(feature = "gui")]
 use parse::config;
 use parse::peripherals::chip::{Chip, DefaultPeripherals};
 use parse::peripherals::Gpio;
+#[cfg(feature = "gui")]
 use parse::scheduler::SchedulerType;
+#[cfg(feature = "gui")]
 use parse::syscall_filter::SyscallFilterType;
 
 use std::fs::File;
 use std::io::Write;
+#[cfg(feature = "gui")]
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::rc::Rc;
 
+#[cfg(feature = "gui")]
 use cursive::views::EditView;
 
+#[cfg(feature = "gui")]
 use crate::capsule::ConfigMenu;
+#[cfg(feature = "gui")]
 use crate::items;
+#[cfg(feature = "gui")]
 use crate::menu::{self, board_config_menu, capsules_menu, kernel_resources_menu};
+#[cfg(feature = "gui")]
 use crate::menu::{processes_menu, scheduler_menu, stack_menu, syscall_filter_menu};
 
+#[cfg(feature = "gui")]
 pub(crate) type ViewStack = Vec<Box<dyn cursive::View>>;
 pub(crate) type GpioMap<C> = Vec<(
     <<<C as Chip>::Peripherals as DefaultPeripherals>::Gpio as Gpio>::PinId,
@@ -68,6 +78,7 @@ pub(crate) struct Data<C: Chip> {
     pub(crate) chip: Rc<C>,
 
     /// The view stack.
+    #[cfg(feature = "gui")]
     views: ViewStack,
 
     /// List of pins with their usage.
@@ -83,6 +94,7 @@ impl<C: Chip> Data<C> {
         Self {
             platform: parse::Configuration::default(),
             chip: Rc::new(chip),
+            #[cfg(feature = "gui")]
             views: ViewStack::new(),
             gpio_list: peripherals.gpio().ok().map(|list| {
                 list.iter()
@@ -94,11 +106,13 @@ impl<C: Chip> Data<C> {
     }
 
     /// Add a view to the view stack.
+    #[cfg(feature = "gui")]
     pub(crate) fn push_view(&mut self, view: Box<dyn cursive::View>) {
         self.views.push(view)
     }
 
     /// Pop view from the view stack.
+    #[cfg(feature = "gui")]
     pub(crate) fn pop_view(&mut self) -> Option<Box<dyn cursive::View>> {
         self.views.pop()
     }
@@ -152,6 +166,7 @@ impl<C: Chip> Data<C> {
 }
 
 /// Push a layer to the view stack.
+#[cfg(feature = "gui")]
 pub(crate) fn push_layer<
     V: cursive::view::IntoBoxedView + 'static,
     C: Chip + 'static + serde::ser::Serialize,
@@ -170,6 +185,7 @@ pub(crate) fn push_layer<
 }
 
 /// Initialize a board configuration session based on the submitted chip.
+#[cfg(feature = "gui")]
 pub(crate) fn on_chip_submit(siv: &mut cursive::Cursive, submit: &items::SupportedChip) {
     match submit {
         items::SupportedChip::EarlgreyCw310 => {
@@ -181,6 +197,7 @@ pub(crate) fn on_chip_submit(siv: &mut cursive::Cursive, submit: &items::Support
 }
 
 /// Initialize a board configuration session based on the submitted chip.
+#[cfg(feature = "gui")]
 pub(crate) fn on_scheduler_submit<C: Chip + 'static + serde::ser::Serialize>(
     siv: &mut cursive::Cursive,
     submit: &SchedulerType,
@@ -190,6 +207,7 @@ pub(crate) fn on_scheduler_submit<C: Chip + 'static + serde::ser::Serialize>(
     }
 }
 
+#[cfg(feature = "gui")]
 pub(crate) fn on_syscall_filter_submit<C: Chip + 'static + serde::ser::Serialize>(
     siv: &mut cursive::Cursive,
     submit: &SyscallFilterType,
@@ -200,6 +218,7 @@ pub(crate) fn on_syscall_filter_submit<C: Chip + 'static + serde::ser::Serialize
 }
 
 /// Open a new configuration window based on the submitted config field.
+#[cfg(feature = "gui")]
 pub(crate) fn on_config_submit<C: Chip + 'static + serde::ser::Serialize>(
     siv: &mut cursive::Cursive,
     submit: &items::ConfigurationField,
@@ -228,6 +247,7 @@ pub(crate) fn on_config_submit<C: Chip + 'static + serde::ser::Serialize>(
 }
 
 /// Open the corresponding config window based on the submitted kernel resource.
+#[cfg(feature = "gui")]
 pub(crate) fn on_kernel_resource_submit<C: Chip + 'static + serde::ser::Serialize>(
     siv: &mut cursive::Cursive,
     submit: &items::KernelResources,
@@ -244,6 +264,7 @@ pub(crate) fn on_kernel_resource_submit<C: Chip + 'static + serde::ser::Serializ
 }
 
 /// Open the corresponding config window based on the submitted capsule.
+#[cfg(feature = "gui")]
 pub(crate) fn on_capsule_submit<C: Chip + 'static + serde::ser::Serialize>(
     siv: &mut cursive::Cursive,
     submit: &items::SupportedCapsule,
@@ -410,7 +431,7 @@ pub(crate) fn on_capsule_submit<C: Chip + 'static + serde::ser::Serialize>(
                 Some(config::Capsule::Ipc {}) => Some(()),
                 _ => None,
             };
-            push_layer::<_, C>(siv, crate::capsule::ipc::config::<C>(chip, previous_state))
+            push_layer::<_, C>(siv, crate::capsule::ipc::config::<C>(previous_state))
         }
         config::Index::ONESHOT_DIGEST => {
             let previous_state = match data.platform.capsule(submit) {
@@ -459,6 +480,7 @@ pub(crate) fn on_capsule_submit<C: Chip + 'static + serde::ser::Serialize>(
 }
 
 /// Give the next prompt from the GPIO capsule.
+#[cfg(feature = "gui")]
 #[allow(unused)]
 pub(crate) fn on_gpio_submit<
     C: Chip + 'static + serde::Serialize,
@@ -476,6 +498,7 @@ pub(crate) fn on_gpio_submit<
 }
 
 /// Exit the current window and go back to the previous one.
+#[cfg(feature = "gui")]
 pub(crate) fn on_exit_submit<C: Chip + 'static + serde::ser::Serialize>(
     siv: &mut cursive::Cursive,
 ) {
@@ -490,6 +513,7 @@ pub(crate) fn on_exit_submit<C: Chip + 'static + serde::ser::Serialize>(
 }
 
 /// Exit the current window and go to the "save to JSON" menu.
+#[cfg(feature = "gui")]
 pub(crate) fn on_quit_submit<C: Chip + 'static + serde::ser::Serialize>(
     siv: &mut cursive::Cursive,
 ) {
@@ -498,6 +522,7 @@ pub(crate) fn on_quit_submit<C: Chip + 'static + serde::ser::Serialize>(
 }
 
 /// Write to the JSON file and quit the configurator.
+#[cfg(feature = "gui")]
 pub(crate) fn on_name_submit<C: Chip + 'static + serde::Serialize>(
     siv: &mut cursive::Cursive,
     name: &str,
@@ -512,6 +537,7 @@ pub(crate) fn on_name_submit<C: Chip + 'static + serde::Serialize>(
 }
 
 /// Save the process count to use in the JSON.
+#[cfg(feature = "gui")]
 pub(crate) fn on_count_submit_proc<C: Chip + 'static + serde::Serialize>(
     siv: &mut cursive::Cursive,
     name: &str,
@@ -529,6 +555,7 @@ pub(crate) fn on_count_submit_proc<C: Chip + 'static + serde::Serialize>(
 }
 
 /// Save the stack memory size to use in the JSON.
+#[cfg(feature = "gui")]
 pub(crate) fn on_count_submit_stack<C: Chip + 'static + serde::Serialize>(
     siv: &mut cursive::Cursive,
     name: &str,
@@ -570,6 +597,7 @@ pub(crate) fn write_json<C: Chip + 'static + serde::ser::Serialize>(data: &mut D
 }
 
 /// Exit the current window and go back to the previous one.
+#[cfg(feature = "gui")]
 pub(crate) fn on_save_submit<C: Chip + 'static + serde::ser::Serialize>(
     siv: &mut cursive::Cursive,
 ) {

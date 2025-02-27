@@ -38,7 +38,7 @@ fn on_flash_submit<C: Chip + 'static + serde::Serialize>(
 ) {
     if let Some(data) = siv.user_data::<Data<C>>() {
         match submit {
-            Some(flash) => data.platform.update_info_flash(Rc::clone(&flash)),
+            Some(flash) => data.platform.update_info_flash(Rc::clone(flash)),
             None => data.platform.remove_info_flash(),
         }
     }

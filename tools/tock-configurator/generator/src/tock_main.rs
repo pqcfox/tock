@@ -196,6 +196,12 @@ impl<C: Chip + 'static> TockMain<C> {
                 aon_timer_tests.start_alarm(1000);
             }
 
+            /// Entry point for the OpenTitan board.
+            ///
+            /// # Safety
+            ///
+            /// This function relies on correct configuration of external
+            /// statics.
             #[no_mangle]
             pub unsafe fn main() {
                 #[cfg(test)]
@@ -310,7 +316,8 @@ impl<C: Chip + 'static> TockMain<C> {
             static mut PROCESS_PRINTER: Option<
                 &'static capsules_system::process_printer::ProcessPrinterText,
             > = None;
-            static mut CHIP: Option<&#chip_type> = None;
+            type ChipType = #chip_type;
+            static mut CHIP: Option<&ChipType> = None;
 
             // Test access to the peripherals
             #[cfg(test)]
@@ -393,19 +400,28 @@ impl<C: Chip + 'static> TockMain<C> {
             }
 
             fn get_flash_default_memory_protection_region() -> earlgrey::flash_ctrl::DefaultMemoryProtectionRegion {
-                earlgrey::flash_ctrl::DefaultMemoryProtectionRegion::new()
+                if cfg!(feature = "sival") {
+                    earlgrey::flash_ctrl::DefaultMemoryProtectionRegion::new()
+                        .enable_ecc()
+                        .enable_scramble()
+                } else {
+                    earlgrey::flash_ctrl::DefaultMemoryProtectionRegion::new()
+                }
             }
 
             fn get_flash_memory_protection_configuration() -> earlgrey::flash_ctrl::MemoryProtectionConfiguration {
                 let flash_default_memory_protection_region = get_flash_default_memory_protection_region();
+
+                let base_memory_protection_config =
+                    earlgrey::flash_ctrl::MemoryProtectionConfiguration::new(flash_default_memory_protection_region);
 
                 #[cfg(feature = "test_flash_ctrl")]
                 {
                     let page_index_range =
                         earlgrey::flash_ctrl::tests::convert_flash_slice_to_page_position_range(unsafe {
                             core::slice::from_raw_parts(
-                                &_sapps as *const u8,
-                                &_eapps as *const u8 as usize - &_sapps as *const u8 as usize,
+                                core::ptr::from_ref(&_sapps),
+                                core::ptr::from_ref(&_eapps) as usize - core::ptr::from_ref(&_sapps) as usize,
                             )
                         })
                         .unwrap();
@@ -416,10 +432,11 @@ impl<C: Chip + 'static> TockMain<C> {
                     let memory_protection_page0_base =
                         DataMemoryProtectionRegionBase::new(*page_index_range.end());
 
-                    const RAW_MEMORY_PROTECTION_PAGE0_SIZE: core::num::NonZeroU16 = match core::num::NonZeroU16::new(1) {
-                        Some(non_zero_u16) => non_zero_u16,
-                        None => unreachable!(),
-                    };
+                    const RAW_MEMORY_PROTECTION_PAGE0_SIZE: core::num::NonZeroU16 =
+                        match core::num::NonZeroU16::new(1) {
+                            Some(non_zero_u16) => non_zero_u16,
+                            None => unreachable!(),
+                        };
 
                     const MEMORY_PROTECTION_PAGE0_SIZE: DataMemoryProtectionRegionSize =
                         match DataMemoryProtectionRegionSize::new(RAW_MEMORY_PROTECTION_PAGE0_SIZE) {
@@ -427,7 +444,7 @@ impl<C: Chip + 'static> TockMain<C> {
                             Err(()) => unreachable!(),
                         };
 
-                    earlgrey::flash_ctrl::MemoryProtectionConfiguration::new(flash_default_memory_protection_region)
+                    base_memory_protection_config
                         .enable_and_configure_data_region(
                             earlgrey::flash_ctrl::DataMemoryProtectionRegionIndex::Index0,
                             memory_protection_page0_base,
@@ -451,32 +468,55 @@ impl<C: Chip + 'static> TockMain<C> {
                 {
                     // SAFETY: &_stext represents a valid flash address in the host address space.
                     let starting_address =
-                        earlgrey::flash_ctrl::FlashAddress::new_from_host_address(unsafe { &_stext as *const u8 })
-                            .unwrap();
+                        earlgrey::flash_ctrl::FlashAddress::new_from_host_address(unsafe { core::ptr::from_ref(&_stext) }).unwrap();
                     // SAFETY: &_etext represents a valid flash address in the host address space.
                     let ending_address =
-                        earlgrey::flash_ctrl::FlashAddress::new_from_host_address(unsafe { &_etext as *const u8 })
-                            .unwrap();
+                        earlgrey::flash_ctrl::FlashAddress::new_from_host_address(unsafe { core::ptr::from_ref(&_etext) }).unwrap();
 
                     // Setup flash memory protection for the kernel
                     // PANIC: the unwrap panics only if Flash(_stext) < FlashAddress(_etext), which occurs
                     // only due to a linker script bug.
-                    earlgrey::flash_ctrl::MemoryProtectionConfiguration::new(flash_default_memory_protection_region)
-                        .enable_and_configure_data_region_from_pointers(
-                            earlgrey::flash_ctrl::DataMemoryProtectionRegionIndex::Index0,
-                            starting_address,
-                            ending_address,
-                        )
-                        .unwrap()
-                        .enable_read()
-                        .finalize_region()
-                        .enable_and_configure_info2_region(earlgrey::flash_ctrl::Info2MemoryProtectionRegionIndex::Bank1(
-                            earlgrey::flash_ctrl::Info2PageIndex::Index1,
-                        ))
-                        .enable_read()
-                        .enable_write()
-                        .enable_erase()
-                        .finalize_region()
+                    if cfg!(feature = "sival") {
+                        base_memory_protection_config
+                            .enable_and_configure_data_region_from_pointers(
+                                earlgrey::flash_ctrl::DataMemoryProtectionRegionIndex::Index0,
+                                starting_address,
+                                ending_address,
+                            )
+                            .unwrap()
+                            .enable_read()
+                            .enable_scramble()
+                            .enable_ecc()
+                            .finalize_region()
+                            .enable_and_configure_info2_region(
+                                earlgrey::flash_ctrl::Info2MemoryProtectionRegionIndex::Bank1(
+                                    earlgrey::flash_ctrl::Info2PageIndex::Index1,
+                                ),
+                            )
+                            .enable_read()
+                            .enable_write()
+                            .enable_erase()
+                            .finalize_region()
+                    } else {
+                        base_memory_protection_config
+                            .enable_and_configure_data_region_from_pointers(
+                                earlgrey::flash_ctrl::DataMemoryProtectionRegionIndex::Index0,
+                                starting_address,
+                                ending_address,
+                            )
+                            .unwrap()
+                            .enable_read()
+                            .finalize_region()
+                            .enable_and_configure_info2_region(
+                                earlgrey::flash_ctrl::Info2MemoryProtectionRegionIndex::Bank1(
+                                    earlgrey::flash_ctrl::Info2PageIndex::Index1,
+                                ),
+                            )
+                            .enable_read()
+                            .enable_write()
+                            .enable_erase()
+                            .finalize_region()
+                    }
                 }
             }
         })
@@ -506,12 +546,15 @@ impl<C: Chip + 'static> TockMain<C> {
 
         // Inject the custom code for a chip/arch? Like enabling interrupts?
         Ok(quote! {
-            unsafe fn setup() -> (
+            type SetupOut = (
                 &'static kernel::Kernel,
                 &'static #platform_ty,
                 &'static #chip_ty,
                 &'static #peripherals_ty,
-            ) {
+            );
+            unsafe fn setup() -> SetupOut {
+                // Could be unused if no drivers are included.
+                #[allow(unused)]
                 let memory_allocation_cap = kernel::create_capability!(kernel::capabilities::MemoryAllocationCapability);
                 let board_kernel = kernel::static_init!(kernel::Kernel, kernel::Kernel::new(&*core::ptr::addr_of!(PROCESSES)));
                 #(#initializations)*
@@ -677,6 +720,9 @@ impl<C: Chip + 'static> TockMain<C> {
         }
 
         Ok(quote! {
+            // This `#[allow]` is required because the configuration file may
+            // contain a non-camelcase config name.
+            #[allow(non_camel_case_types)]
             struct #board_ty {
                 #(#capsules_identifiers: &'static #capsules_types,)*
                 #scheduler_id: &'static #scheduler_ty,
@@ -689,6 +735,8 @@ impl<C: Chip + 'static> TockMain<C> {
                 where
                     F: FnOnce(Option<&dyn kernel::syscall::SyscallDriver>) -> R,
                 {
+                    // Don't flag verbosity for single binding if no capsules are included.
+                    #[allow(clippy::match_single_binding)]
                     match driver_num {
                         #( #capsules_driver_nums => f(Some(self.#capsules_identifiers)),)*
                         _ => f(None),
@@ -715,10 +763,10 @@ impl<C: Chip + 'static> TockMain<C> {
                     &()
                 }
                 fn scheduler(&self) -> &Self::Scheduler {
-                    &self.#scheduler_id
+                    self.#scheduler_id
                 }
                 fn scheduler_timer(&self) -> &Self::SchedulerTimer {
-                    &self.#scheduler_timer_id
+                    self.#scheduler_timer_id
                 }
                 fn watchdog(&self) -> &Self::WatchDog {
                     self.#watchdog_id

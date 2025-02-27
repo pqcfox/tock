@@ -6,11 +6,14 @@
 // Author: Darius Jipa <darius.jipa@oxidos.io>
 
 use clap::Parser;
-use tock_configurator::{init, run_cli_mode, Mode, Opts};
+#[cfg(feature = "gui")]
+use tock_configurator::init;
+use tock_configurator::{run_cli_mode, Mode, Opts};
 
 fn main() {
     let opts = Opts::parse();
     match opts.mode {
+        #[cfg(feature = "gui")]
         Mode::Gui => {
             let mut configurator = init();
             configurator.run()

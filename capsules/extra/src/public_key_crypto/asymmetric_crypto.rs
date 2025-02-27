@@ -80,9 +80,9 @@ use kernel::ErrorCode;
 use kernel::ProcessId;
 
 /// ECDSA P-256 driver number
-pub const DRIVER_NUM_ECDSA_P256: usize = capsules_core::driver::NUM::EcdsaP256 as usize;
+pub const DRIVER_NUM_P256: usize = capsules_core::driver::NUM::EcdsaP256 as usize;
 /// ECDSA P-384 driver number
-pub const DRIVER_NUM_ECDSA_P384: usize = capsules_core::driver::NUM::EcdsaP384 as usize;
+pub const DRIVER_NUM_P384: usize = capsules_core::driver::NUM::EcdsaP384 as usize;
 
 pub struct AsymmetricCrypto<
     'a,

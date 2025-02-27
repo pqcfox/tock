@@ -138,7 +138,7 @@ impl dyn Component {
     }
 
     pub fn downcast<T: 'static>(self: Rc<Self>) -> Result<Rc<T>, Rc<Self>> {
-        if (&*self).is::<T>() {
+        if self.is::<T>() {
             unsafe { Ok(Rc::from_raw(Rc::into_raw(self) as _)) }
         } else {
             Err(self)

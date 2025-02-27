@@ -366,11 +366,11 @@ impl SyscallDriverLookup for EarlGrey {
             capsules_extra::opentitan_sysrst::DRIVER_NUM => f(Some(self.opentitan_sysrst)),
             capsules_extra::opentitan_attestation::DRIVER_NUM => f(Some(self.attestation)),
             #[cfg(feature = "ffi")]
-            capsules_extra::public_key_crypto::asymmetric_crypto::DRIVER_NUM_ECDSA_P256 => {
+            capsules_extra::public_key_crypto::asymmetric_crypto::DRIVER_NUM_P256 => {
                 f(Some(self.ecdsa_p256))
             }
             #[cfg(feature = "ffi")]
-            capsules_extra::public_key_crypto::asymmetric_crypto::DRIVER_NUM_ECDSA_P384 => {
+            capsules_extra::public_key_crypto::asymmetric_crypto::DRIVER_NUM_P384 => {
                 f(Some(self.ecdsa_p384))
             }
             kernel::ipc::DRIVER_NUM => f(Some(&self.ipc)),
@@ -1341,7 +1341,7 @@ unsafe fn setup() -> (
                 p256_hash_buf,
                 p256_signature_buf,
                 board_kernel.create_grant(
-                    capsules_extra::public_key_crypto::asymmetric_crypto::DRIVER_NUM_ECDSA_P256,
+                    capsules_extra::public_key_crypto::asymmetric_crypto::DRIVER_NUM_P256,
                     &memory_allocation_cap
                 ),
             ),
@@ -1384,7 +1384,7 @@ unsafe fn setup() -> (
                 p384_hash_buf,
                 p384_signature_buf,
                 board_kernel.create_grant(
-                    capsules_extra::public_key_crypto::asymmetric_crypto::DRIVER_NUM_ECDSA_P384,
+                    capsules_extra::public_key_crypto::asymmetric_crypto::DRIVER_NUM_P384,
                     &memory_allocation_cap
                 ),
             ),

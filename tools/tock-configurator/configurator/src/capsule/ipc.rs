@@ -5,21 +5,18 @@
 // Author: Irina Nita <irina.nita@oxidos.io>
 // Author: Darius Jipa <darius.jipa@oxidos.io>
 
-use std::rc::Rc;
-
 use crate::menu::capsule_popup;
 use crate::state::Data;
 use parse::peripherals::Chip;
 
-const PERIPHERAL: &'static str = "IPC";
+const PERIPHERAL: &str = "IPC";
 
 /// Menu for configuring the IPC capsule.
 pub fn config<C: Chip + 'static + serde::Serialize>(
-    chip: Rc<C>,
     previous_state: Option<()>,
 ) -> cursive::views::LinearLayout {
     match previous_state {
-        None => config_none(chip),
+        None => config_none::<C>(),
         Some(()) => capsule_popup::<C, _>(crate::views::radio_group_with_null_known(
             vec![PERIPHERAL],
             on_ipc_submit::<C>,
@@ -29,9 +26,7 @@ pub fn config<C: Chip + 'static + serde::Serialize>(
 }
 
 /// Menu for configuring the Alarm capsule when none was configured before.
-fn config_none<C: Chip + 'static + serde::ser::Serialize>(
-    chip: Rc<C>,
-) -> cursive::views::LinearLayout {
+fn config_none<C: Chip + 'static + serde::ser::Serialize>() -> cursive::views::LinearLayout {
     capsule_popup::<C, _>(crate::views::radio_group_with_null(
         vec![PERIPHERAL],
         on_ipc_submit::<C>,

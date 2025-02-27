@@ -65,6 +65,12 @@ impl DefaultSchedulerTimer {
     }
 }
 
+impl Default for DefaultSchedulerTimer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl crate::Ident for DefaultSchedulerTimer {
     fn ident(&self) -> Result<String, crate::error::Error> {
         Ok(String::from("scheduler_timer"))

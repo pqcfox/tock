@@ -41,6 +41,7 @@ pub struct AccelMuxComponent {
 }
 
 impl AccelMuxComponent {
+    #[allow(unused)]
     pub fn new(otbn: &'static Otbn<'static>) -> AccelMuxComponent {
         AccelMuxComponent { otbn }
     }
@@ -60,6 +61,7 @@ pub struct OtbnComponent {
 }
 
 impl OtbnComponent {
+    #[allow(unused)]
     pub fn new(mux_otbn: &'static MuxAccel<'static>) -> OtbnComponent {
         OtbnComponent { mux_otbn }
     }
