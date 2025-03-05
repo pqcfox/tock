@@ -2,11 +2,15 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // Copyright Tock Contributors 2022.
 
+use crate::peripherals::Peripheral;
 use std::rc::Rc;
 
+pub const GPIO_PINS: usize = 32;
+
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(usize)]
 pub enum PinId {
-    Pin0,
+    Pin0 = 0,
     Pin1,
     Pin2,
     Pin3,
@@ -49,7 +53,10 @@ impl std::fmt::Display for PinId {
 impl parse::Ident for PinId {
     fn ident(&self) -> Result<String, parse::Error> {
         let index = *self as usize;
-        Ok(format!("peripherals.gpio_port[{}]", index))
+        Ok(format!(
+            "peripherals.gpio_port.as_ref().unwrap()[{}]",
+            index
+        ))
     }
 }
 
@@ -62,6 +69,10 @@ impl parse::Component for PinId {
 
     fn init_expr(&self) -> Result<proc_macro2::TokenStream, parse::Error> {
         todo!()
+    }
+
+    fn trace_dependencies(&self, peripherals: &mut dyn parse::component::ConfigPeripherals) {
+        peripherals.require(Peripheral::GpioPort as usize, *self as usize)
     }
 }
 
@@ -76,7 +87,7 @@ impl GpioPort {
 
 impl parse::Ident for GpioPort {
     fn ident(&self) -> Result<String, parse::Error> {
-        Ok(String::from("peripherals.gpio_port"))
+        Ok(String::from("peripherals.gpio_port.as_ref().unwrap()"))
     }
 }
 

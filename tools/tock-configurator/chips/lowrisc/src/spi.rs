@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // Copyright Tock Contributors 2022.
 
+use crate::peripherals::{Peripheral, NO_PARAM};
+
 #[derive(serde::Serialize, serde::Deserialize, Debug, PartialEq)]
 pub struct SpiHost {}
 
@@ -13,13 +15,17 @@ impl SpiHost {
 
 impl parse::Ident for SpiHost {
     fn ident(&self) -> Result<String, parse::Error> {
-        Ok(String::from("peripherals.spi_host0"))
+        Ok(String::from("peripherals.spi_host0.as_ref().unwrap()"))
     }
 }
 
 impl parse::Component for SpiHost {
     fn ty(&self) -> Result<proc_macro2::TokenStream, parse::Error> {
         Ok(quote::quote!(lowrisc::spi_host::SpiHost<'static>))
+    }
+
+    fn trace_dependencies(&self, peripherals: &mut dyn parse::component::ConfigPeripherals) {
+        peripherals.require(Peripheral::SpiHost0 as usize, NO_PARAM);
     }
 }
 

@@ -871,9 +871,7 @@ mod tests {
         }
       }"#}
     test_capsule_no_fields! {test_attestation, "attestation", "ATTESTATION", "attestation", r#"{
-        "flash": {
-          "peripheral": {}
-        }
+        "flash": {}
       }"#}
 
     // Tests for capsules with a single field.

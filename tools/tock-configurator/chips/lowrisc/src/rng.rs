@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // Copyright Tock Contributors 2022.
 
+use crate::peripherals::{Peripheral, NO_PARAM};
+
 #[derive(serde::Serialize, serde::Deserialize, Debug, PartialEq)]
 pub struct CsRng {}
 
@@ -13,13 +15,17 @@ impl CsRng {
 
 impl parse::Ident for CsRng {
     fn ident(&self) -> Result<String, parse::Error> {
-        Ok(String::from("peripherals.rng"))
+        Ok(String::from("peripherals.rng.as_ref().unwrap()"))
     }
 }
 
 impl parse::Component for CsRng {
     fn ty(&self) -> Result<proc_macro2::TokenStream, parse::Error> {
         Ok(quote::quote!(lowrisc::csrng::CsRng<'static>))
+    }
+
+    fn trace_dependencies(&self, peripherals: &mut dyn parse::component::ConfigPeripherals) {
+        peripherals.require(Peripheral::Rng as usize, NO_PARAM);
     }
 }
 

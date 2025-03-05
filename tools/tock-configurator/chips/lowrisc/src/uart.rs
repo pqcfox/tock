@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // Copyright Tock Contributors 2022.
 
+use crate::peripherals::{Peripheral, NO_PARAM};
+
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub enum Uart {
     Uart0,
@@ -21,13 +23,17 @@ impl Uart {
 
 impl parse::Ident for Uart {
     fn ident(&self) -> Result<String, parse::Error> {
-        Ok(String::from("peripherals.uart0"))
+        Ok(String::from("peripherals.uart0.as_ref().unwrap()"))
     }
 }
 
 impl parse::Component for Uart {
     fn ty(&self) -> Result<proc_macro2::TokenStream, parse::Error> {
         Ok(quote::quote!(earlgrey::uart::Uart<'static>))
+    }
+
+    fn trace_dependencies(&self, peripherals: &mut dyn parse::component::ConfigPeripherals) {
+        peripherals.require(Peripheral::Uart0 as usize, NO_PARAM);
     }
 }
 

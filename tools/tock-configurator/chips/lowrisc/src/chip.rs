@@ -2,23 +2,30 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // Copyright Tock Contributors 2022.
 
+use crate::peripherals::EarlgreyPeripheralConfig;
 use parse::Chip as _;
 use parse::DefaultPeripherals as _;
 use parse::Ident as _;
 
+use std::cell::RefCell;
 use std::rc::Rc;
 
 #[derive(serde::Deserialize, serde::Serialize, Debug)]
 pub struct Chip {
     epmp: Rc<crate::epmp::Epmp>,
-    peripherals: Rc<crate::peripherals::Peripherals>,
+    peripherals: Rc<crate::peripherals::Drivers>,
     scheduler_timer: Rc<parse::SchedulerTimer<crate::timer::RvTimer>>,
     watchdog: Rc<crate::watchdog::Watchdog>,
+    #[serde(skip)]
+    peripheral_config: Rc<RefCell<EarlgreyPeripheralConfig>>,
 }
 
 impl Default for Chip {
     fn default() -> Self {
-        let peripherals = Rc::new(crate::peripherals::Peripherals::new());
+        let peripheral_config = Rc::new(RefCell::new(EarlgreyPeripheralConfig::new()));
+        let peripherals = Rc::new(crate::peripherals::Drivers::new(Rc::clone(
+            &peripheral_config,
+        )));
         let timer = peripherals.timer().unwrap()[0].clone();
         let mux_alarm = Rc::new(parse::MuxAlarm::new(timer));
         let virtual_mux_alarm = Rc::new(parse::VirtualMuxAlarm::new(mux_alarm));
@@ -28,6 +35,7 @@ impl Default for Chip {
             peripherals,
             scheduler_timer: parse::SchedulerTimer::new(virtual_mux_alarm),
             watchdog: Rc::new(crate::watchdog::Watchdog::new()),
+            peripheral_config,
         }
     }
 }
@@ -69,10 +77,6 @@ impl parse::Component for Chip {
         Some(vec![epmp, peripherals])
     }
 
-    fn before_init(&self) -> Option<parse::proc_macro2::TokenStream> {
-        None
-    }
-
     fn init_expr(&self) -> Result<parse::proc_macro2::TokenStream, parse::Error> {
         let ty = self.ty()?;
         let peripherals = self.peripherals();
@@ -89,7 +93,7 @@ impl parse::Component for Chip {
         Some(quote::quote! {
             CHIP = Some(#ident);
             use kernel::utilities::registers::interfaces::ReadWriteable;
-            #ident.enable_plic_interrupts();
+            #ident.enable_plic_interrupts(EARLGREY_PERIPHERAL_CONFIG);
             // enable interrupts globally
             rv32i::csr::CSR.mie.modify(
                 rv32i::csr::mie::mie::msoft::SET + rv32i::csr::mie::mie::mtimer::CLEAR + rv32i::csr::mie::mie::mext::SET,
@@ -100,12 +104,12 @@ impl parse::Component for Chip {
 }
 
 impl parse::Chip for Chip {
-    type Peripherals = crate::peripherals::Peripherals;
+    type Peripherals = crate::peripherals::Drivers;
     type Systick = parse::SchedulerTimer<crate::timer::RvTimer>;
     type Watchdog = crate::watchdog::Watchdog;
 
     fn peripherals(&self) -> Rc<Self::Peripherals> {
-        self.peripherals.clone()
+        Rc::clone(&self.peripherals)
     }
 
     fn systick(&self) -> Result<Rc<Self::Systick>, parse::Error> {
@@ -114,5 +118,9 @@ impl parse::Chip for Chip {
 
     fn watchdog(&self) -> Result<Rc<Self::Watchdog>, parse::Error> {
         Ok(self.watchdog.clone())
+    }
+
+    fn peripheral_config(&self) -> Rc<RefCell<dyn parse::component::ConfigPeripherals>> {
+        Rc::clone(&self.peripheral_config) as Rc<RefCell<dyn parse::component::ConfigPeripherals>>
     }
 }
