@@ -94,7 +94,15 @@ Protocol stacks and other libraries.
   encryption.
 - **[Public Key Cryptography](src/public_key_crypto)**: Asymmetric
   encryption.
-- **[Oneshot Digest](src/oneshot_digest.rs)**: Digest operations that operate
+- **[Oneshot Hash Functions](src/oneshot_digest/hash.rs)**: SHA-2/3 hash
+  operations that operate directly on allow parameters.
+- **[Oneshot SHAKE](src/oneshot_digest/shake.rs)**: SHAKE XOF operations that
+  operate directly on allow parameters.
+- **[Oneshot cSHAKE](src/oneshot_digest/cshake.rs)**: cSHAKE XOF operations that
+  operate directly on allow parameters.
+- **[Oneshot HMAC](src/oneshot_digest/hmac.rs)**: HMAC operations that operate
+  directly on allow parameters.
+- **[Oneshot KMAC](src/oneshot_digest/kmac.rs)**: KMAC operations that operate
   directly on allow parameters.
 
 
@@ -176,6 +184,8 @@ Other capsules that implement reusable logic.
 - **[TicKV](src/tickv.rs)**: Key-value storage.
 - **[TicKV KV Store](src/tickv_kv_store.rs)**: Provide `hil::kv::KV` with TickV.
 - **[Virtual KV](src/virtual_kv.rs)**: Virtualize access to KV with permissions.
+- **[Oneshot Digest Utils](src/oneshot_digest/utils.rs)**: Internal utilities
+  used by oneshot digest capsules.
 
 
 Debugging Capsules

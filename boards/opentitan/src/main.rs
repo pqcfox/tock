@@ -241,7 +241,67 @@ struct EarlGrey {
         VirtualMuxAlarm<'static, RvTimer<'static>>,
     >,
     #[cfg(feature = "ffi")]
-    oneshot_digest: &'static capsules_extra::oneshot_digest::OneshotDigest<
+    oneshot_sha256: &'static capsules_extra::oneshot_digest::hash::OneshotSha256<
+        lowrisc::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest,
+    >,
+    #[cfg(feature = "ffi")]
+    oneshot_sha384: &'static capsules_extra::oneshot_digest::hash::OneshotSha384<
+        lowrisc::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest,
+    >,
+    #[cfg(feature = "ffi")]
+    oneshot_sha512: &'static capsules_extra::oneshot_digest::hash::OneshotSha512<
+        lowrisc::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest,
+    >,
+    #[cfg(feature = "ffi")]
+    oneshot_sha3_224: &'static capsules_extra::oneshot_digest::hash::OneshotSha3_224<
+        lowrisc::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest,
+    >,
+    #[cfg(feature = "ffi")]
+    oneshot_sha3_256: &'static capsules_extra::oneshot_digest::hash::OneshotSha3_256<
+        lowrisc::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest,
+    >,
+    #[cfg(feature = "ffi")]
+    oneshot_sha3_384: &'static capsules_extra::oneshot_digest::hash::OneshotSha3_384<
+        lowrisc::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest,
+    >,
+    #[cfg(feature = "ffi")]
+    oneshot_sha3_512: &'static capsules_extra::oneshot_digest::hash::OneshotSha3_512<
+        lowrisc::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest,
+    >,
+    #[cfg(feature = "ffi")]
+    oneshot_shake128: &'static capsules_extra::oneshot_digest::shake::OneshotShake128<
+        lowrisc::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest,
+    >,
+    #[cfg(feature = "ffi")]
+    oneshot_shake256: &'static capsules_extra::oneshot_digest::shake::OneshotShake256<
+        lowrisc::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest,
+    >,
+    #[cfg(feature = "ffi")]
+    oneshot_cshake128: &'static capsules_extra::oneshot_digest::cshake::OneshotCshake128<
+        lowrisc::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest,
+    >,
+    #[cfg(feature = "ffi")]
+    oneshot_cshake256: &'static capsules_extra::oneshot_digest::cshake::OneshotCshake256<
+        lowrisc::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest,
+    >,
+    #[cfg(feature = "ffi")]
+    oneshot_hmac_sha256: &'static capsules_extra::oneshot_digest::hmac::OneshotHmacSha256<
+        lowrisc::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest,
+    >,
+    #[cfg(feature = "ffi")]
+    oneshot_hmac_sha384: &'static capsules_extra::oneshot_digest::hmac::OneshotHmacSha384<
+        lowrisc::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest,
+    >,
+    #[cfg(feature = "ffi")]
+    oneshot_hmac_sha512: &'static capsules_extra::oneshot_digest::hmac::OneshotHmacSha512<
+        lowrisc::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest,
+    >,
+    #[cfg(feature = "ffi")]
+    oneshot_kmac128: &'static capsules_extra::oneshot_digest::kmac::OneshotKmac128<
+        lowrisc::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest,
+    >,
+    #[cfg(feature = "ffi")]
+    oneshot_kmac256: &'static capsules_extra::oneshot_digest::kmac::OneshotKmac256<
         lowrisc::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest,
     >,
     info_flash: &'static capsules_extra::info_flash::InfoFlash<
@@ -344,7 +404,43 @@ impl SyscallDriverLookup for EarlGrey {
         match driver_num {
             capsules_core::led::DRIVER_NUM => f(Some(self.led)),
             #[cfg(feature = "ffi")]
-            capsules_extra::oneshot_digest::DRIVER_NUM => f(Some(self.oneshot_digest)),
+            capsules_extra::oneshot_digest::DRIVER_NUM_SHA256 => f(Some(self.oneshot_sha256)),
+            #[cfg(feature = "ffi")]
+            capsules_extra::oneshot_digest::DRIVER_NUM_SHA384 => f(Some(self.oneshot_sha384)),
+            #[cfg(feature = "ffi")]
+            capsules_extra::oneshot_digest::DRIVER_NUM_SHA512 => f(Some(self.oneshot_sha512)),
+            #[cfg(feature = "ffi")]
+            capsules_extra::oneshot_digest::DRIVER_NUM_SHA3_224 => f(Some(self.oneshot_sha3_224)),
+            #[cfg(feature = "ffi")]
+            capsules_extra::oneshot_digest::DRIVER_NUM_SHA3_256 => f(Some(self.oneshot_sha3_256)),
+            #[cfg(feature = "ffi")]
+            capsules_extra::oneshot_digest::DRIVER_NUM_SHA3_384 => f(Some(self.oneshot_sha3_384)),
+            #[cfg(feature = "ffi")]
+            capsules_extra::oneshot_digest::DRIVER_NUM_SHA3_512 => f(Some(self.oneshot_sha3_512)),
+            #[cfg(feature = "ffi")]
+            capsules_extra::oneshot_digest::DRIVER_NUM_SHAKE128 => f(Some(self.oneshot_shake128)),
+            #[cfg(feature = "ffi")]
+            capsules_extra::oneshot_digest::DRIVER_NUM_SHAKE256 => f(Some(self.oneshot_shake256)),
+            #[cfg(feature = "ffi")]
+            capsules_extra::oneshot_digest::DRIVER_NUM_CSHAKE128 => f(Some(self.oneshot_cshake128)),
+            #[cfg(feature = "ffi")]
+            capsules_extra::oneshot_digest::DRIVER_NUM_CSHAKE256 => f(Some(self.oneshot_cshake256)),
+            #[cfg(feature = "ffi")]
+            capsules_extra::oneshot_digest::DRIVER_NUM_HMAC_SHA256 => {
+                f(Some(self.oneshot_hmac_sha256))
+            }
+            #[cfg(feature = "ffi")]
+            capsules_extra::oneshot_digest::DRIVER_NUM_HMAC_SHA384 => {
+                f(Some(self.oneshot_hmac_sha384))
+            }
+            #[cfg(feature = "ffi")]
+            capsules_extra::oneshot_digest::DRIVER_NUM_HMAC_SHA512 => {
+                f(Some(self.oneshot_hmac_sha512))
+            }
+            #[cfg(feature = "ffi")]
+            capsules_extra::oneshot_digest::DRIVER_NUM_KMAC128 => f(Some(self.oneshot_kmac128)),
+            #[cfg(feature = "ffi")]
+            capsules_extra::oneshot_digest::DRIVER_NUM_KMAC256 => f(Some(self.oneshot_kmac256)),
             capsules_core::gpio::DRIVER_NUM => f(Some(self.gpio)),
             capsules_core::console::DRIVER_NUM => f(Some(self.console)),
             capsules_core::alarm::DRIVER_NUM => f(Some(self.alarm)),
@@ -795,16 +891,241 @@ unsafe fn setup() -> (
     .finalize(components::low_level_debug_component_static!());
 
     #[cfg(feature = "ffi")]
-    let oneshot_digest: &'static capsules_extra::oneshot_digest::OneshotDigest<
+    let oneshot_sha256: &'static capsules_extra::oneshot_digest::hash::OneshotSha256<
         lowrisc::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest,
     > = static_init!(
-        capsules_extra::oneshot_digest::OneshotDigest<
+        capsules_extra::oneshot_digest::hash::OneshotSha256<
             lowrisc::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest,
         >,
-        capsules_extra::oneshot_digest::OneshotDigest::new(
+        capsules_extra::oneshot_digest::hash::OneshotSha256::new(
             lowrisc::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest,
             board_kernel.create_grant(
-                capsules_extra::oneshot_digest::DRIVER_NUM,
+                capsules_extra::oneshot_digest::DRIVER_NUM_SHA256,
+                &memory_allocation_cap
+            )
+        )
+    );
+    #[cfg(feature = "ffi")]
+    let oneshot_sha384: &'static capsules_extra::oneshot_digest::hash::OneshotSha384<
+        lowrisc::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest,
+    > = static_init!(
+        capsules_extra::oneshot_digest::hash::OneshotSha384<
+            lowrisc::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest,
+        >,
+        capsules_extra::oneshot_digest::hash::OneshotSha384::new(
+            lowrisc::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest,
+            board_kernel.create_grant(
+                capsules_extra::oneshot_digest::DRIVER_NUM_SHA384,
+                &memory_allocation_cap
+            )
+        )
+    );
+    #[cfg(feature = "ffi")]
+    let oneshot_sha512: &'static capsules_extra::oneshot_digest::hash::OneshotSha512<
+        lowrisc::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest,
+    > = static_init!(
+        capsules_extra::oneshot_digest::hash::OneshotSha512<
+            lowrisc::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest,
+        >,
+        capsules_extra::oneshot_digest::hash::OneshotSha512::new(
+            lowrisc::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest,
+            board_kernel.create_grant(
+                capsules_extra::oneshot_digest::DRIVER_NUM_SHA512,
+                &memory_allocation_cap
+            )
+        )
+    );
+    #[cfg(feature = "ffi")]
+    let oneshot_sha3_224: &'static capsules_extra::oneshot_digest::hash::OneshotSha3_224<
+        lowrisc::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest,
+    > = static_init!(
+        capsules_extra::oneshot_digest::hash::OneshotSha3_224<
+            lowrisc::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest,
+        >,
+        capsules_extra::oneshot_digest::hash::OneshotSha3_224::new(
+            lowrisc::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest,
+            board_kernel.create_grant(
+                capsules_extra::oneshot_digest::DRIVER_NUM_SHA3_224,
+                &memory_allocation_cap
+            )
+        )
+    );
+    #[cfg(feature = "ffi")]
+    let oneshot_sha3_256: &'static capsules_extra::oneshot_digest::hash::OneshotSha3_256<
+        lowrisc::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest,
+    > = static_init!(
+        capsules_extra::oneshot_digest::hash::OneshotSha3_256<
+            lowrisc::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest,
+        >,
+        capsules_extra::oneshot_digest::hash::OneshotSha3_256::new(
+            lowrisc::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest,
+            board_kernel.create_grant(
+                capsules_extra::oneshot_digest::DRIVER_NUM_SHA3_256,
+                &memory_allocation_cap
+            )
+        )
+    );
+    #[cfg(feature = "ffi")]
+    let oneshot_sha3_384: &'static capsules_extra::oneshot_digest::hash::OneshotSha3_384<
+        lowrisc::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest,
+    > = static_init!(
+        capsules_extra::oneshot_digest::hash::OneshotSha3_384<
+            lowrisc::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest,
+        >,
+        capsules_extra::oneshot_digest::hash::OneshotSha3_384::new(
+            lowrisc::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest,
+            board_kernel.create_grant(
+                capsules_extra::oneshot_digest::DRIVER_NUM_SHA3_384,
+                &memory_allocation_cap
+            )
+        )
+    );
+    #[cfg(feature = "ffi")]
+    let oneshot_sha3_512: &'static capsules_extra::oneshot_digest::hash::OneshotSha3_512<
+        lowrisc::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest,
+    > = static_init!(
+        capsules_extra::oneshot_digest::hash::OneshotSha3_512<
+            lowrisc::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest,
+        >,
+        capsules_extra::oneshot_digest::hash::OneshotSha3_512::new(
+            lowrisc::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest,
+            board_kernel.create_grant(
+                capsules_extra::oneshot_digest::DRIVER_NUM_SHA3_512,
+                &memory_allocation_cap
+            )
+        )
+    );
+    #[cfg(feature = "ffi")]
+    let oneshot_shake128: &'static capsules_extra::oneshot_digest::shake::OneshotShake128<
+        lowrisc::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest,
+    > = static_init!(
+        capsules_extra::oneshot_digest::shake::OneshotShake128<
+            lowrisc::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest,
+        >,
+        capsules_extra::oneshot_digest::shake::OneshotShake128::new(
+            lowrisc::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest,
+            board_kernel.create_grant(
+                capsules_extra::oneshot_digest::DRIVER_NUM_SHAKE128,
+                &memory_allocation_cap
+            )
+        )
+    );
+    #[cfg(feature = "ffi")]
+    let oneshot_shake256: &'static capsules_extra::oneshot_digest::shake::OneshotShake256<
+        lowrisc::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest,
+    > = static_init!(
+        capsules_extra::oneshot_digest::shake::OneshotShake256<
+            lowrisc::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest,
+        >,
+        capsules_extra::oneshot_digest::shake::OneshotShake256::new(
+            lowrisc::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest,
+            board_kernel.create_grant(
+                capsules_extra::oneshot_digest::DRIVER_NUM_SHAKE256,
+                &memory_allocation_cap
+            )
+        )
+    );
+    #[cfg(feature = "ffi")]
+    let oneshot_cshake128: &'static capsules_extra::oneshot_digest::cshake::OneshotCshake128<
+        lowrisc::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest,
+    > = static_init!(
+        capsules_extra::oneshot_digest::cshake::OneshotCshake128<
+            lowrisc::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest,
+        >,
+        capsules_extra::oneshot_digest::cshake::OneshotCshake128::new(
+            lowrisc::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest,
+            board_kernel.create_grant(
+                capsules_extra::oneshot_digest::DRIVER_NUM_CSHAKE128,
+                &memory_allocation_cap
+            )
+        )
+    );
+    #[cfg(feature = "ffi")]
+    let oneshot_cshake256: &'static capsules_extra::oneshot_digest::cshake::OneshotCshake256<
+        lowrisc::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest,
+    > = static_init!(
+        capsules_extra::oneshot_digest::cshake::OneshotCshake256<
+            lowrisc::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest,
+        >,
+        capsules_extra::oneshot_digest::cshake::OneshotCshake256::new(
+            lowrisc::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest,
+            board_kernel.create_grant(
+                capsules_extra::oneshot_digest::DRIVER_NUM_CSHAKE256,
+                &memory_allocation_cap
+            )
+        )
+    );
+    #[cfg(feature = "ffi")]
+    let oneshot_hmac_sha256: &'static capsules_extra::oneshot_digest::hmac::OneshotHmacSha256<
+        lowrisc::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest,
+    > = static_init!(
+        capsules_extra::oneshot_digest::hmac::OneshotHmacSha256<
+            lowrisc::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest,
+        >,
+        capsules_extra::oneshot_digest::hmac::OneshotHmacSha256::new(
+            lowrisc::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest,
+            board_kernel.create_grant(
+                capsules_extra::oneshot_digest::DRIVER_NUM_HMAC_SHA256,
+                &memory_allocation_cap
+            )
+        )
+    );
+    #[cfg(feature = "ffi")]
+    let oneshot_hmac_sha384: &'static capsules_extra::oneshot_digest::hmac::OneshotHmacSha384<
+        lowrisc::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest,
+    > = static_init!(
+        capsules_extra::oneshot_digest::hmac::OneshotHmacSha384<
+            lowrisc::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest,
+        >,
+        capsules_extra::oneshot_digest::hmac::OneshotHmacSha384::new(
+            lowrisc::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest,
+            board_kernel.create_grant(
+                capsules_extra::oneshot_digest::DRIVER_NUM_HMAC_SHA384,
+                &memory_allocation_cap
+            )
+        )
+    );
+    #[cfg(feature = "ffi")]
+    let oneshot_hmac_sha512: &'static capsules_extra::oneshot_digest::hmac::OneshotHmacSha512<
+        lowrisc::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest,
+    > = static_init!(
+        capsules_extra::oneshot_digest::hmac::OneshotHmacSha512<
+            lowrisc::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest,
+        >,
+        capsules_extra::oneshot_digest::hmac::OneshotHmacSha512::new(
+            lowrisc::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest,
+            board_kernel.create_grant(
+                capsules_extra::oneshot_digest::DRIVER_NUM_HMAC_SHA512,
+                &memory_allocation_cap
+            )
+        )
+    );
+    #[cfg(feature = "ffi")]
+    let oneshot_kmac128: &'static capsules_extra::oneshot_digest::kmac::OneshotKmac128<
+        lowrisc::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest,
+    > = static_init!(
+        capsules_extra::oneshot_digest::kmac::OneshotKmac128<
+            lowrisc::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest,
+        >,
+        capsules_extra::oneshot_digest::kmac::OneshotKmac128::new(
+            lowrisc::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest,
+            board_kernel.create_grant(
+                capsules_extra::oneshot_digest::DRIVER_NUM_KMAC128,
+                &memory_allocation_cap
+            )
+        )
+    );
+    #[cfg(feature = "ffi")]
+    let oneshot_kmac256: &'static capsules_extra::oneshot_digest::kmac::OneshotKmac256<
+        lowrisc::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest,
+    > = static_init!(
+        capsules_extra::oneshot_digest::kmac::OneshotKmac256<
+            lowrisc::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest,
+        >,
+        capsules_extra::oneshot_digest::kmac::OneshotKmac256::new(
+            lowrisc::ffi::cryptolib::oneshot_digest::OtCryptoOneshotDigest,
+            board_kernel.create_grant(
+                capsules_extra::oneshot_digest::DRIVER_NUM_KMAC256,
                 &memory_allocation_cap
             )
         )
@@ -1472,7 +1793,37 @@ unsafe fn setup() -> (
             #[cfg(not(feature = "test_flash_ctrl"))]
             kv_driver,
             #[cfg(feature = "ffi")]
-            oneshot_digest,
+            oneshot_sha256,
+            #[cfg(feature = "ffi")]
+            oneshot_sha384,
+            #[cfg(feature = "ffi")]
+            oneshot_sha512,
+            #[cfg(feature = "ffi")]
+            oneshot_sha3_224,
+            #[cfg(feature = "ffi")]
+            oneshot_sha3_256,
+            #[cfg(feature = "ffi")]
+            oneshot_sha3_384,
+            #[cfg(feature = "ffi")]
+            oneshot_sha3_512,
+            #[cfg(feature = "ffi")]
+            oneshot_shake128,
+            #[cfg(feature = "ffi")]
+            oneshot_shake256,
+            #[cfg(feature = "ffi")]
+            oneshot_cshake128,
+            #[cfg(feature = "ffi")]
+            oneshot_cshake256,
+            #[cfg(feature = "ffi")]
+            oneshot_hmac_sha256,
+            #[cfg(feature = "ffi")]
+            oneshot_hmac_sha384,
+            #[cfg(feature = "ffi")]
+            oneshot_hmac_sha512,
+            #[cfg(feature = "ffi")]
+            oneshot_kmac128,
+            #[cfg(feature = "ffi")]
+            oneshot_kmac256,
             pattgen,
             syscall_filter,
             scheduler,
