@@ -47,12 +47,12 @@ impl PwrMgr {
         if regs.control.read(CONTROL::LOW_POWER_HINT) != 1 {
             // Next WFI should trigger low power entry
             // Leave the IO clock enabled as we need to get interrupts
-            regs.control.write(
-                CONTROL::LOW_POWER_HINT::SET
-                    + CONTROL::CORE_CLK_EN::CLEAR
-                    + CONTROL::IO_CLK_EN::SET
-                    + CONTROL::MAIN_PD_N::CLEAR,
-            );
+            // regs.control.write(
+            //     CONTROL::LOW_POWER_HINT::SET
+            //         + CONTROL::CORE_CLK_EN::CLEAR
+            //         + CONTROL::IO_CLK_EN::SET
+            //         + CONTROL::MAIN_PD_N::CLEAR,
+            // );
 
             // Propagate changes to slow clock domain
             regs.cfg_cdc_sync.write(CFG_CDC_SYNC::SYNC::SET);
