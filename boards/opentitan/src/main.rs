@@ -333,30 +333,6 @@ struct EarlGrey {
         >,
     >,
     pattgen: &'static capsules_extra::pattgen::PattGen<'static, lowrisc::pattgen::PattGen<'static>>,
-    #[cfg(not(feature = "test_flash_ctrl"))]
-    #[allow(clippy::type_complexity)]
-    kv_driver: &'static capsules_extra::kv_driver::KVStoreDriver<
-        'static,
-        capsules_extra::virtual_kv::VirtualKVPermissions<
-            'static,
-            capsules_extra::kv_store_permissions::KVStorePermissions<
-                'static,
-                capsules_extra::tickv_kv_store::TicKVKVStore<
-                    'static,
-                    capsules_extra::tickv::TicKVSystem<
-                        'static,
-                        capsules_core::virtualizers::virtual_flash::FlashUser<
-                            'static,
-                            earlgrey::flash_ctrl::FlashCtrl<'static>,
-                        >,
-                        capsules_extra::sip_hash::SipHasher24<'static>,
-                        2048,
-                    >,
-                    [u8; 8],
-                >,
-            >,
-        >,
-    >,
     usb: &'static capsules_extra::usb::usb_user2::UsbSyscallDriver<
         'static,
         lowrisc::usb::Usb<'static>,
@@ -449,8 +425,6 @@ impl SyscallDriverLookup for EarlGrey {
             capsules_core::spi_controller::DRIVER_NUM => f(Some(self.spi_controller)),
             capsules_core::rng::DRIVER_NUM => f(Some(self.rng)),
             capsules_extra::symmetric_encryption::aes::DRIVER_NUM => f(Some(self.aes)),
-            #[cfg(not(feature = "test_flash_ctrl"))]
-            capsules_extra::kv_driver::DRIVER_NUM => f(Some(self.kv_driver)),
             capsules_extra::info_flash::DRIVER_NUMBER => f(Some(self.info_flash)),
             capsules_extra::usb::usb_user2::DRIVER_NUM => f(Some(self.usb)),
             capsules_extra::pattgen::DRIVER_NUM => f(Some(self.pattgen)),
@@ -1304,92 +1278,6 @@ unsafe fn setup() -> (
         TICKV = Some(tickv);
     }
 
-    #[cfg(not(feature = "test_flash_ctrl"))]
-    let kv_driver = {
-        let tickv = TICKV.unwrap();
-        let kv_store = components::kv::TicKVKVStoreComponent::new(tickv).finalize(
-            components::tickv_kv_store_component_static!(
-                capsules_extra::tickv::TicKVSystem<
-                    capsules_core::virtualizers::virtual_flash::FlashUser<
-                        earlgrey::flash_ctrl::FlashCtrl,
-                    >,
-                    capsules_extra::sip_hash::SipHasher24<'static>,
-                    2048,
-                >,
-                capsules_extra::tickv::TicKVKeyType,
-            ),
-        );
-
-        let kv_store_permissions = components::kv::KVStorePermissionsComponent::new(kv_store)
-            .finalize(components::kv_store_permissions_component_static!(
-                capsules_extra::tickv_kv_store::TicKVKVStore<
-                    capsules_extra::tickv::TicKVSystem<
-                        capsules_core::virtualizers::virtual_flash::FlashUser<
-                            earlgrey::flash_ctrl::FlashCtrl,
-                        >,
-                        capsules_extra::sip_hash::SipHasher24<'static>,
-                        2048,
-                    >,
-                    capsules_extra::tickv::TicKVKeyType,
-                >
-            ));
-
-        let mux_kv = components::kv::KVPermissionsMuxComponent::new(kv_store_permissions).finalize(
-            components::kv_permissions_mux_component_static!(
-                capsules_extra::kv_store_permissions::KVStorePermissions<
-                    capsules_extra::tickv_kv_store::TicKVKVStore<
-                        capsules_extra::tickv::TicKVSystem<
-                            capsules_core::virtualizers::virtual_flash::FlashUser<
-                                earlgrey::flash_ctrl::FlashCtrl,
-                            >,
-                            capsules_extra::sip_hash::SipHasher24<'static>,
-                            2048,
-                        >,
-                        capsules_extra::tickv::TicKVKeyType,
-                    >,
-                >
-            ),
-        );
-
-        let virtual_kv_driver = components::kv::VirtualKVPermissionsComponent::new(mux_kv)
-            .finalize(components::virtual_kv_permissions_component_static!(
-                capsules_extra::kv_store_permissions::KVStorePermissions<
-                    capsules_extra::tickv_kv_store::TicKVKVStore<
-                        capsules_extra::tickv::TicKVSystem<
-                            capsules_core::virtualizers::virtual_flash::FlashUser<
-                                earlgrey::flash_ctrl::FlashCtrl,
-                            >,
-                            capsules_extra::sip_hash::SipHasher24<'static>,
-                            2048,
-                        >,
-                        capsules_extra::tickv::TicKVKeyType,
-                    >,
-                >
-            ));
-
-        components::kv::KVDriverComponent::new(
-            virtual_kv_driver,
-            board_kernel,
-            capsules_extra::kv_driver::DRIVER_NUM,
-        )
-        .finalize(components::kv_driver_component_static!(
-            capsules_extra::virtual_kv::VirtualKVPermissions<
-                capsules_extra::kv_store_permissions::KVStorePermissions<
-                    capsules_extra::tickv_kv_store::TicKVKVStore<
-                        capsules_extra::tickv::TicKVSystem<
-                            capsules_core::virtualizers::virtual_flash::FlashUser<
-                                earlgrey::flash_ctrl::FlashCtrl,
-                            >,
-                            capsules_extra::sip_hash::SipHasher24<'static>,
-                            2048,
-                        >,
-                        capsules_extra::tickv::TicKVKeyType,
-                    >,
-                >,
-            >
-        ))
-    };
-
     // Info flash multiplexer user endpoint
     let virtual_info_flash = components::flash::InfoFlashUserComponent::new(mux_info_flash)
         .finalize(components::info_flash_user_component_static!(
@@ -1790,8 +1678,6 @@ unsafe fn setup() -> (
             spi_controller,
             aes,
             usb,
-            #[cfg(not(feature = "test_flash_ctrl"))]
-            kv_driver,
             #[cfg(feature = "ffi")]
             oneshot_sha256,
             #[cfg(feature = "ffi")]
