@@ -32,7 +32,24 @@ pub struct AonTimer<'a> {
     registers: StaticRef<AonTimerRegisters>,
     wakeup_notification: OptionalCell<&'a dyn Fn()>,
     bark_notification: OptionalCell<&'a dyn Fn()>,
-    aon_clk_freq: OptionalCell<u32>, //Hz, this differs for FPGA/Verilator
+    // Making this field a `u64` was the source of a very gnarly alignment bug.
+    //
+    // A `u64` and a `[u32; 2]` are the same size, but they have different
+    // alignment requirements. A `u64` is guaranteed to be 8-byte aligned,
+    // whereas a `[u32; 2]` is only guaranteed to be 4-byte aligned. Using a
+    // `u64` caused the 8-byte alignment requirement to be propagated to all the
+    // fields of `AonTimer`, including `registers`.
+    //
+    // Currently, Tock cannot cope with `self.registers` being forced to have
+    // 8-byte alignment. It causes the ELF to fail to account for the 4 bytes of
+    // padding inserted at the beginning of the `.relocate` section of the
+    // binary, causing undefined behavior because `self.registers` is actually
+    // loaded at an address 4 bytes higher than `rustc` tells the binary it is.
+    //
+    // TODO: this is likely a bug with a linker script or one of the static
+    // initialization types. This type should be able to be reverted to a `u64`
+    // if the root cause is found.
+    aon_clk_freq: OptionalCell<[u32; 2]>, //Hz, this differs for FPGA/Verilator
 }
 
 impl<'a> AonTimer<'a> {
@@ -46,8 +63,9 @@ impl<'a> AonTimer<'a> {
         }
     }
 
-    pub fn set_clk_freq(&self, freq: u32) {
-        self.aon_clk_freq.insert(Some(freq));
+    pub fn set_clk_freq(&self, freq: u64) {
+        self.aon_clk_freq
+            .insert(Some([(freq & 0xFFFF_FFFF) as u32, (freq >> 32) as u32]));
     }
 
     fn wakeup_set_prescaler_and_enable(&self, prescaler: u32) -> Result<(), ErrorCode> {
@@ -98,8 +116,8 @@ impl<'a> AonTimer<'a> {
     pub fn get_ms_to_wkup(&self) -> Result<u64, ErrorCode> {
         let wkup_count_lo = self.registers.wkup_count_lo.read(WKUP_COUNT_LO::COUNT_LO);
         let wkup_count_hi = self.registers.wkup_count_hi.read(WKUP_COUNT_HI::COUNT_HI);
-        let wkup_count = u64::from(wkup_count_lo)
-            + (u64::from(wkup_count_hi) << u32::BITS).saturating_mul(u64::from(
+        let wkup_count = (u64::from(wkup_count_lo) + (u64::from(wkup_count_hi) << u32::BITS))
+            .saturating_mul(u64::from(
                 self.registers.wkup_ctrl.read(WKUP_CTRL::PRESCALER) + 1,
             ));
         let wkup_thold_lo = self
@@ -209,7 +227,7 @@ impl<'a> AonTimer<'a> {
     fn ms_to_cycles(&self, ms: u64) -> Result<u64, ErrorCode> {
         // 250kHZ CW310 or 125kHz Verilator (as specified in chip config)
         self.aon_clk_freq
-            .map(|freq| ms.saturating_mul(u64::from(freq)).saturating_div(1000))
+            .map(|freq| ms.saturating_mul(parse_freq(freq)).saturating_div(1000))
             .ok_or(ErrorCode::FAIL)
     }
 
@@ -220,7 +238,7 @@ impl<'a> AonTimer<'a> {
     fn cycles_to_ms(&self, cycles: u64) -> Result<u64, ErrorCode> {
         // 250kHZ CW310 or 125kHz Verilator (as specified in chip config)
         self.aon_clk_freq
-            .map(|freq| cycles.saturating_mul(1000).saturating_div(u64::from(freq)))
+            .map(|freq| cycles.saturating_mul(1000).saturating_div(parse_freq(freq)))
             .ok_or(ErrorCode::FAIL)
     }
 
@@ -509,4 +527,8 @@ impl<'a> platform::watchdog::WatchDog for AonTimer<'a> {
     fn resume(&self) {
         self.wdog_resume();
     }
+}
+
+fn parse_freq(arr: [u32; 2]) -> u64 {
+    (arr[0] as u64) | ((arr[1] as u64) << 32)
 }
