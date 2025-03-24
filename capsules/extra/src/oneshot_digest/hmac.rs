@@ -132,7 +132,6 @@ macro_rules! oneshot_hmac {
                 _data2: usize,
                 calling_process: ProcessId,
             ) -> CommandReturn {
-                kernel::debug!("in hmac: command = {}", command_num);
                 CommandReturn::from(match command_num {
                     command::EXISTS => Ok(()),
                     command::HMAC => self.command_hmac(calling_process, data1),
