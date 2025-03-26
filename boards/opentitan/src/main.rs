@@ -579,7 +579,7 @@ fn get_flash_memory_protection_configuration() -> flash_ctrl::MemoryProtectionCo
 
         base_memory_protection_config
             .enable_and_configure_data_region(
-                flash_ctrl::DataMemoryProtectionRegionIndex::Index0,
+                flash_ctrl::DataMemoryProtectionRegionIndex::Index2,
                 memory_protection_page0_base,
                 MEMORY_PROTECTION_PAGE0_SIZE,
             )

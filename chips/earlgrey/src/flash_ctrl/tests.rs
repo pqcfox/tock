@@ -2199,7 +2199,7 @@ pub fn convert_flash_slice_to_page_position_range(
     Ok(RangeInclusive::new(start_page_number, end_page_number))
 }
 
-fn test_memory_protection_region0(
+fn test_memory_protection_region(
     flash: &FlashCtrl<'_>,
     memory_protection_region_index: DataMemoryProtectionRegionIndex,
 ) {
@@ -2207,35 +2207,35 @@ fn test_memory_protection_region0(
 
     assert!(
         flash.is_data_region_read_enabled(memory_protection_region_index),
-        "Memory protection region 0 must have read enabled. This can be either an implementation bug or wrong memory protection configuration in board file."
+        "Memory protection region 2 must have read enabled. This can be either an implementation bug or wrong memory protection configuration in board file."
     );
 
-    // assert!(
-    //     flash.is_data_region_write_enabled(memory_protection_region_index),
-    //     "Memory protection region 0 must have write enabled. This can be either an implementation bug or wrong memory protection configuration in board file."
-    // );
+    assert!(
+        flash.is_data_region_write_enabled(memory_protection_region_index),
+        "Memory protection region 2 must have write enabled. This can be either an implementation bug or wrong memory protection configuration in board file."
+    );
 
-    // assert!(
-    //     flash.is_data_region_erase_enabled(memory_protection_region_index),
-    //     "Memory protection region 0 must have erase enabled. This can be either an implementation bug or wrong memory protection configuration in board file."
-    // );
+    assert!(
+        flash.is_data_region_erase_enabled(memory_protection_region_index),
+        "Memory protection region 2 must have erase enabled. This can be either an implementation bug or wrong memory protection configuration in board file."
+    );
 
-    // assert!(s
-    //     !flash.is_data_region_scramble_enabled(memory_protection_region_index),
-    //     "Memory protection region 0 must have scramble disabled. This can be either an implementation bug or wrong memory protection configuration in board file."
-    // );
+    assert!(
+        !flash.is_data_region_scramble_enabled(memory_protection_region_index),
+        "Memory protection region 2 must have scramble disabled. This can be either an implementation bug or wrong memory protection configuration in board file."
+    );
 
-    // assert!(
-    //     !flash.is_data_region_ecc_enabled(memory_protection_region_index),
-    //     "Memory protection region 0 must have ecc disabled. This can be either an implementation bug or wrong memory protection configuration in board file."
-    // );
+    assert!(
+        !flash.is_data_region_ecc_enabled(memory_protection_region_index),
+        "Memory protection region 2 must have ecc disabled. This can be either an implementation bug or wrong memory protection configuration in board file."
+    );
 
     assert!(
         flash.is_data_region_high_endurance_enabled(memory_protection_region_index),
-        "Memory protection region 0 must have high_endurance enabled. This can be either an implementation bug or wrong memory protection configuration in board file."
+        "Memory protection region 2 must have high_endurance enabled. This can be either an implementation bug or wrong memory protection configuration in board file."
     );
 
-    print_test_footer("Memory protection region 0 configuration");
+    print_test_footer("Memory protection region 2 configuration");
 }
 
 pub fn run_all(
@@ -2253,7 +2253,7 @@ pub fn run_all(
     super::flash_address::tests::run_all();
     super::chunk::tests::run_all();
 
-    test_memory_protection_region0(flash, DataMemoryProtectionRegionIndex::Index0);
+    test_memory_protection_region(flash, DataMemoryProtectionRegionIndex::Index2);
     flash.set_client(test_client);
     flash.set_info_client(test_client);
     test_client.execute_next_test();
