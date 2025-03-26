@@ -374,14 +374,18 @@ impl<'a, U: hil::usb::UsbController<'a>, A: 'a + Alarm<'a>> hil::usb::Client<'a>
 
         // Setup buffers for IN and OUT data transfer.
         self.controller()
-            .endpoint_set_in_buffer(ENDPOINT_IN_NUM, self.buffer(ENDPOINT_IN_NUM));
+            .endpoint_set_in_buffer(ENDPOINT_IN_NUM, self.buffer(ENDPOINT_IN_NUM))
+            .unwrap();
         self.controller()
-            .endpoint_in_enable(TransferType::Bulk, ENDPOINT_IN_NUM);
+            .endpoint_in_enable(TransferType::Bulk, ENDPOINT_IN_NUM)
+            .unwrap();
 
         self.controller()
-            .endpoint_set_out_buffer(ENDPOINT_OUT_NUM, self.buffer(ENDPOINT_OUT_NUM));
+            .endpoint_set_out_buffer(ENDPOINT_OUT_NUM, self.buffer(ENDPOINT_OUT_NUM))
+            .unwrap();
         self.controller()
-            .endpoint_out_enable(TransferType::Bulk, ENDPOINT_OUT_NUM);
+            .endpoint_out_enable(TransferType::Bulk, ENDPOINT_OUT_NUM)
+            .unwrap();
 
         self.state.set(State::Enabled);
 
@@ -400,6 +404,16 @@ impl<'a, U: hil::usb::UsbController<'a>, A: 'a + Alarm<'a>> hil::usb::Client<'a>
         // We take a bus reset to mean the enumeration has finished.
         self.state.set(State::Enumerated);
     }
+
+    fn link_suspended(&'a self) {}
+
+    fn link_resume(&'a self) {}
+
+    fn disconnected(&'a self) {}
+
+    fn host_lost(&'a self) {}
+
+    fn bus_powered(&'a self) {}
 
     /// Handle a Control Setup transaction.
     ///
@@ -628,23 +642,32 @@ impl<'a, U: hil::usb::UsbController<'a>, A: 'a + Alarm<'a>> hil::usb::Client<'a>
         }
     }
 
-    fn packet_transmitted(&'a self, _endpoint: usize) {
+    fn packet_transmitted(&'a self, _endpoint: usize, result: Result<(), ()>) {
         // Check if more to send.
         self.tx_buffer.take().map(|tx_buf| {
             // Check if we have any bytes to send.
             let remaining = self.tx_len.get() - self.tx_offset.get();
-            if remaining > 0 {
-                // We do, so ask to send again.
-                self.tx_buffer.replace(tx_buf);
-                self.controller().endpoint_resume_in(ENDPOINT_IN_NUM);
-            } else {
-                // We don't have anything to send, so that means we are
-                // ok to signal the callback.
-
-                // Signal the callback and pass back the TX buffer.
+            // Check for any errors
+            if let Err(()) = result {
                 self.tx_client.map(move |tx_client| {
-                    tx_client.transmitted_buffer(tx_buf, self.tx_len.get(), Ok(()))
+                    tx_client.transmitted_buffer(tx_buf, remaining, Err(ErrorCode::FAIL));
                 });
+            } else {
+                if remaining > 0 {
+                    // We do, so ask to send again.
+                    self.tx_buffer.replace(tx_buf);
+                    self.controller()
+                        .endpoint_resume_in(ENDPOINT_IN_NUM)
+                        .unwrap();
+                } else {
+                    // We don't have anything to send, so that means we are
+                    // ok to signal the callback.
+
+                    // Signal the callback and pass back the TX buffer.
+                    self.tx_client.map(move |tx_client| {
+                        tx_client.transmitted_buffer(tx_buf, self.tx_len.get(), Ok(()))
+                    });
+                }
             }
         });
     }
@@ -688,7 +711,9 @@ impl<'a, U: hil::usb::UsbController<'a>, A: 'a + Alarm<'a>> uart::Transmit<'a>
             if self.state.get() == State::Connected {
                 // Then signal to the lower layer that we are ready to do a TX
                 // by putting data in the IN endpoint.
-                self.controller().endpoint_resume_in(ENDPOINT_IN_NUM);
+                self.controller()
+                    .endpoint_resume_in(ENDPOINT_IN_NUM)
+                    .unwrap();
                 Ok(())
             } else if self.boot_period.get() {
                 // indicate success because we will try to send it once a host connects
@@ -766,7 +791,9 @@ impl<'a, U: hil::usb::UsbController<'a>, A: 'a + Alarm<'a>> AlarmClient for CdcA
         if self.state.get() == State::ConnectingDelay {
             self.state.set(State::Connected);
             if self.tx_buffer.is_some() {
-                self.controller().endpoint_resume_in(ENDPOINT_IN_NUM);
+                self.controller()
+                    .endpoint_resume_in(ENDPOINT_IN_NUM)
+                    .unwrap();
             }
         } else {
             // no client has connected, but we do not want to block indefinitely, so go ahead

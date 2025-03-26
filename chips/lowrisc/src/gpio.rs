@@ -4,83 +4,22 @@
 
 //! General Purpose Input/Output driver.
 
+use crate::registers::gpio_regs::{
+    GpioRegisters, DATA_IN, DIRECT_OE, DIRECT_OUT, INTR, MASKED_OE_LOWER, MASKED_OE_UPPER,
+    MASKED_OUT_LOWER, MASKED_OUT_UPPER,
+};
 use kernel::hil::gpio;
 use kernel::utilities::cells::OptionalCell;
 use kernel::utilities::registers::interfaces::{ReadWriteable, Readable, Writeable};
-use kernel::utilities::registers::{
-    register_bitfields, register_structs, Field, ReadOnly, ReadWrite, WriteOnly,
-};
+use kernel::utilities::registers::{Field, ReadWrite};
 use kernel::utilities::StaticRef;
 
-register_structs! {
-    pub GpioRegisters {
-        (0x00 => intr_state: ReadWrite<u32, pins::Register>),
-        (0x04 => intr_enable: ReadWrite<u32, pins::Register>),
-        (0x08 => intr_test: WriteOnly<u32, pins::Register>),
-        (0x0c => alert_test: ReadOnly<u32>),
-        (0x10 => data_in: ReadOnly<u32, pins::Register>),
-        (0x14 => direct_out: ReadWrite<u32, pins::Register>),
-        (0x18 => masked_out_lower: ReadWrite<u32, mask_half::Register>),
-        (0x1c => masked_out_upper: ReadWrite<u32, mask_half::Register>),
-        (0x20 => direct_oe: ReadWrite<u32, pins::Register>),
-        (0x24 => masked_oe_lower: ReadWrite<u32, mask_half::Register>),
-        (0x28 => masked_oe_upper: ReadWrite<u32, mask_half::Register>),
-        (0x2c => intr_ctrl_en_rising: ReadWrite<u32, pins::Register>),
-        (0x30 => intr_ctrl_en_falling: ReadWrite<u32, pins::Register>),
-        (0x34 => intr_ctrl_en_lvlhigh: ReadWrite<u32, pins::Register>),
-        (0x38 => intr_ctrl_en_lvllow: ReadWrite<u32, pins::Register>),
-        (0x3c => ctrl_en_input_filter: ReadWrite<u32, pins::Register>),
-        (0x40 => @END),
-    }
-}
-
-register_bitfields![u32,
-    pub pins [
-        pin0 0,
-        pin1 1,
-        pin2 2,
-        pin3 3,
-        pin4 4,
-        pin5 5,
-        pin6 6,
-        pin7 7,
-        pin8 8,
-        pin9 9,
-        pin10 10,
-        pin11 11,
-        pin12 12,
-        pin13 13,
-        pin14 14,
-        pin15 15,
-        pin16 16,
-        pin17 17,
-        pin18 18,
-        pin19 19,
-        pin20 20,
-        pin21 21,
-        pin22 22,
-        pin23 23,
-        pin24 24,
-        pin25 25,
-        pin26 26,
-        pin27 27,
-        pin28 28,
-        pin29 29,
-        pin30 30,
-        pin31 31
-    ],
-    mask_half [
-        data OFFSET(0) NUMBITS(16) [],
-        mask OFFSET(16) NUMBITS(16) []
-    ]
-];
-
-pub type GpioBitfield = Field<u32, pins::Register>;
+pub type GpioBitfield = Field<u32, INTR::Register>;
 
 pub struct GpioPin<'a, PAD> {
     gpio_registers: StaticRef<GpioRegisters>,
     padctl: PAD,
-    pin: Field<u32, pins::Register>,
+    pin: u8,
     client: OptionalCell<&'a dyn gpio::Client>,
 }
 
@@ -88,7 +27,7 @@ impl<'a, PAD> GpioPin<'a, PAD> {
     pub const fn new(
         gpio_base: StaticRef<GpioRegisters>,
         padctl: PAD,
-        pin: Field<u32, pins::Register>,
+        pin: u8,
     ) -> GpioPin<'a, PAD> {
         GpioPin {
             gpio_registers: gpio_base,
@@ -99,26 +38,52 @@ impl<'a, PAD> GpioPin<'a, PAD> {
     }
 
     #[inline(always)]
-    fn half_set(
+    fn oe_half_set(
         val: bool,
-        field: Field<u32, pins::Register>,
-        lower: &ReadWrite<u32, mask_half::Register>,
-        upper: &ReadWrite<u32, mask_half::Register>,
+        field: Field<u32, INTR::Register>,
+        lower: &ReadWrite<u32, MASKED_OE_LOWER::Register>,
+        upper: &ReadWrite<u32, MASKED_OE_UPPER::Register>,
     ) {
         let shift = field.shift;
         let bit = u32::from(val);
         if shift < 16 {
-            lower.write(mask_half::data.val(bit << shift) + mask_half::mask.val(1u32 << shift));
+            lower.write(
+                MASKED_OE_LOWER::DATA.val(bit << shift) + MASKED_OE_LOWER::MASK.val(1u32 << shift),
+            );
         } else {
             let upper_shift = shift - 16;
             upper.write(
-                mask_half::data.val(bit << upper_shift) + mask_half::mask.val(1u32 << upper_shift),
+                MASKED_OE_UPPER::DATA.val(bit << upper_shift)
+                    + MASKED_OE_UPPER::MASK.val(1u32 << upper_shift),
+            );
+        }
+    }
+
+    #[inline(always)]
+    fn out_half_set(
+        val: bool,
+        field: Field<u32, INTR::Register>,
+        lower: &ReadWrite<u32, MASKED_OUT_LOWER::Register>,
+        upper: &ReadWrite<u32, MASKED_OUT_UPPER::Register>,
+    ) {
+        let shift = field.shift;
+        let bit = u32::from(val);
+        if shift < 16 {
+            lower.write(
+                MASKED_OUT_LOWER::DATA.val(bit << shift)
+                    + MASKED_OUT_LOWER::MASK.val(1u32 << shift),
+            );
+        } else {
+            let upper_shift = shift - 16;
+            upper.write(
+                MASKED_OUT_UPPER::DATA.val(bit << upper_shift)
+                    + MASKED_OUT_UPPER::MASK.val(1u32 << upper_shift),
             );
         }
     }
 
     pub fn handle_interrupt(&self) {
-        let pin = self.pin;
+        let pin = intr_pin(self.pin);
 
         if self.gpio_registers.intr_state.is_set(pin) {
             self.gpio_registers.intr_state.modify(pin.val(1));
@@ -133,7 +98,9 @@ impl<PAD: gpio::Configure> gpio::Configure for GpioPin<'_, PAD> {
     fn configuration(&self) -> gpio::Configuration {
         match (
             self.padctl.configuration(),
-            self.gpio_registers.direct_oe.is_set(self.pin),
+            self.gpio_registers
+                .direct_oe
+                .is_set(direct_oe_pin(self.pin)),
         ) {
             (gpio::Configuration::InputOutput, true) => gpio::Configuration::InputOutput,
             (gpio::Configuration::InputOutput, false) => gpio::Configuration::Input,
@@ -165,9 +132,9 @@ impl<PAD: gpio::Configure> gpio::Configure for GpioPin<'_, PAD> {
     fn make_output(&self) -> gpio::Configuration {
         // Re-connect in case we make output after switching from LowPower state.
         if let gpio::Configuration::InputOutput = self.padctl.make_output() {
-            Self::half_set(
+            Self::oe_half_set(
                 true,
-                self.pin,
+                intr_pin(self.pin),
                 &self.gpio_registers.masked_oe_lower,
                 &self.gpio_registers.masked_oe_upper,
             );
@@ -176,9 +143,9 @@ impl<PAD: gpio::Configure> gpio::Configure for GpioPin<'_, PAD> {
     }
 
     fn disable_output(&self) -> gpio::Configuration {
-        Self::half_set(
+        Self::oe_half_set(
             false,
-            self.pin,
+            intr_pin(self.pin),
             &self.gpio_registers.masked_oe_lower,
             &self.gpio_registers.masked_oe_upper,
         );
@@ -198,18 +165,18 @@ impl<PAD: gpio::Configure> gpio::Configure for GpioPin<'_, PAD> {
 
 impl<PAD> gpio::Input for GpioPin<'_, PAD> {
     fn read(&self) -> bool {
-        self.gpio_registers.data_in.is_set(self.pin)
+        self.gpio_registers.data_in.read(DATA_IN::DATA_IN) & (1 << self.pin) != 0
     }
 }
 
 impl<PAD> gpio::Output for GpioPin<'_, PAD> {
     fn toggle(&self) -> bool {
-        let pin = self.pin;
-        let new_state = !self.gpio_registers.direct_out.is_set(pin);
+        let new_state =
+            self.gpio_registers.direct_out.read(DIRECT_OUT::DIRECT_OUT) & (1 << self.pin) == 0;
 
-        Self::half_set(
+        Self::out_half_set(
             new_state,
-            self.pin,
+            intr_pin(self.pin),
             &self.gpio_registers.masked_out_lower,
             &self.gpio_registers.masked_out_upper,
         );
@@ -217,18 +184,18 @@ impl<PAD> gpio::Output for GpioPin<'_, PAD> {
     }
 
     fn set(&self) {
-        Self::half_set(
+        Self::out_half_set(
             true,
-            self.pin,
+            intr_pin(self.pin),
             &self.gpio_registers.masked_out_lower,
             &self.gpio_registers.masked_out_upper,
         );
     }
 
     fn clear(&self) {
-        Self::half_set(
+        Self::out_half_set(
             false,
-            self.pin,
+            intr_pin(self.pin),
             &self.gpio_registers.masked_out_lower,
             &self.gpio_registers.masked_out_upper,
         );
@@ -241,7 +208,7 @@ impl<'a, PAD> gpio::Interrupt<'a> for GpioPin<'a, PAD> {
     }
 
     fn enable_interrupts(&self, mode: gpio::InterruptEdge) {
-        let pin = self.pin;
+        let pin = intr_pin(self.pin);
 
         match mode {
             gpio::InterruptEdge::RisingEdge => {
@@ -262,7 +229,7 @@ impl<'a, PAD> gpio::Interrupt<'a> for GpioPin<'a, PAD> {
     }
 
     fn disable_interrupts(&self) {
-        let pin = self.pin;
+        let pin = intr_pin(self.pin);
 
         self.gpio_registers.intr_enable.modify(pin.val(0));
         // Clear any pending interrupt
@@ -270,6 +237,92 @@ impl<'a, PAD> gpio::Interrupt<'a> for GpioPin<'a, PAD> {
     }
 
     fn is_pending(&self) -> bool {
-        self.gpio_registers.intr_state.is_set(self.pin)
+        self.gpio_registers.intr_state.is_set(intr_pin(self.pin))
+    }
+}
+
+/// Returns the GPIO register for the given pin ID.
+///
+/// # Panics
+///
+/// If the pin ID is out of bounds.
+const fn intr_pin(num: u8) -> Field<u32, INTR::Register> {
+    match num {
+        0 => INTR::GPIO_0,
+        1 => INTR::GPIO_1,
+        2 => INTR::GPIO_2,
+        3 => INTR::GPIO_3,
+        4 => INTR::GPIO_4,
+        5 => INTR::GPIO_5,
+        6 => INTR::GPIO_6,
+        7 => INTR::GPIO_7,
+        8 => INTR::GPIO_8,
+        9 => INTR::GPIO_9,
+        10 => INTR::GPIO_10,
+        11 => INTR::GPIO_11,
+        12 => INTR::GPIO_12,
+        13 => INTR::GPIO_13,
+        14 => INTR::GPIO_14,
+        15 => INTR::GPIO_15,
+        16 => INTR::GPIO_16,
+        17 => INTR::GPIO_17,
+        18 => INTR::GPIO_18,
+        19 => INTR::GPIO_19,
+        20 => INTR::GPIO_20,
+        21 => INTR::GPIO_21,
+        22 => INTR::GPIO_22,
+        23 => INTR::GPIO_23,
+        24 => INTR::GPIO_24,
+        25 => INTR::GPIO_25,
+        26 => INTR::GPIO_26,
+        27 => INTR::GPIO_27,
+        28 => INTR::GPIO_28,
+        29 => INTR::GPIO_29,
+        30 => INTR::GPIO_30,
+        31 => INTR::GPIO_31,
+        _ => panic!("GPIO pin ID out of bounds"),
+    }
+}
+
+/// Returns the direct OE register for the given pin ID.
+///
+/// # Panics
+///
+/// If the pin ID is out of bounds.
+const fn direct_oe_pin(num: u8) -> Field<u32, DIRECT_OE::Register> {
+    match num {
+        0 => DIRECT_OE::DIRECT_OE_0,
+        1 => DIRECT_OE::DIRECT_OE_1,
+        2 => DIRECT_OE::DIRECT_OE_2,
+        3 => DIRECT_OE::DIRECT_OE_3,
+        4 => DIRECT_OE::DIRECT_OE_4,
+        5 => DIRECT_OE::DIRECT_OE_5,
+        6 => DIRECT_OE::DIRECT_OE_6,
+        7 => DIRECT_OE::DIRECT_OE_7,
+        8 => DIRECT_OE::DIRECT_OE_8,
+        9 => DIRECT_OE::DIRECT_OE_9,
+        10 => DIRECT_OE::DIRECT_OE_10,
+        11 => DIRECT_OE::DIRECT_OE_11,
+        12 => DIRECT_OE::DIRECT_OE_12,
+        13 => DIRECT_OE::DIRECT_OE_13,
+        14 => DIRECT_OE::DIRECT_OE_14,
+        15 => DIRECT_OE::DIRECT_OE_15,
+        16 => DIRECT_OE::DIRECT_OE_16,
+        17 => DIRECT_OE::DIRECT_OE_17,
+        18 => DIRECT_OE::DIRECT_OE_18,
+        19 => DIRECT_OE::DIRECT_OE_19,
+        20 => DIRECT_OE::DIRECT_OE_20,
+        21 => DIRECT_OE::DIRECT_OE_21,
+        22 => DIRECT_OE::DIRECT_OE_22,
+        23 => DIRECT_OE::DIRECT_OE_23,
+        24 => DIRECT_OE::DIRECT_OE_24,
+        25 => DIRECT_OE::DIRECT_OE_25,
+        26 => DIRECT_OE::DIRECT_OE_26,
+        27 => DIRECT_OE::DIRECT_OE_27,
+        28 => DIRECT_OE::DIRECT_OE_28,
+        29 => DIRECT_OE::DIRECT_OE_29,
+        30 => DIRECT_OE::DIRECT_OE_30,
+        31 => DIRECT_OE::DIRECT_OE_31,
+        _ => panic!("GPIO pin ID out of bounds"),
     }
 }

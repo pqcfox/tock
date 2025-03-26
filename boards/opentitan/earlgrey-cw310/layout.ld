@@ -1,15 +1,29 @@
+/* Copyright lowRISC contributors (OpenTitan project). */
+/* Licensed under the Apache License, Version 2.0, see LICENSE for details. */
+/* SPDX-License-Identifier: Apache-2.0 */
+
 /* Licensed under the Apache License, Version 2.0 or the MIT License. */
 /* SPDX-License-Identifier: Apache-2.0 OR MIT                         */
 /* Copyright Tock Contributors 2023.                                  */
 
 MEMORY
 {
-  rom   (rx)  : ORIGIN = 0x20000000, LENGTH = 0x30000
-  /* Support up to 0x2009_0000 for apps
-   * and 0x2009_0000 to 0x2010_0000 is for flash storage.
+  rom_ext(r)  : ORIGIN = 0x20000000, LENGTH = 0x10000
+  /* rom is the region the kernel image occupies (a Tock convention required by
+   * tock/boards/kernel_layout.ld) -- it is not the region the chip's ROM exists
+   * in.
    */
-  prog  (rx)  : ORIGIN = 0x20030000, LENGTH = 0x60000
-  fs (r)      : ORIGIN = 0x20090000, LENGTH = 0x70000
+  rom   (rx)  : ORIGIN = 0x20010000, LENGTH = 0x30000
+  /* Support up to 0x200a_0000 for apps
+   * and 0x200a_0000 to 0x2010_0000 is for flash storage.
+   */
+  prog  (rx)  : ORIGIN = 0x20040000, LENGTH = 0x60000
+  fs (r)      : ORIGIN = 0x200a0000, LENGTH = 0x60000
+
+  /* Retention sram that survives reset operations */
+  rram_creator(r) : ORIGIN = 0x40600000, LENGTH = 0x800
+  rram_owner  (wx)  : ORIGIN = 0x40600800, LENGTH = 0x800
+
   /* The first 0x650 bytes of RAM are reserved for the boot
    * ROM, so we have to ignore that space.
    * See https://github.com/lowRISC/opentitan/blob/master/sw/device/silicon_creator/lib/base/static_critical.ld
@@ -24,11 +38,16 @@ SECTIONS {
      * that we can use a single NAPOT region. The .text section will
      * be made executable by a separate PMP region.
      */
-    _sflash = ORIGIN(rom);
+    _sflash = ORIGIN(rom_ext);
+    _skernel = ORIGIN(rom);
     _eflash = ORIGIN(fs) + LENGTH(fs);
 
     _ssram  = ORIGIN(ram) - 0x650;
     _esram  = ORIGIN(ram) + LENGTH(ram);
+
+
+    .rram_creator (NOLOAD): {} > rram_creator
+    .rram_owner   (NOLOAD): {} > rram_owner
 
     .manifest ORIGIN(rom):
     {
@@ -41,10 +60,10 @@ SECTIONS {
         . += 4;   /* usage_constraints.manuf_state_owner */
         . += 4;   /* usage_constraints.life_cycle_state */
         . += 384; /* rsa_modulus */
-        . += 4;   /* address_translation */
+        LONG(0x1d4); /* . += 4;   /* address_translation (HardenedFalse) */
         . += 4;   /* identifier */
-        . += 4;   /* manifest_version */
-        . += 4;   /* signed_region_end */
+        LONG(0x6c47); /* . += 4; manifest_version.minor */
+        LONG(0x71c3); /* . += 4; manifest_version.major */
         . += 4;   /* length */
         . += 4;   /* version_major */
         . += 4;   /* version_minor */
@@ -52,8 +71,8 @@ SECTIONS {
         . += 8;   /* timestamp */
         . += 32;  /* binding_value */
         . += 4;   /* max_key_version */
-        . += 4;   /* code_start */
-        . += 4;   /* code_end */
+        LONG(_stext - ORIGIN(rom)); /* . += 4;   /* code_start */
+        LONG(_etext - ORIGIN(rom)); /* . += 4;   /* code_end */
         LONG(_stext - ORIGIN(rom)); /* . = . + 4; entry_point */
         /* manifest extension table */
         /* see: sw/device/silicon_creator/lib/base/chip.h */

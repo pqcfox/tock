@@ -15,14 +15,18 @@ QEMU_ENTRY_POINT=0x20000400
 # earlgrey_es branch. earlgrey_es is what is being taped out in the first
 # Earlgrey chip.
 OPENTITAN_SUPPORTED_SHA := edf5e35f5d50a5377641c90a315109a351de7635
-
+# Disable virtual function elimination
+VFUNC_ELIM=1
+FPGA_FLAGS := --features=fpga,sival
 
 include ../../Makefile.common
 
 # Pass OpenTitan board configuration option in `BOARD_CONFIGURATION` through
 # Cargo `--features`. Please see `Cargo.toml` for available options.
 ifneq ($(BOARD_CONFIGURATION),)
-	CARGO_FLAGS = --no-default-features --features=$(BOARD_CONFIGURATION)
+	CARGO_FLAGS_TOCK += --no-default-features --features=$(BOARD_CONFIGURATION)
+else
+	FPGA_FLAGS += --no-default-features
 endif
 
 .PHONY: check
@@ -38,6 +42,10 @@ $(TARGET_PATH)/release/$(PLATFORM):
 $(TARGET_PATH)/debug/$(PLATFORM):
 	$(Q)$(CARGO) build $(VERBOSE_FLAGS) $(CARGO_FLAGS)
 	$(Q)$(SIZE) $(SIZE_FLAGS) $@
+
+# Build test crates with the `panic = "abort"` strategy. Tests use `unwind` by
+# default which causes incompatability with `core` built via `-Zbuild-std`.
+CARGO_FLAGS_TOCK += -Zpanic-abort-tests
 
 .PHONY: ot-check
 ifneq ($(OPENTITAN_TREE),)
@@ -65,8 +73,11 @@ endif
 .PHONY: install
 install: flash
 
-qemu: $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/$(PLATFORM).elf
-	$(QEMU) -M opentitan -kernel $^ -nographic -serial mon:stdio -global driver=riscv.lowrisc.ibex.soc,property=resetvec,value=${QEMU_ENTRY_POINT}
+qemu:
+	$(error '`make qemu` has been renamed to `make qemu-rom-only`. QEMU is currently supported with the test ROM only.')
+
+qemu-rom-only:
+	$(Q)$(MAKE) -C ../$(PLATFORM)-rom-only qemu
 
 qemu-gdb: $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/$(PLATFORM).elf
 	$(QEMU) -s -S -M opentitan -kernel $^ -nographic -serial mon:stdio -global driver=riscv.lowrisc.ibex.soc,property=resetvec,value=${QEMU_ENTRY_POINT}
@@ -77,14 +88,30 @@ qemu-app: $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/$(PLATFORM).elf
 qemu-app-gdb : $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/$(PLATFORM).elf
 	$(QEMU) -s -S -M opentitan -kernel $^ -device loader,file=$(APP),addr=0x20030000 -nographic -serial mon:stdio -global driver=riscv.lowrisc.ibex.soc,property=resetvec,value=${QEMU_ENTRY_POINT}
 
-flash: $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/$(PLATFORM).bin
-	$(OPENTITAN_TREE)/bazel-bin/sw/host/opentitantool/opentitantool.runfiles/lowrisc_opentitan/sw/host/opentitantool/opentitantool --interface=cw310 bootstrap $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/$(PLATFORM).bin
+.PHONY: fpga
+fpga: CARGO_FLAGS_TOCK += $(FPGA_FLAGS)
+fpga: $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/$(PLATFORM).bin
 
-flash-app: $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/$(PLATFORM).elf
-	$(RISC_PREFIX)-objcopy --set-section-flags .apps=LOAD,ALLOC $^ $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/$(PLATFORM)-app.elf
-	$(RISC_PREFIX)-objcopy --update-section .apps=$(APP) $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/$(PLATFORM)-app.elf
+.PHONY: fpga-app
+fpga-app: CARGO_FLAGS_TOCK += $(FPGA_FLAGS)
+fpga-app: $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/$(PLATFORM).elf
+	$(RISC_PREFIX)-objcopy --update-section .apps=$(APP) $^ $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/$(PLATFORM)-app.elf
 	$(RISC_PREFIX)-objcopy --output-target=binary $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/$(PLATFORM)-app.elf $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/$(PLATFORM)-app.bin
-	$(OPENTITAN_TREE)/bazel-bin/sw/host/opentitantool/opentitantool.runfiles/lowrisc_opentitan/sw/host/opentitantool/opentitantool --interface=cw310 bootstrap $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/$(PLATFORM)-app.bin
+
+fpga-rom-only:
+	$(Q)$(MAKE) -C ../$(PLATFORM)-rom-only fpga
+
+flash:
+	$(error '`make flash` has been renamed to `make flash-rom-only`. For ROM_EXT builds, use `make fpga` and then follow the "Owner Firmware With ROM_EXT" guide.')
+
+flash-rom-only:
+	$(Q)$(MAKE) -C ../$(PLATFORM)-rom-only flash
+
+flash-app:
+	$(error '`make flash-app` has been renamed to `make flash-app-rom-only`. For ROM_EXT builds, use `make fpga` and then follow the "Owner Firmware With ROM_EXT" guide.')
+
+flash-app-rom-only: $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/$(PLATFORM).elf
+	$(Q)$(MAKE) -C ../$(PLATFORM)-rom-only flash-app
 
 verilator: $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/$(PLATFORM).elf
 	$(call check_defined, OPENTITAN_TREE)
@@ -110,7 +137,13 @@ test:
 ifneq ($(OPENTITAN_TREE),)
 	$(error "Running on QEMU, use test-hardware to run on hardware")
 endif
-	$(Q)TOCK_ROOT_DIRECTORY=${TOCK_ROOT_DIRECTORY} QEMU_ENTRY_POINT=${QEMU_ENTRY_POINT} TARGET=${TARGET} LINKER_SCRIPT_OVERRIDE=test_layout.ld $(CARGO) test $(CARGO_FLAGS) $(NO_RUN) --bin $(PLATFORM) --release
+	mkdir -p $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/deps/
+	$(Q)cp test_layout.ld $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/deps/layout.ld
+	$(Q)cp ../../kernel_layout.ld $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/
+# Not all the tests whose feature flags are listed here will
+# necessarily be run; some are hard-coded to ignore the default "qemu"
+# feature because QEMU cannot emulate them.
+	$(Q)RUSTFLAGS="$(RUSTC_FLAGS_TOCK)" TOCK_ROOT_DIRECTORY=${TOCK_ROOT_DIRECTORY} QEMU_ENTRY_POINT=${QEMU_ENTRY_POINT} TARGET=${TARGET} $(CARGO) test $(CARGO_FLAGS_TOCK) $(NO_RUN) --bin $(PLATFORM) --release --features=test_sram_ret,test_sysrst_ctrl,test_aon_timer,test_alerthandler,test_resetmanager,test_otp,test_pattgen,test_rv_timer,test_clkmgr
 
 test-hardware: ot-check
 	$(Q)OBJCOPY=$(RISC_PREFIX)-objcopy TOCK_ROOT_DIRECTORY=${TOCK_ROOT_DIRECTORY} TARGET=${TARGET} LINKER_SCRIPT_OVERRIDE=test_layout.ld $(CARGO) test $(CARGO_FLAGS) $(NO_RUN) --bin $(PLATFORM) --release --features=hardware_tests

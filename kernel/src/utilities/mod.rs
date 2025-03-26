@@ -16,6 +16,7 @@ pub mod peripheral_management;
 pub mod static_init;
 pub mod storage_volume;
 pub mod streaming_process_slice;
+pub mod target_test;
 
 mod static_ref;
 pub use self::static_ref::StaticRef;

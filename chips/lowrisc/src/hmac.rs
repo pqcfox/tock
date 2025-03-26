@@ -107,10 +107,10 @@ impl Hmac<'_> {
 
             let data_idx = i * 4;
 
-            let mut d = (data[data_idx + 3] as u32) << 0;
+            let mut d = data[data_idx + 3] as u32;
             d |= (data[data_idx + 2] as u32) << 8;
             d |= (data[data_idx + 1] as u32) << 16;
-            d |= (data[data_idx + 0] as u32) << 24;
+            d |= (data[data_idx] as u32) << 24;
 
             regs.msg_fifo.set(d);
         }
@@ -176,7 +176,7 @@ impl Hmac<'_> {
 
                         let idx = i * 4;
 
-                        if digest[idx + 0] != d[0]
+                        if digest[idx] != d[0]
                             || digest[idx + 1] != d[1]
                             || digest[idx + 2] != d[2]
                             || digest[idx + 3] != d[3]
@@ -200,7 +200,7 @@ impl Hmac<'_> {
 
                         let idx = i * 4;
 
-                        digest[idx + 0] = d[0];
+                        digest[idx] = d[0];
                         digest[idx + 1] = d[1];
                         digest[idx + 2] = d[2];
                         digest[idx + 3] = d[3];
@@ -250,11 +250,7 @@ impl Hmac<'_> {
                 } else {
                     ErrorCode::FAIL
                 };
-                if self.verify.get() {
-                    client.hash_done(Err(errval), self.digest.take().unwrap());
-                } else {
-                    client.hash_done(Err(errval), self.digest.take().unwrap());
-                }
+                client.hash_done(Err(errval), self.digest.take().unwrap());
             });
         }
     }
@@ -395,7 +391,7 @@ impl hil::digest::HmacSha256 for Hmac<'_> {
             let mut k = *key.get(idx + 3).ok_or(ErrorCode::INVAL)? as u32;
             k |= (*key.get(i * 4 + 2).ok_or(ErrorCode::INVAL)? as u32) << 8;
             k |= (*key.get(i * 4 + 1).ok_or(ErrorCode::INVAL)? as u32) << 16;
-            k |= (*key.get(i * 4 + 0).ok_or(ErrorCode::INVAL)? as u32) << 24;
+            k |= (*key.get(i * 4).ok_or(ErrorCode::INVAL)? as u32) << 24;
 
             regs.key.get(i).ok_or(ErrorCode::INVAL)?.set(k);
             key_idx = i + 1;

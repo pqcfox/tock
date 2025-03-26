@@ -112,6 +112,12 @@ pub trait HasClient<'a, C> {
     fn set_client(&'a self, client: &'a C);
 }
 
+pub trait HasInfoClient<'a, C> {
+    /// Set the client for this flash peripheral. The client will be called
+    /// when info operations complete.
+    fn set_info_client(&'a self, info_client: &'a C);
+}
+
 /// A page of writable persistent flash memory.
 pub trait Flash {
     /// Type of a single flash page for the given implementation.
@@ -135,6 +141,45 @@ pub trait Flash {
     fn erase_page(&self, page_number: usize) -> Result<(), ErrorCode>;
 }
 
+/// Trait for performing flash operations on info partitions
+pub trait InfoFlash {
+    type InfoType: TryFrom<usize, Error = ()>;
+    type BankType: TryFrom<usize, Error = ()>;
+    type Page: AsMut<[u8]> + Default;
+
+    /// Read a page from info partition
+    fn read_info_page(
+        &self,
+        info_type: Self::InfoType,
+        bank: Self::BankType,
+        page_number: usize,
+        page: &'static mut Self::Page,
+    ) -> Result<(), (ErrorCode, &'static mut Self::Page)>;
+
+    /// Write a page to info partition
+    fn write_info_page(
+        &self,
+        info_type: Self::InfoType,
+        bank: Self::BankType,
+        page_number: usize,
+        page: &'static mut Self::Page,
+    ) -> Result<(), (ErrorCode, &'static mut Self::Page)>;
+
+    /// Erase an info partition
+    fn erase_info_page(
+        &self,
+        info_type: Self::InfoType,
+        bank: Self::BankType,
+        page_number: usize,
+    ) -> Result<(), ErrorCode>;
+}
+
+/// Trait for performing operations on both data partitions and info partitions
+pub trait AdvancedFlash: Flash + InfoFlash {}
+
+// Automatically implement AdvancedFlash for any type that implements Flash and InfoFlash traits
+impl<T: Flash + InfoFlash> AdvancedFlash for T {}
+
 /// Implement `Client` to receive callbacks from `Flash`.
 pub trait Client<F: Flash> {
     /// Flash read complete.
@@ -146,3 +191,21 @@ pub trait Client<F: Flash> {
     /// Flash erase complete.
     fn erase_complete(&self, result: Result<(), Error>);
 }
+
+/// Implement `InfoClient` to receive callbacks from `Flash`.
+pub trait InfoClient<F: InfoFlash> {
+    /// Flash info read complete.
+    fn info_read_complete(&self, read_buffer: &'static mut F::Page, result: Result<(), Error>);
+
+    /// Flash info write complete.
+    fn info_write_complete(&self, write_buffer: &'static mut F::Page, result: Result<(), Error>);
+
+    /// Flash info erase complete.
+    fn info_erase_complete(&self, result: Result<(), Error>);
+}
+
+/// Client that can receive both data callbacks and info callbacks from an advanced flash
+pub trait AdvancedClient<F: AdvancedFlash>: Client<F> + InfoClient<F> {}
+
+// Automatically implement AdvancedClient for any type that implements both Client and InfoClient
+impl<F: AdvancedFlash, T: Client<F> + InfoClient<F>> AdvancedClient<F> for T {}

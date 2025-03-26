@@ -40,7 +40,7 @@ mod key_value {
                     'static,
                     TicKVSystem<
                         'static,
-                        FlashUser<'static, lowrisc::flash_ctrl::FlashCtrl<'static>>,
+                        FlashUser<'static, earlgrey::flash_ctrl::FlashCtrl<'static>>,
                         capsules_extra::sip_hash::SipHasher24,
                         2048,
                     >,

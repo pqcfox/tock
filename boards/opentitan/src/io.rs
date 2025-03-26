@@ -46,6 +46,7 @@ use kernel::hil::led;
 #[cfg(not(test))]
 #[no_mangle]
 #[panic_handler]
+#[allow(clippy::missing_safety_doc)]
 pub unsafe fn panic_fmt(pi: &PanicInfo) -> ! {
     use core::ptr::{addr_of, addr_of_mut};
     let first_led_pin = &mut earlgrey::gpio::GpioPin::new(
@@ -54,7 +55,7 @@ pub unsafe fn panic_fmt(pi: &PanicInfo) -> ! {
             earlgrey::registers::top_earlgrey::MuxedPads::Ioa6,
             earlgrey::registers::top_earlgrey::PinmuxOutsel::GpioGpio7,
         ),
-        earlgrey::gpio::pins::pin7,
+        7, // GPIO_7
     );
     first_led_pin.make_output();
     let first_led = &mut led::LedLow::new(first_led_pin);

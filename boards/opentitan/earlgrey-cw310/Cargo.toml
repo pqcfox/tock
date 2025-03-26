@@ -8,12 +8,13 @@ version.workspace = true
 authors.workspace = true
 build = "build.rs"
 edition.workspace = true
+license = "Apache-2.0 OR MIT"
 
 [dependencies]
 components = { path = "../../components" }
 rv32i = { path = "../../../arch/rv32i" }
 kernel = { path = "../../../kernel" }
-earlgrey = { path = "../../../chips/earlgrey" }
+earlgrey = { path = "../../../chips/earlgrey"}
 lowrisc = { path = "../../../chips/lowrisc" }
 tock-tbf = { path = "../../../libraries/tock-tbf" }
 
@@ -27,7 +28,18 @@ tock_build_scripts = { path = "../../build_scripts" }
 
 
 [features]
-default = ["fpga_cw310"]
+default = ["qemu", "sival"]
+test_sram_ret = ["earlgrey/test_sram_ret"]
+test_sysrst_ctrl = ["lowrisc/test_sysrst_ctrl"]
+test_rv_timer = ["lowrisc/test_rv_timer"]
+test_aon_timer = ["lowrisc/test_aon_timer"]
+test_alerthandler = ["earlgrey/test_alerthandler", "lowrisc/test_alerthandler"]
+test_resetmanager = ["capsules-extra/test_resetmanager"]
+test_otp = ["lowrisc/test_otp"]
+test_pattgen = ["lowrisc/test_pattgen"]
+test_flash_ctrl = ["earlgrey/test_flash_ctrl"]
+test_clkmgr = ["earlgrey/clkmgr_tests"]
+test_cryptolib = ["ffi", "lowrisc/test_cryptolib"]
 
 # OpenTitan SoC design can be synthesized or compiled for different targets. A
 # target can be a specific FPGA board, an ASIC technology, or a simulation tool.
@@ -36,13 +48,27 @@ default = ["fpga_cw310"]
 #
 # OpenTitan CPU and possibly other components must be configured appropriately
 # for a specific target:
-#    - fpga_cw310:
+#    - fpga:
 #      OpenTitan SoC design running on CW310 FPGA.
+#
+#    - silicon:
+#      OpenTitan SoC design running on PRODA silicon.
 #
 #    - sim_verilator:
 #      OpenTitan SoC design simulated in Verilator.
-fpga_cw310 = []
+fpga = []
+qemu = ["earlgrey/qemu"]
+silicon = ["sival"]
 sim_verilator = []
+unlock_dice_info_pages = ["earlgrey/unlock_dice_info_pages"]
+
+# This is used to indicate that we intend to use this kernel with a silicon
+# validation execution environment.
+sival = ["earlgrey/sival"]
+
+# Enable when linking with OpenTitan FFI dependencies
+ffi = []
+
 # This is used to indicate that we should include tests that only pass on
 # hardware.
 hardware_tests = []

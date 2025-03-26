@@ -61,6 +61,7 @@ Virtualized Hardware Resources
 
 These allow for multiple users of shared hardware resources in the kernel.
 
+- **[Timeout Mux](src/virtualizers/timeout_mux.rs)**: Timer-driver job scheduler with timeout handling.
 - **[Virtual ADC](src/virtualizers/virtual_adc.rs)**: Shared single ADC channel.
 - **[Virtual AES-CCM](src/virtualizers/virtual_aes_ccm.rs)**: Shared AES-CCM engine.
 - **[Virtual Alarm](src/virtualizers/virtual_alarm.rs)**: Shared alarm resource.

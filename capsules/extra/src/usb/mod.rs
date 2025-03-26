@@ -7,5 +7,6 @@ pub mod ctap;
 pub mod descriptors;
 pub mod keyboard_hid;
 pub mod usb_user;
+pub mod usb_user2;
 pub mod usbc_client;
 pub mod usbc_client_ctrl;

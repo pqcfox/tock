@@ -34,6 +34,7 @@ pub enum NUM {
     UsbUser               = 0x20005,
     I2cMasterSlave        = 0x20006,
     Can                   = 0x20007,
+    UsbUser2              = 0x20008,
 
     // Radio
     BleAdvertising        = 0x30000,
@@ -51,12 +52,31 @@ pub enum NUM {
     CtapHid               = 0x40004,
     Sha                   = 0x40005,
     Aes                   = 0x40006,
+    EcdsaP256             = 0x40007,
+    EcdsaP384             = 0x40008,
+    OneshotSha256         = 0x40009,
+    OneshotSha384         = 0x4000a,
+    OneshotSha512         = 0x4000b,
+    OneshotSha3_224       = 0x4000c,
+    OneshotSha3_256       = 0x4000d,
+    OneshotSha3_384       = 0x4000e,
+    OneshotSha3_512       = 0x4000f,
+    OneshotShake128       = 0x40010,
+    OneshotShake256       = 0x40011,
+    OneshotCshake128      = 0x40012,
+    OneshotCshake256      = 0x40013,
+    OneshotHmacSha256     = 0x40014,
+    OneshotHmacSha384     = 0x40015,
+    OneshotHmacSha512     = 0x40016,
+    OneshotKmac128        = 0x40017,
+    OneshotKmac256        = 0x40018,
 
     // Storage
     AppFlash              = 0x50000,
     NvmStorage            = 0x50001,
     SdCard                = 0x50002,
     Kv                    = 0x50003,
+    InfoFlash             = 0x50004,
 
     // Sensors
     Temperature           = 0x60000,
@@ -96,5 +116,10 @@ pub enum NUM {
     DateTime              = 0x90007,
     CycleCount            = 0x90008,
     Servo                 = 0x90009,
+    Pattgen               = 0x9000A,
+    ResetManager          = 0x9000B,
+    OpenTitanAlertHandler = 0x9000C,
+    OpenTitanSysRst       = 0x9000D,
+    OpenTitanAttestation  = 0x9000E,
 }
 }

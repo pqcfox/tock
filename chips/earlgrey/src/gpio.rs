@@ -7,8 +7,8 @@
 use core::ops::{Index, IndexMut};
 
 use kernel::utilities::StaticRef;
-use lowrisc::gpio::GpioRegisters;
-pub use lowrisc::gpio::{pins, GpioBitfield, GpioPin};
+pub use lowrisc::gpio::{GpioBitfield, GpioPin};
+use lowrisc::registers::gpio_regs::{GpioRegisters};
 
 use crate::pinmux::PadConfig;
 use crate::pinmux_config::EarlGreyPinmuxConfig;
@@ -96,38 +96,38 @@ impl Port<'_> {
             // Intentionally prevent splitting GpioPin to multiple line
             #[rustfmt::skip]
             pins: [
-                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(PinmuxPeripheralIn::GpioGpio0), pins::pin0),
-                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(PinmuxPeripheralIn::GpioGpio1), pins::pin1),
-                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(PinmuxPeripheralIn::GpioGpio2), pins::pin2),
-                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(PinmuxPeripheralIn::GpioGpio3), pins::pin3),
-                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(PinmuxPeripheralIn::GpioGpio4), pins::pin4),
-                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(PinmuxPeripheralIn::GpioGpio5), pins::pin5),
-                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(PinmuxPeripheralIn::GpioGpio6), pins::pin6),
-                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(PinmuxPeripheralIn::GpioGpio7), pins::pin7),
-                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(PinmuxPeripheralIn::GpioGpio8), pins::pin8),
-                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(PinmuxPeripheralIn::GpioGpio9), pins::pin9),
-                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(PinmuxPeripheralIn::GpioGpio10), pins::pin10),
-                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(PinmuxPeripheralIn::GpioGpio11), pins::pin11),
-                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(PinmuxPeripheralIn::GpioGpio12), pins::pin12),
-                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(PinmuxPeripheralIn::GpioGpio13), pins::pin13),
-                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(PinmuxPeripheralIn::GpioGpio14), pins::pin14),
-                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(PinmuxPeripheralIn::GpioGpio15), pins::pin15),
-                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(PinmuxPeripheralIn::GpioGpio16), pins::pin16),
-                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(PinmuxPeripheralIn::GpioGpio17), pins::pin17),
-                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(PinmuxPeripheralIn::GpioGpio18), pins::pin18),
-                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(PinmuxPeripheralIn::GpioGpio19), pins::pin19),
-                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(PinmuxPeripheralIn::GpioGpio20), pins::pin20),
-                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(PinmuxPeripheralIn::GpioGpio21), pins::pin21),
-                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(PinmuxPeripheralIn::GpioGpio22), pins::pin22),
-                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(PinmuxPeripheralIn::GpioGpio23), pins::pin23),
-                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(PinmuxPeripheralIn::GpioGpio24), pins::pin24),
-                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(PinmuxPeripheralIn::GpioGpio25), pins::pin25),
-                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(PinmuxPeripheralIn::GpioGpio26), pins::pin26),
-                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(PinmuxPeripheralIn::GpioGpio27), pins::pin27),
-                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(PinmuxPeripheralIn::GpioGpio28), pins::pin28),
-                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(PinmuxPeripheralIn::GpioGpio29), pins::pin29),
-                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(PinmuxPeripheralIn::GpioGpio30), pins::pin30),
-                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(PinmuxPeripheralIn::GpioGpio31), pins::pin31),
+                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(PinmuxPeripheralIn::GpioGpio0), 0),
+                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(PinmuxPeripheralIn::GpioGpio1), 1),
+                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(PinmuxPeripheralIn::GpioGpio2), 2),
+                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(PinmuxPeripheralIn::GpioGpio3), 3),
+                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(PinmuxPeripheralIn::GpioGpio4), 4),
+                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(PinmuxPeripheralIn::GpioGpio5), 5),
+                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(PinmuxPeripheralIn::GpioGpio6), 6),
+                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(PinmuxPeripheralIn::GpioGpio7), 7),
+                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(PinmuxPeripheralIn::GpioGpio8), 8),
+                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(PinmuxPeripheralIn::GpioGpio9), 9),
+                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(PinmuxPeripheralIn::GpioGpio10), 10),
+                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(PinmuxPeripheralIn::GpioGpio11), 11),
+                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(PinmuxPeripheralIn::GpioGpio12), 12),
+                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(PinmuxPeripheralIn::GpioGpio13), 13),
+                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(PinmuxPeripheralIn::GpioGpio14), 14),
+                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(PinmuxPeripheralIn::GpioGpio15), 15),
+                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(PinmuxPeripheralIn::GpioGpio16), 16),
+                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(PinmuxPeripheralIn::GpioGpio17), 17),
+                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(PinmuxPeripheralIn::GpioGpio18), 18),
+                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(PinmuxPeripheralIn::GpioGpio19), 19),
+                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(PinmuxPeripheralIn::GpioGpio20), 20),
+                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(PinmuxPeripheralIn::GpioGpio21), 21),
+                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(PinmuxPeripheralIn::GpioGpio22), 22),
+                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(PinmuxPeripheralIn::GpioGpio23), 23),
+                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(PinmuxPeripheralIn::GpioGpio24), 24),
+                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(PinmuxPeripheralIn::GpioGpio25), 25),
+                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(PinmuxPeripheralIn::GpioGpio26), 26),
+                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(PinmuxPeripheralIn::GpioGpio27), 27),
+                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(PinmuxPeripheralIn::GpioGpio28), 28),
+                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(PinmuxPeripheralIn::GpioGpio29), 29),
+                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(PinmuxPeripheralIn::GpioGpio30), 30),
+                GpioPin::new(GPIO_BASE, gpio_pad_config::<Layout>(PinmuxPeripheralIn::GpioGpio31), 31),
             ],
         }
     }

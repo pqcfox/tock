@@ -118,14 +118,19 @@ impl<'a> I2c<'a> {
         let len = self.read_len.get();
 
         self.buffer.map(|buf| {
-            for i in self.read_index.get()..len {
+            for (i, item) in buf
+                .iter_mut()
+                .enumerate()
+                .take(len)
+                .skip(self.read_index.get())
+            {
                 if regs.status.is_set(STATUS::RXEMPTY) {
                     // The RX buffer is empty
                     data_popped = i;
                     break;
                 }
                 // Read the data
-                buf[i] = regs.rdata.read(RDATA::RDATA) as u8;
+                *item = regs.rdata.read(RDATA::RDATA) as u8;
                 data_popped = i;
             }
 

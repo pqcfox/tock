@@ -4,8 +4,7 @@
 
 use crate::registers::top_earlgrey::USBDEV_BASE_ADDR;
 use kernel::utilities::StaticRef;
-pub use lowrisc::usbdev::Usb;
-use lowrisc::usbdev::UsbRegisters;
+use lowrisc::registers::usbdev_regs::UsbdevRegisters;
 
-pub const USB0_BASE: StaticRef<UsbRegisters> =
-    unsafe { StaticRef::new(USBDEV_BASE_ADDR as *const UsbRegisters) };
+pub const USB0_BASE: StaticRef<UsbdevRegisters> =
+    unsafe { StaticRef::new(USBDEV_BASE_ADDR as *const UsbdevRegisters) };

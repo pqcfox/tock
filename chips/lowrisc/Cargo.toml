@@ -7,10 +7,24 @@ name = "lowrisc"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
+license = "Apache-2.0 OR MIT"
 
 [dependencies]
+capsules-core = { path = "../../capsules/core", optional = true }
 rv32i = { path = "../../arch/rv32i" }
 kernel = { path = "../../kernel" }
 
 [lints]
 workspace = true
+
+[features]
+# Enable when linking with OpenTitan FFI dependencies
+ffi = ["dep:capsules-core"]
+test_alerthandler = []
+test_sysrst_ctrl = []
+test_sram_ret = []
+test_rv_timer = []
+test_aon_timer = []
+test_otp = []
+test_pattgen = []
+test_cryptolib = []

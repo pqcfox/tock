@@ -423,3 +423,12 @@ pub trait ReceiveAdvanced<'a>: Receive<'a> {
         interbyte_timeout: u8,
     ) -> Result<(), (ErrorCode, &'static mut [u8])>;
 }
+
+pub trait TransmitSynch {
+    /// Receive data until `interbyte_timeout` bit periods have passed since the
+    /// last byte or buffer is full. Does not timeout until at least one byte
+    /// has been received.
+    ///
+    /// * `interbyte_timeout`: number of bit periods since last data received.
+    fn transmit_sync(&self, bytes: &[u8]);
+}

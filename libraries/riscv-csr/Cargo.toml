@@ -12,7 +12,7 @@ repository = "https://github.com/tock/tock/tree/master/libraries/riscv-csr"
 readme = "README.md"
 keywords = ["tock", "embedded", "riscv", "bare-metal"]
 categories = ["data-structures", "embedded", "no-std"]
-license = "MIT/Apache-2.0"
+license = "Apache-2.0 OR MIT"
 edition = "2021"
 
 [badges]

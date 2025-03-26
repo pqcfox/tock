@@ -34,6 +34,7 @@ use core::cell::Cell;
 
 use kernel::collections::list::{List, ListLink, ListNode};
 use kernel::hil;
+use kernel::hil::flash::Error as FlashError;
 use kernel::utilities::cells::{OptionalCell, TakeCell};
 use kernel::ErrorCode;
 
@@ -240,5 +241,297 @@ impl<F: hil::flash::Flash> hil::flash::Flash for FlashUser<'_, F> {
         self.operation.set(Op::Erase(page_number));
         self.mux.do_next_op();
         Ok(())
+    }
+}
+
+// Info flash multiplexer
+
+/// Handle keeping a list of active users of flash hardware and serialize their
+/// requests. After each completed request the list is checked to see if there
+/// is another flash user with an outstanding read, write, or erase request.
+pub struct MuxInfoFlash<'a, F: hil::flash::InfoFlash + 'static>
+where
+    F::InfoType: Copy,
+    F::BankType: Copy,
+{
+    info_flash: &'a F,
+    users: List<'a, InfoFlashUser<'a, F>>,
+    inflight: OptionalCell<&'a InfoFlashUser<'a, F>>,
+}
+
+impl<F: hil::flash::InfoFlash> hil::flash::InfoClient<F> for MuxInfoFlash<'_, F>
+where
+    F::InfoType: Copy,
+    F::BankType: Copy,
+{
+    fn info_read_complete(
+        &self,
+        pagebuffer: &'static mut F::Page,
+        result: Result<(), hil::flash::Error>,
+    ) {
+        self.inflight.take().map(move |user| {
+            user.info_read_complete(pagebuffer, result);
+        });
+        // If any of the following operations fail-fast, notify the caller immediately that their
+        // operation failed.
+        while let Err(_) = self.do_next_op() {
+            self.inflight.take().map(move |user| {
+                user.info_erase_complete(Err(FlashError::FlashError));
+            });
+        }
+    }
+
+    fn info_write_complete(
+        &self,
+        pagebuffer: &'static mut F::Page,
+        result: Result<(), hil::flash::Error>,
+    ) {
+        self.inflight.take().map(move |user| {
+            user.info_write_complete(pagebuffer, result);
+        });
+        // If any of the following operations fail-fast, notify the caller immediately that their
+        // operation failed.
+        while let Err(_) = self.do_next_op() {
+            self.inflight.take().map(move |user| {
+                user.info_erase_complete(Err(FlashError::FlashError));
+            });
+        }
+    }
+
+    fn info_erase_complete(&self, result: Result<(), hil::flash::Error>) {
+        self.inflight.take().map(move |user| {
+            user.info_erase_complete(result);
+        });
+        // If any of the following operations fail-fast, notify the caller immediately that their
+        // operation failed.
+        while let Err(_) = self.do_next_op() {
+            self.inflight.take().map(move |user| {
+                user.info_erase_complete(Err(FlashError::FlashError));
+            });
+        }
+    }
+}
+
+impl<'a, F: hil::flash::InfoFlash> MuxInfoFlash<'a, F>
+where
+    F::InfoType: Copy,
+    F::BankType: Copy,
+{
+    pub const fn new(flash: &'a F) -> MuxInfoFlash<'a, F> {
+        MuxInfoFlash {
+            info_flash: flash,
+            users: List::new(),
+            inflight: OptionalCell::empty(),
+        }
+    }
+
+    /// Scan the list of users and find the first user that has a pending
+    /// request, then issue that request to the flash hardware.
+    fn do_next_op(&self) -> Result<(), ErrorCode> {
+        if self.inflight.is_none() {
+            let mnode = self.users.iter().find(|node| match node.operation.get() {
+                InfoOp::Idle => false,
+                _ => true,
+            });
+            mnode.map_or(Ok(()), |node| {
+                let result = node.buffer.take().map_or_else(
+                    || {
+                        // Don't need a buffer for erase.
+                        match node.operation.get() {
+                            InfoOp::Erase(info_type, bank, page_number) => self
+                                .info_flash
+                                .erase_info_page(info_type, bank, page_number),
+                            _ => Err(ErrorCode::FAIL),
+                        }
+                    },
+                    |buf| {
+                        match node.operation.get() {
+                            InfoOp::Write(info_type, bank, page_number) => {
+                                if let Err((err, buf)) = self.info_flash.write_info_page(
+                                    info_type,
+                                    bank,
+                                    page_number,
+                                    buf,
+                                ) {
+                                    node.buffer.replace(buf);
+                                    return Err(err);
+                                }
+                                Ok(())
+                            }
+                            InfoOp::Read(info_type, bank, page_number) => {
+                                if let Err((err, buf)) = self.info_flash.read_info_page(
+                                    info_type,
+                                    bank,
+                                    page_number,
+                                    buf,
+                                ) {
+                                    node.buffer.replace(buf);
+                                    return Err(err);
+                                }
+                                Ok(())
+                            }
+                            InfoOp::Erase(info_type, bank, page_number) => self
+                                .info_flash
+                                .erase_info_page(info_type, bank, page_number),
+                            InfoOp::Idle => Err(ErrorCode::FAIL), // Can't get here...
+                        }
+                    },
+                );
+                node.operation.set(InfoOp::Idle);
+                self.inflight.set(node);
+                result
+            })
+        } else {
+            Ok(())
+        }
+    }
+}
+
+#[derive(Copy, Clone, PartialEq)]
+enum InfoOp<P: Copy, B: Copy> {
+    Idle,
+    Write(P, B, usize),
+    Read(P, B, usize),
+    Erase(P, B, usize),
+}
+
+/// Keep state for each flash user. All uses of the virtualized flash interface
+/// need to create one of these to be a user of the flash. The `new()` function
+/// handles most of the work, a user only has to pass in a reference to the
+/// MuxFlash object.
+pub struct InfoFlashUser<'a, F: hil::flash::InfoFlash + 'static>
+where
+    F::InfoType: Copy,
+    F::BankType: Copy,
+{
+    mux: &'a MuxInfoFlash<'a, F>,
+    buffer: TakeCell<'static, F::Page>,
+    operation: Cell<InfoOp<F::InfoType, F::BankType>>,
+    next: ListLink<'a, InfoFlashUser<'a, F>>,
+    client: OptionalCell<&'a dyn hil::flash::InfoClient<InfoFlashUser<'a, F>>>,
+}
+
+impl<'a, F: hil::flash::InfoFlash> InfoFlashUser<'a, F>
+where
+    F::InfoType: Copy,
+    F::BankType: Copy,
+{
+    pub fn new(mux: &'a MuxInfoFlash<'a, F>) -> InfoFlashUser<'a, F> {
+        InfoFlashUser {
+            mux,
+            buffer: TakeCell::empty(),
+            operation: Cell::new(InfoOp::Idle),
+            next: ListLink::empty(),
+            client: OptionalCell::empty(),
+        }
+    }
+}
+
+impl<'a, F: hil::flash::InfoFlash, C: hil::flash::InfoClient<Self>> hil::flash::HasInfoClient<'a, C>
+    for InfoFlashUser<'a, F>
+where
+    F::InfoType: Copy,
+    F::BankType: Copy,
+{
+    fn set_info_client(&'a self, client: &'a C) {
+        self.mux.users.push_head(self);
+        self.client.set(client);
+    }
+}
+
+impl<'a, F: hil::flash::InfoFlash> hil::flash::InfoClient<F> for InfoFlashUser<'a, F>
+where
+    F::InfoType: Copy,
+    F::BankType: Copy,
+{
+    fn info_read_complete(
+        &self,
+        pagebuffer: &'static mut F::Page,
+        result: Result<(), hil::flash::Error>,
+    ) {
+        self.client.map(move |client| {
+            client.info_read_complete(pagebuffer, result);
+        });
+    }
+
+    fn info_write_complete(
+        &self,
+        pagebuffer: &'static mut F::Page,
+        result: Result<(), hil::flash::Error>,
+    ) {
+        self.client.map(move |client| {
+            client.info_write_complete(pagebuffer, result);
+        });
+    }
+
+    fn info_erase_complete(&self, result: Result<(), hil::flash::Error>) {
+        self.client.map(move |client| {
+            client.info_erase_complete(result);
+        });
+    }
+}
+
+impl<'a, F: hil::flash::InfoFlash> ListNode<'a, InfoFlashUser<'a, F>> for InfoFlashUser<'a, F>
+where
+    F::InfoType: Copy,
+    F::BankType: Copy,
+{
+    fn next(&'a self) -> &'a ListLink<'a, InfoFlashUser<'a, F>> {
+        &self.next
+    }
+}
+
+impl<F: hil::flash::InfoFlash> hil::flash::InfoFlash for InfoFlashUser<'_, F>
+where
+    F::InfoType: Copy,
+    F::BankType: Copy,
+{
+    type InfoType = F::InfoType;
+    type BankType = F::BankType;
+    type Page = F::Page;
+
+    fn read_info_page(
+        &self,
+        info_type: Self::InfoType,
+        bank: Self::BankType,
+        page_number: usize,
+        buf: &'static mut Self::Page,
+    ) -> Result<(), (ErrorCode, &'static mut Self::Page)> {
+        self.buffer.replace(buf);
+        self.operation
+            .set(InfoOp::Read(info_type, bank, page_number));
+        self.mux.do_next_op().map_err(|err| {
+            // PANIC: `self.buffer` cannot be empty because we set it at the beginning of the
+            // function.
+            (err, self.buffer.take().unwrap())
+        })
+    }
+
+    fn write_info_page(
+        &self,
+        info_type: Self::InfoType,
+        bank: Self::BankType,
+        page_number: usize,
+        buf: &'static mut Self::Page,
+    ) -> Result<(), (ErrorCode, &'static mut Self::Page)> {
+        self.buffer.replace(buf);
+        self.operation
+            .set(InfoOp::Write(info_type, bank, page_number));
+        self.mux.do_next_op().map_err(|err| {
+            // PANIC: `self.buffer` cannot be empty because we set it at the beginning of the
+            // function.
+            (err, self.buffer.take().unwrap())
+        })
+    }
+
+    fn erase_info_page(
+        &self,
+        info_type: Self::InfoType,
+        bank: Self::BankType,
+        page_number: usize,
+    ) -> Result<(), ErrorCode> {
+        self.operation
+            .set(InfoOp::Erase(info_type, bank, page_number));
+        self.mux.do_next_op()
     }
 }

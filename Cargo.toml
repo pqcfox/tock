@@ -17,6 +17,7 @@ members = [
     "boards/nano_rp2040_connect",
     "boards/arty_e21",
     "boards/opentitan/earlgrey-cw310",
+    "boards/opentitan/earlgrey-cw310-rom-only",
     "boards/esp32-c3-devkitM-1",
     "boards/clue_nrf52840",
     "boards/veer_el2_sim",

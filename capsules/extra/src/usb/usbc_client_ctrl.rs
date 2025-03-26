@@ -178,7 +178,8 @@ impl<'a, 'b, U: hil::usb::UsbController<'a>> ClientCtrl<'a, 'b, U> {
         self.controller
             .enable_as_device(hil::usb::DeviceSpeed::Full); // must be Full for Bulk transfers
         self.controller
-            .endpoint_out_enable(TransferType::Control, 0);
+            .endpoint_in_out_enable(TransferType::Control, 0)
+            .unwrap();
     }
 
     pub fn attach(&'a self) {

@@ -736,6 +736,10 @@ impl Eq for Ticks16 {}
 pub struct Ticks64(u64);
 
 impl Ticks64 {
+    pub const fn new(val: u64) -> Self {
+        Self(val)
+    }
+
     pub fn into_u64(self) -> u64 {
         self.0
     }

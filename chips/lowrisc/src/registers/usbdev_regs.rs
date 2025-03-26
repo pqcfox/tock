@@ -1,13 +1,14 @@
 // Licensed under the Apache License, Version 2.0 or the MIT License.
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// Copyright lowRISC contributors 2023.
+// Copyright lowRISC contributors (OpenTitan project).
 
 // Generated register constants for usbdev.
 // Built for Earlgrey-M2.5.1-RC1-493-gedf5e35f5d
-// https://github.com/lowRISC/opentitan/tree/edf5e35f5d50a5377641c90a315109a351de7635
+// https://github.com/lowRISC/opentitan/tree/1290004bc3ec4b5cf4b091b55e94ad199c68efe2
 // Tree status: clean
-// Build date: 2023-10-18T10:11:37
+// Build date: 2024-12-16 17:33:48
 
+// Generated register constants for usbdev.
 // Original reference file: hw/ip/usbdev/data/usbdev.hjson
 use kernel::utilities::registers::ReadWrite;
 use kernel::utilities::registers::{register_bitfields, register_structs};

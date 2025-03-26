@@ -1,0 +1,608 @@
+// Licensed under the Apache License, Version 2.0 or the MIT License.
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+// Copyright OxidOS Automotive SRL 2024
+//
+// Author: Irina Nita <irina.nita@oxidos.io>
+// Author: Darius Jipa <darius.jipa@oxidos.io>
+
+#[cfg(feature = "gui")]
+use parse::config;
+use parse::peripherals::chip::{Chip, DefaultPeripherals};
+use parse::peripherals::Gpio;
+#[cfg(feature = "gui")]
+use parse::scheduler::SchedulerType;
+#[cfg(feature = "gui")]
+use parse::syscall_filter::SyscallFilterType;
+
+use std::fs::File;
+use std::io::Write;
+#[cfg(feature = "gui")]
+use std::num::NonZeroUsize;
+use std::path::PathBuf;
+use std::rc::Rc;
+
+#[cfg(feature = "gui")]
+use cursive::views::EditView;
+
+#[cfg(feature = "gui")]
+use crate::capsule::ConfigMenu;
+#[cfg(feature = "gui")]
+use crate::items;
+#[cfg(feature = "gui")]
+use crate::menu::{self, board_config_menu, capsules_menu, kernel_resources_menu};
+#[cfg(feature = "gui")]
+use crate::menu::{processes_menu, scheduler_menu, stack_menu, syscall_filter_menu};
+
+#[cfg(feature = "gui")]
+pub(crate) type ViewStack = Vec<Box<dyn cursive::View>>;
+pub(crate) type GpioMap<C> = Vec<(
+    <<<C as Chip>::Peripherals as DefaultPeripherals>::Gpio as Gpio>::PinId,
+    PinFunction,
+)>;
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+#[allow(unused)]
+pub enum PinFunction {
+    None,
+    Led,
+    Button,
+    Gpio,
+}
+
+#[derive(Debug)]
+pub struct GpioHelper<C: Chip> {
+    pub gpio: Rc<<C::Peripherals as DefaultPeripherals>::Gpio>,
+    pub pins: GpioMap<C>,
+}
+
+impl<C: Chip> GpioHelper<C> {
+    pub(crate) fn new(gpio: Rc<<C::Peripherals as DefaultPeripherals>::Gpio>) -> Self {
+        let pins = gpio.pins().unwrap();
+        Self {
+            gpio,
+            pins: pins.iter().map(|pin| (*pin, PinFunction::None)).collect(),
+        }
+    }
+
+    pub fn pins(&self) -> &GpioMap<C> {
+        &self.pins
+    }
+}
+
+/// Inner data to be kept by Cursive.
+pub(crate) struct Data<C: Chip> {
+    /// The platform configuration.
+    pub(crate) platform: parse::Configuration<C::Peripherals>,
+
+    /// The chip that the platform configuration is based on.
+    pub(crate) chip: Rc<C>,
+
+    /// The view stack.
+    #[cfg(feature = "gui")]
+    views: ViewStack,
+
+    /// List of pins with their usage.
+    pub gpio_list: Option<Vec<GpioHelper<C>>>,
+
+    /// Path to write the output to.
+    pub out: Option<PathBuf>,
+}
+
+impl<C: Chip> Data<C> {
+    pub(crate) fn new(chip: C) -> Data<C> {
+        let peripherals = Rc::clone(&chip.peripherals());
+        Self {
+            platform: parse::Configuration::default(),
+            chip: Rc::new(chip),
+            #[cfg(feature = "gui")]
+            views: ViewStack::new(),
+            gpio_list: peripherals.gpio().ok().map(|list| {
+                list.iter()
+                    .map(|gpio| GpioHelper::new(Rc::clone(gpio)))
+                    .collect()
+            }),
+            out: None,
+        }
+    }
+
+    /// Add a view to the view stack.
+    #[cfg(feature = "gui")]
+    pub(crate) fn push_view(&mut self, view: Box<dyn cursive::View>) {
+        self.views.push(view)
+    }
+
+    /// Pop view from the view stack.
+    #[cfg(feature = "gui")]
+    pub(crate) fn pop_view(&mut self) -> Option<Box<dyn cursive::View>> {
+        self.views.pop()
+    }
+
+    /// Take the port and returns the helper struct for it.
+    pub fn gpio(
+        &self,
+        gpio: &<<C as Chip>::Peripherals as DefaultPeripherals>::Gpio,
+    ) -> Option<&GpioHelper<C>> {
+        //  FIXME: The match is unnecessary.
+        match self.gpio_list.as_ref() {
+            Some(gpio_list) => {
+                for helper in gpio_list.iter() {
+                    if helper.gpio.as_ref() == gpio {
+                        return Some(helper);
+                    }
+                }
+                None
+            }
+            None => None,
+        }
+    }
+
+    /// Change the pin status that is stored inside the configurator
+    /// inner state.
+    pub fn change_pin_status(
+        &mut self,
+        gpio: Rc<<<C as Chip>::Peripherals as DefaultPeripherals>::Gpio>,
+        searched_pin: <<<C as Chip>::Peripherals as DefaultPeripherals>::Gpio as Gpio>::PinId,
+        status: PinFunction,
+    ) {
+        let _ = self.gpio_list.as_mut().map(|gpio_list| {
+            let gpio_list = gpio_list.iter_mut().filter(|helper| helper.gpio == gpio);
+            gpio_list.for_each(|helper| {
+                for pin in helper.pins.iter_mut() {
+                    // If the searched pin was found, change its status and exit
+                    // the loop.
+                    if pin.0 == searched_pin {
+                        pin.1 = status;
+                        break;
+                    }
+                }
+            });
+        });
+    }
+
+    /// Set the path to write the JSON output to.
+    pub fn set_out(&mut self, out: PathBuf) {
+        self.out = Some(out);
+    }
+}
+
+/// Push a layer to the view stack.
+#[cfg(feature = "gui")]
+pub(crate) fn push_layer<
+    V: cursive::view::IntoBoxedView + 'static,
+    C: Chip + 'static + serde::ser::Serialize,
+>(
+    siv: &mut cursive::Cursive,
+    layer: V,
+) {
+    if let Some(old_layer) = siv.pop_layer() {
+        // Update user data.
+        if let Some(data) = siv.user_data::<Data<C>>() {
+            data.push_view(old_layer);
+        }
+    }
+
+    siv.add_layer(layer);
+}
+
+/// Initialize a board configuration session based on the submitted chip.
+#[cfg(feature = "gui")]
+pub(crate) fn on_chip_submit(siv: &mut cursive::Cursive, submit: &items::SupportedChip) {
+    match submit {
+        items::SupportedChip::EarlgreyCw310 => {
+            siv.set_user_data::<Data<lowrisc::Chip>>(Data::new(lowrisc::Chip::new()));
+
+            push_layer::<_, lowrisc::Chip>(siv, board_config_menu::<lowrisc::Chip>());
+        }
+    };
+}
+
+/// Initialize a board configuration session based on the submitted chip.
+#[cfg(feature = "gui")]
+pub(crate) fn on_scheduler_submit<C: Chip + 'static + serde::ser::Serialize>(
+    siv: &mut cursive::Cursive,
+    submit: &SchedulerType,
+) {
+    if let Some(data) = siv.user_data::<Data<C>>() {
+        data.platform.update_scheduler(*submit);
+    }
+}
+
+#[cfg(feature = "gui")]
+pub(crate) fn on_syscall_filter_submit<C: Chip + 'static + serde::ser::Serialize>(
+    siv: &mut cursive::Cursive,
+    submit: &SyscallFilterType,
+) {
+    if let Some(data) = siv.user_data::<Data<C>>() {
+        data.platform.update_syscall_filter(*submit);
+    }
+}
+
+/// Open a new configuration window based on the submitted config field.
+#[cfg(feature = "gui")]
+pub(crate) fn on_config_submit<C: Chip + 'static + serde::ser::Serialize>(
+    siv: &mut cursive::Cursive,
+    submit: &items::ConfigurationField,
+) {
+    // For each one, we need to add a layer.
+    if let Some(data) = siv.user_data::<Data<C>>() {
+        match submit {
+            items::ConfigurationField::Capsules => push_layer::<_, C>(siv, capsules_menu::<C>()),
+            items::ConfigurationField::KernelResources => {
+                push_layer::<_, C>(siv, kernel_resources_menu::<C>())
+            }
+            items::ConfigurationField::Processes => {
+                let process_count = data.platform.process_count;
+                push_layer::<_, C>(siv, processes_menu::<C>(process_count))
+            }
+            items::ConfigurationField::StackMem => {
+                let stack_size: usize = data.platform.stack_size.into();
+                push_layer::<_, C>(siv, stack_menu::<C>(stack_size))
+            }
+            items::ConfigurationField::SysCallFilter => {
+                let syscall_filter = data.platform.syscall_filter;
+                push_layer::<_, C>(siv, syscall_filter_menu::<C>(syscall_filter))
+            }
+        }
+    };
+}
+
+/// Open the corresponding config window based on the submitted kernel resource.
+#[cfg(feature = "gui")]
+pub(crate) fn on_kernel_resource_submit<C: Chip + 'static + serde::ser::Serialize>(
+    siv: &mut cursive::Cursive,
+    submit: &items::KernelResources,
+) {
+    // For each one, we need to add a layer.
+    if let Some(data) = siv.user_data::<Data<C>>() {
+        match submit {
+            items::KernelResources::Scheduler => {
+                let scheduler_type = data.platform.scheduler;
+                push_layer::<_, C>(siv, scheduler_menu::<C>(scheduler_type));
+            } // This will have multiple variants as the support grows.
+        }
+    }
+}
+
+/// Open the corresponding config window based on the submitted capsule.
+#[cfg(feature = "gui")]
+pub(crate) fn on_capsule_submit<C: Chip + 'static + serde::ser::Serialize>(
+    siv: &mut cursive::Cursive,
+    submit: &items::SupportedCapsule,
+) {
+    let data = siv.user_data::<Data<C>>().unwrap();
+    let chip = Rc::clone(&data.chip);
+
+    match submit {
+        config::Index::CONSOLE => {
+            let previous_state = match data.platform.capsule(submit) {
+                Some(config::Capsule::Console { uart, baud_rate }) => {
+                    Some((Rc::clone(uart), *baud_rate))
+                }
+                _ => None,
+            };
+
+            push_layer::<_, C>(
+                siv,
+                crate::capsule::console::config::<C>(chip, previous_state),
+            )
+        }
+        config::Index::ALARM => {
+            let choice = match data.platform.capsule(&config::Index::ALARM) {
+                Some(config::Capsule::Alarm { timer }) => Some(Rc::clone(timer)),
+                _ => None,
+            };
+
+            push_layer::<_, C>(siv, crate::capsule::alarm::config::<C>(chip, choice))
+        }
+        config::Index::SPI => {
+            let choice = match data.platform.capsule(&config::Index::SPI) {
+                Some(config::Capsule::Spi { spi }) => Some(Rc::clone(spi)),
+                _ => None,
+            };
+
+            push_layer::<_, C>(siv, crate::capsule::spi::config::<C>(chip, choice))
+        }
+        config::Index::I2C => {
+            let choice = match data.platform.capsule(&config::Index::I2C) {
+                Some(config::Capsule::I2c { i2c }) => Some(Rc::clone(i2c)),
+                _ => None,
+            };
+
+            push_layer::<_, C>(siv, crate::capsule::i2c::config::<C>(chip, choice))
+        }
+        config::Index::BLE => {
+            let choice = match data.platform.capsule(&config::Index::BLE) {
+                Some(config::Capsule::BleRadio { ble, timer }) => {
+                    Some((Rc::clone(timer), Rc::clone(ble)))
+                }
+                _ => None,
+            };
+
+            push_layer::<_, C>(siv, crate::capsule::ble::config::<C>(chip, choice))
+        }
+        config::Index::FLASH => {
+            let choice = match data.platform.capsule(submit) {
+                Some(config::Capsule::Flash { flash, buffer_size }) => {
+                    Some((Rc::clone(flash), *buffer_size))
+                }
+                _ => None,
+            };
+
+            push_layer::<_, C>(siv, crate::capsule::flash::config::<C>(choice, chip))
+        }
+        config::Index::LSM303AGR => {
+            let previous_state = match data.platform.capsule(submit) {
+                Some(config::Capsule::Lsm303agr { i2c, .. }) => Some(Rc::clone(i2c)),
+                _ => None,
+            };
+
+            siv.pop_layer();
+            siv.add_layer(crate::capsule::lsm303agr::config::<C>(chip, previous_state));
+        }
+        config::Index::TEMPERATURE => {
+            let choice = match data.platform.capsule(&config::Index::TEMPERATURE) {
+                Some(config::Capsule::Temperature { temp }) => Some(Rc::clone(temp)),
+                _ => None,
+            };
+
+            push_layer::<_, C>(siv, crate::capsule::temperature::config::<C>(chip, choice))
+        }
+        config::Index::RNG => {
+            let choice = match data.platform.capsule(&config::Index::RNG) {
+                Some(config::Capsule::Rng { rng }) => Some(Rc::clone(rng)),
+                _ => None,
+            };
+
+            push_layer::<_, C>(siv, crate::capsule::rng::config::<C>(chip, choice))
+        }
+        config::Index::GPIO => {
+            push_layer::<_, C>(siv, crate::capsule::gpio::GpioConfig::config(chip))
+        }
+        config::Index::LED => push_layer::<_, C>(siv, crate::capsule::led::LedConfig::config(chip)),
+        config::Index::HMAC => {
+            push_layer::<_, C>(siv, crate::capsule::hmac::HmacConfig::config(chip))
+        }
+        config::Index::INFO_FLASH => push_layer::<_, C>(
+            siv,
+            crate::capsule::info_flash::InfoFlashConfig::config(chip),
+        ),
+        config::Index::LLDB => {
+            push_layer::<_, C>(siv, crate::capsule::lldb::LldbConfig::config(chip))
+        }
+        config::Index::AES => push_layer::<_, C>(siv, crate::capsule::aes::AesConfig::config(chip)),
+        config::Index::KV_DRIVER => {
+            push_layer::<_, C>(siv, crate::capsule::kv_driver::KvDriverConfig::config(chip))
+        }
+        config::Index::PATTGEN => {
+            let previous_state = match data.platform.capsule(submit) {
+                Some(config::Capsule::Pattgen { pattgen }) => Some(pattgen.clone()),
+                _ => None,
+            };
+            push_layer::<_, C>(
+                siv,
+                crate::capsule::pattgen::config::<C>(chip, previous_state),
+            )
+        }
+        config::Index::SYSTEM_RESET_CONTROLLER => {
+            let previous_state = match data.platform.capsule(submit) {
+                Some(config::Capsule::SystemResetController {
+                    system_reset_controller,
+                }) => Some(system_reset_controller.clone()),
+                _ => None,
+            };
+            push_layer::<_, C>(
+                siv,
+                crate::capsule::system_reset_controller::config::<C>(chip, previous_state),
+            )
+        }
+        config::Index::ALERT_HANDLER => {
+            let previous_state = match data.platform.capsule(submit) {
+                Some(config::Capsule::AlertHandler { alert_handler }) => {
+                    Some(alert_handler.clone())
+                }
+                _ => None,
+            };
+            push_layer::<_, C>(
+                siv,
+                crate::capsule::alert_handler::config::<C>(chip, previous_state),
+            )
+        }
+        config::Index::USB => {
+            let previous_state = match data.platform.capsule(submit) {
+                Some(config::Capsule::Usb { usb }) => Some(usb.clone()),
+                _ => None,
+            };
+            push_layer::<_, C>(siv, crate::capsule::usb::config::<C>(chip, previous_state))
+        }
+        config::Index::RESET_MANAGER => {
+            let previous_state = match data.platform.capsule(submit) {
+                Some(config::Capsule::ResetManager { reset_manager }) => {
+                    Some(reset_manager.clone())
+                }
+                _ => None,
+            };
+            push_layer::<_, C>(
+                siv,
+                crate::capsule::reset_manager::config::<C>(chip, previous_state),
+            )
+        }
+        config::Index::IPC => {
+            let previous_state = match data.platform.capsule(submit) {
+                Some(config::Capsule::Ipc {}) => Some(()),
+                _ => None,
+            };
+            push_layer::<_, C>(siv, crate::capsule::ipc::config::<C>(previous_state))
+        }
+        config::Index::ONESHOT_DIGEST => {
+            let previous_state = match data.platform.capsule(submit) {
+                Some(config::Capsule::OneshotDigest { oneshot_digest }) => {
+                    Some(oneshot_digest.clone())
+                }
+                _ => None,
+            };
+            push_layer::<_, C>(
+                siv,
+                crate::capsule::oneshot_digest::config::<C>(chip, previous_state),
+            )
+        }
+        config::Index::P256 => {
+            let previous_state = match data.platform.capsule(submit) {
+                Some(config::Capsule::P256 { p256 }) => Some(p256.clone()),
+                _ => None,
+            };
+            push_layer::<_, C>(
+                siv,
+                crate::capsule::asymmetric_crypto::config_p256::<C>(chip, previous_state),
+            )
+        }
+        config::Index::P384 => {
+            let previous_state = match data.platform.capsule(submit) {
+                Some(config::Capsule::P384 { p384 }) => Some(p384.clone()),
+                _ => None,
+            };
+            push_layer::<_, C>(
+                siv,
+                crate::capsule::asymmetric_crypto::config_p384::<C>(chip, previous_state),
+            )
+        }
+        config::Index::ATTESTATION => {
+            let previous_state = match data.platform.capsule(submit) {
+                Some(config::Capsule::Attestation { attestation }) => Some(attestation.clone()),
+                _ => None,
+            };
+            push_layer::<_, C>(
+                siv,
+                crate::capsule::attestation::config::<C>(chip, previous_state),
+            )
+        }
+        _ => unreachable!(),
+    }
+}
+
+/// Give the next prompt from the GPIO capsule.
+#[cfg(feature = "gui")]
+#[allow(unused)]
+pub(crate) fn on_gpio_submit<
+    C: Chip + 'static + serde::Serialize,
+    F: 'static
+        + Fn(
+            Rc<<<C as Chip>::Peripherals as DefaultPeripherals>::Gpio>,
+        ) -> cursive::views::LinearLayout,
+>(
+    siv: &mut cursive::Cursive,
+    submit: Rc<<<C as Chip>::Peripherals as DefaultPeripherals>::Gpio>,
+    popup: F,
+) {
+    siv.pop_layer();
+    siv.add_layer(popup(submit));
+}
+
+/// Exit the current window and go back to the previous one.
+#[cfg(feature = "gui")]
+pub(crate) fn on_exit_submit<C: Chip + 'static + serde::ser::Serialize>(
+    siv: &mut cursive::Cursive,
+) {
+    // Pop the current layer.
+    siv.pop_layer();
+    // Go to the back layer.
+    if let Some(data) = siv.user_data::<Data<C>>() {
+        if let Some(old_layer) = data.pop_view() {
+            siv.add_layer(old_layer);
+        }
+    }
+}
+
+/// Exit the current window and go to the "save to JSON" menu.
+#[cfg(feature = "gui")]
+pub(crate) fn on_quit_submit<C: Chip + 'static + serde::ser::Serialize>(
+    siv: &mut cursive::Cursive,
+) {
+    siv.pop_layer();
+    siv.add_layer(menu::save_dialog::<C>())
+}
+
+/// Write to the JSON file and quit the configurator.
+#[cfg(feature = "gui")]
+pub(crate) fn on_name_submit<C: Chip + 'static + serde::Serialize>(
+    siv: &mut cursive::Cursive,
+    name: &str,
+) {
+    if let Some(data) = siv.user_data::<Data<C>>() {
+        if !name.is_empty() {
+            data.platform.update_type(name)
+        }
+        write_json(data);
+    }
+    siv.quit();
+}
+
+/// Save the process count to use in the JSON.
+#[cfg(feature = "gui")]
+pub(crate) fn on_count_submit_proc<C: Chip + 'static + serde::Serialize>(
+    siv: &mut cursive::Cursive,
+    name: &str,
+) {
+    if let Some(data) = siv.user_data::<Data<C>>() {
+        if name.is_empty() {
+            data.platform.process_count = 4_usize;
+        } else if let Ok(count) = name.parse::<usize>() {
+            data.platform.process_count = count;
+        }
+
+        siv.pop_layer();
+        siv.add_layer(board_config_menu::<C>());
+    }
+}
+
+/// Save the stack memory size to use in the JSON.
+#[cfg(feature = "gui")]
+pub(crate) fn on_count_submit_stack<C: Chip + 'static + serde::Serialize>(
+    siv: &mut cursive::Cursive,
+    name: &str,
+) {
+    if let Some(data) = siv.user_data::<Data<C>>() {
+        if name.is_empty() {
+            // TODO: Safety comment
+            unsafe {
+                data.platform.stack_size = NonZeroUsize::new_unchecked(0x900_usize);
+            }
+        } else if let Some(number) = name.strip_prefix("0x") {
+            if let Ok(count) = usize::from_str_radix(number, 16) {
+                data.platform.update_stack_size(count);
+            }
+        } else if let Ok(count) = name.parse::<usize>() {
+            data.platform.update_stack_size(count);
+        }
+
+        siv.pop_layer();
+        siv.add_layer(board_config_menu::<C>());
+    }
+}
+
+/// Write the contents of the inner Data to a JSON file.
+///
+/// Note: This function replaces `data.out` with an empty `PathBuf`.
+pub(crate) fn write_json<C: Chip + 'static + serde::ser::Serialize>(data: &mut Data<C>) {
+    let board_config = serde_json::to_string_pretty(&data.platform).unwrap();
+    match &mut data.out {
+        Some(out) => {
+            let mut file = File::create(std::mem::take(out)).unwrap();
+            file.write_all(board_config.as_bytes()).unwrap();
+        }
+        None => {
+            // No path, write to stdout instead.
+            println!("{}", board_config);
+        }
+    }
+}
+
+/// Exit the current window and go back to the previous one.
+#[cfg(feature = "gui")]
+pub(crate) fn on_save_submit<C: Chip + 'static + serde::ser::Serialize>(
+    siv: &mut cursive::Cursive,
+) {
+    let ident = siv
+        .call_on_name("save_name", |view: &mut EditView| view.get_content())
+        .unwrap();
+    on_name_submit::<C>(siv, &ident);
+}

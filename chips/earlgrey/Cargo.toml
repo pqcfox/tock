@@ -7,12 +7,23 @@ name = "earlgrey"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
+license = "Apache-2.0 OR MIT"
 
 [dependencies]
 lowrisc = { path = "../lowrisc" }
 rv32i = { path = "../../arch/rv32i" }
 kernel = { path = "../../kernel" }
 
-
 [lints]
 workspace = true
+
+[features]
+clkmgr_tests = []
+sival = []
+qemu = []
+test_alerthandler = ["lowrisc/test_alerthandler"]
+test_sram_ret = ["lowrisc/test_sram_ret"]
+test_rv_timer = ["lowrisc/test_rv_timer"]
+test_aon_timer = ["lowrisc/test_aon_timer"]
+test_flash_ctrl = []
+unlock_dice_info_pages = []

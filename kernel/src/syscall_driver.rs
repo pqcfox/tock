@@ -89,6 +89,51 @@ impl From<Result<(), ErrorCode>> for CommandReturn {
     }
 }
 
+impl From<Result<u32, ErrorCode>> for CommandReturn {
+    fn from(rc: Result<u32, ErrorCode>) -> Self {
+        match rc {
+            Ok(data) => CommandReturn::success_u32(data),
+            Err(error_code) => CommandReturn::failure(error_code),
+        }
+    }
+}
+
+impl From<Result<(u32, u32), ErrorCode>> for CommandReturn {
+    fn from(rc: Result<(u32, u32), ErrorCode>) -> Self {
+        match rc {
+            Ok((data0, data1)) => CommandReturn::success_u32_u32(data0, data1),
+            Err(error_code) => CommandReturn::failure(error_code),
+        }
+    }
+}
+
+impl From<Result<(u32, u32, u32), ErrorCode>> for CommandReturn {
+    fn from(rc: Result<(u32, u32, u32), ErrorCode>) -> Self {
+        match rc {
+            Ok((data0, data1, data2)) => CommandReturn::success_u32_u32_u32(data0, data1, data2),
+            Err(error_code) => CommandReturn::failure(error_code),
+        }
+    }
+}
+
+impl From<Result<(u32, u64), ErrorCode>> for CommandReturn {
+    fn from(rc: Result<(u32, u64), ErrorCode>) -> Self {
+        match rc {
+            Ok((data0, data1)) => CommandReturn::success_u32_u64(data0, data1),
+            Err(error_code) => CommandReturn::failure(error_code),
+        }
+    }
+}
+
+impl From<Result<u64, ErrorCode>> for CommandReturn {
+    fn from(rc: Result<u64, ErrorCode>) -> Self {
+        match rc {
+            Ok(data) => CommandReturn::success_u64(data),
+            Err(error_code) => CommandReturn::failure(error_code),
+        }
+    }
+}
+
 impl From<process::Error> for CommandReturn {
     fn from(perr: process::Error) -> Self {
         CommandReturn::failure(perr.into())

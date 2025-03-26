@@ -1,0 +1,97 @@
+// Licensed under the Apache License, Version 2.0 or the MIT License.
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+// Copyright OxidOS Automotive SRL 2024
+
+// Author: Irina Nita <irina.nita@oxidos.io>
+// Author: Darius Jipa <darius.jipa@oxidos.io>
+
+pub mod alarm;
+pub use alarm::*;
+
+pub mod console;
+pub use console::*;
+
+pub mod led;
+pub use led::*;
+
+pub mod spi_controller;
+pub use spi_controller::SpiController as SpiCapsule;
+
+pub mod ble_radio;
+pub use ble_radio::*;
+
+pub mod lsm303agr;
+pub use lsm303agr::*;
+
+pub mod temperature;
+pub use temperature::Temperature as TemperatureCapsule;
+
+pub mod rng_capsule;
+pub use rng_capsule::*;
+
+// Avoid name conflicts
+mod i2c;
+pub use i2c::*;
+
+// Avoid name conflicts
+mod gpio;
+pub use gpio::GPIO;
+
+// Avoid name conflicts
+mod hmac;
+pub use hmac::HmacCapsule;
+
+// Avoid name conflicts
+pub mod info_flash;
+pub use info_flash::InfoFlash;
+
+// Avoid name conflicts
+mod lldb;
+pub use lldb::Lldb;
+
+// Avoid name conflicts
+mod aes;
+pub use aes::AesCapsule;
+
+// Avoid name conflicts
+mod kv_driver;
+pub use kv_driver::KvDriver;
+
+// Avoid name conflicts
+mod pattgen;
+pub use pattgen::PattgenCapsule;
+
+// Avoid name conflicts
+mod system_reset_controller;
+pub use system_reset_controller::SystemResetControllerCapsule;
+
+// Avoid name conflicts
+mod alert_handler;
+pub use alert_handler::AlertHandlerCapsule;
+
+// Avoid name conflicts
+mod usb;
+pub use usb::UsbCapsule;
+
+// Avoid name conflicts
+mod reset_manager;
+pub use reset_manager::ResetManagerCapsule;
+
+// Avoid name conflicts
+mod ipc;
+pub use ipc::IPC;
+
+// Avoid name conflicts
+mod asymmetric_crypto;
+pub use asymmetric_crypto::*;
+
+// Avoid name conflicts
+mod attestation;
+pub use attestation::*;
+
+// Avoid name conflicts
+mod oneshot_digest;
+pub use oneshot_digest::*;
+
+pub mod timeout_mux;
+pub use timeout_mux::*;

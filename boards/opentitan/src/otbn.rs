@@ -41,6 +41,7 @@ pub struct AccelMuxComponent {
 }
 
 impl AccelMuxComponent {
+    #[allow(unused)]
     pub fn new(otbn: &'static Otbn<'static>) -> AccelMuxComponent {
         AccelMuxComponent { otbn }
     }
@@ -60,6 +61,7 @@ pub struct OtbnComponent {
 }
 
 impl OtbnComponent {
+    #[allow(unused)]
     pub fn new(mux_otbn: &'static MuxAccel<'static>) -> OtbnComponent {
         OtbnComponent { mux_otbn }
     }
@@ -148,7 +150,10 @@ pub fn find_app(name: &str, app_flash: &'static [u8]) -> Result<(usize, usize, u
             // Parse the full TBF header to see if this is a valid app. If the
             // header can't parse, we will error right here.
             if let Ok(tbf_header) = tock_tbf::parse::parse_tbf_header(header_flash, version) {
-                let process_name = tbf_header.get_package_name().unwrap();
+                let process_name = match tbf_header.get_package_name() {
+                    Some(name) => name,
+                    None => continue,
+                };
 
                 // If the app is enabled, it's a real app and not what we are looking for.
                 if tbf_header.enabled() {

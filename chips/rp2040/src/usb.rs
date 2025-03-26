@@ -10,7 +10,7 @@
 use crate::gpio::RPGpioPin;
 use core::cell::Cell;
 use kernel::hil;
-use kernel::hil::usb::TransferType;
+use kernel::hil::usb::{self, TransferType};
 use kernel::utilities::cells::{OptionalCell, VolatileCell};
 use kernel::utilities::registers::interfaces::{ReadWriteable, Readable, Writeable};
 use kernel::utilities::registers::{register_bitfields, register_structs, ReadWrite};
@@ -1822,7 +1822,7 @@ impl<'a> UsbCtrl<'a> {
             BulkInState::InData => {
                 // Totally expected state. Nothing to do.
                 self.client
-                    .map(|client| client.packet_transmitted(endpoint));
+                    .map(|client| client.packet_transmitted(endpoint, Ok(())));
                 self.descriptors[endpoint].state.set(EndpointState::Bulk(
                     transfer_type,
                     Some(BulkInState::Init),
@@ -2338,7 +2338,11 @@ impl<'a> hil::usb::UsbController<'a> for UsbCtrl<'a> {
         self.descriptors[0].slice_out.set(buf);
     }
 
-    fn endpoint_set_in_buffer(&self, endpoint: usize, buf: &'a [VolatileCell<u8>]) {
+    fn endpoint_set_in_buffer(
+        &self,
+        endpoint: usize,
+        buf: &'a [VolatileCell<u8>],
+    ) -> Result<(), usb::Error> {
         if buf.len() < 8 {
             panic!("Endpoint buffer must be at least 8 bytes");
         }
@@ -2349,9 +2353,15 @@ impl<'a> hil::usb::UsbController<'a> for UsbCtrl<'a> {
             panic!("Endpoint number is invalid");
         }
         self.descriptors[endpoint].slice_in.set(buf);
+
+        Ok(())
     }
 
-    fn endpoint_set_out_buffer(&self, endpoint: usize, buf: &'a [VolatileCell<u8>]) {
+    fn endpoint_set_out_buffer(
+        &self,
+        endpoint: usize,
+        buf: &'a [VolatileCell<u8>],
+    ) -> Result<(), usb::Error> {
         if buf.len() < 8 {
             panic!("Endpoint buffer must be at least 8 bytes");
         }
@@ -2362,6 +2372,8 @@ impl<'a> hil::usb::UsbController<'a> for UsbCtrl<'a> {
             panic!("Endpoint number is invalid");
         }
         self.descriptors[endpoint].slice_out.set(buf);
+
+        Ok(())
     }
 
     fn enable_as_device(&self, speed: hil::usb::DeviceSpeed) {
@@ -2390,7 +2402,11 @@ impl<'a> hil::usb::UsbController<'a> for UsbCtrl<'a> {
             .modify(ADDR_ENDP::ADDRESS.val(self.address.get()));
     }
 
-    fn endpoint_in_enable(&self, transfer_type: TransferType, endpoint: usize) {
+    fn endpoint_in_enable(
+        &self,
+        transfer_type: TransferType,
+        endpoint: usize,
+    ) -> Result<(), usb::Error> {
         match transfer_type {
             TransferType::Control => {
                 panic!("There is no IN control endpoint");
@@ -2403,9 +2419,15 @@ impl<'a> hil::usb::UsbController<'a> for UsbCtrl<'a> {
             }
             TransferType::Isochronous => unimplemented!("isochronous endpoint"),
         }
+
+        Ok(())
     }
 
-    fn endpoint_out_enable(&self, transfer_type: TransferType, endpoint: usize) {
+    fn endpoint_out_enable(
+        &self,
+        transfer_type: TransferType,
+        endpoint: usize,
+    ) -> Result<(), usb::Error> {
         match transfer_type {
             TransferType::Control => {
                 if endpoint != 0 {
@@ -2421,9 +2443,15 @@ impl<'a> hil::usb::UsbController<'a> for UsbCtrl<'a> {
             }
             TransferType::Isochronous => unimplemented!("isochronous endpoint"),
         }
+
+        Ok(())
     }
 
-    fn endpoint_in_out_enable(&self, transfer_type: TransferType, endpoint: usize) {
+    fn endpoint_in_out_enable(
+        &self,
+        transfer_type: TransferType,
+        endpoint: usize,
+    ) -> Result<(), usb::Error> {
         match transfer_type {
             TransferType::Control => {
                 panic!("There is no IN control endpoint");
@@ -2435,9 +2463,11 @@ impl<'a> hil::usb::UsbController<'a> for UsbCtrl<'a> {
             }
             TransferType::Isochronous => unimplemented!("isochronous endpoint"),
         }
+
+        Ok(())
     }
 
-    fn endpoint_resume_in(&self, endpoint: usize) {
+    fn endpoint_resume_in(&self, endpoint: usize) -> Result<(), usb::Error> {
         // Get the state of the endpoint that the upper layer requested to start
         // an IN transfer with for our state machine.
         let (_, in_state, _) = self.descriptors[endpoint].state.get().bulk_state();
@@ -2454,9 +2484,11 @@ impl<'a> hil::usb::UsbController<'a> for UsbCtrl<'a> {
         } else {
             self.descriptors[endpoint].request_transmit_in.set(true);
         }
+
+        Ok(())
     }
 
-    fn endpoint_resume_out(&self, endpoint: usize) {
+    fn endpoint_resume_out(&self, endpoint: usize) -> Result<(), usb::Error> {
         let (transfer_type, in_state, out_state) =
             self.descriptors[endpoint].state.get().bulk_state();
         assert!(out_state.is_some());
@@ -2481,5 +2513,7 @@ impl<'a> hil::usb::UsbController<'a> for UsbCtrl<'a> {
                 internal_err!("Unexpected state: {:?}", out_state);
             }
         }
+
+        Ok(())
     }
 }

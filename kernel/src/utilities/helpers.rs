@@ -9,6 +9,8 @@
 //!
 //! The macros are exported through the top level of the `kernel` crate.
 
+use core::num::{NonZeroU32, NonZeroUsize};
+
 /// Create an object with the given capability.
 ///
 /// ```ignore
@@ -46,6 +48,38 @@ macro_rules! count_expressions {
     () => (0usize);
     ($head:expr $(,)?) => (1usize);
     ($head:expr, $($tail:expr),* $(,)?) => (1usize + count_expressions!($($tail),*));
+}
+
+/// Creates a [NonZeroUsize] from the given value
+///
+/// # Return value
+///
+/// A new instance of [NonZeroUsize]
+///
+/// # Panic
+///
+/// Panics if `value` == 0.
+pub const fn create_non_zero_usize(value: usize) -> NonZeroUsize {
+    match NonZeroUsize::new(value) {
+        None => panic!("Attempted to create NonZeroUsize with 0 as value"),
+        Some(non_zero_value) => non_zero_value,
+    }
+}
+
+/// Creates a [NonZeroU32] from the given value
+///
+/// # Return value
+///
+/// A new instance of [NonZeroU32]
+///
+/// # Panic
+///
+/// Panics if `value` == 0.
+pub const fn create_non_zero_u32(value: u32) -> NonZeroU32 {
+    match NonZeroU32::new(value) {
+        None => panic!("Attempted to create NonZeroU32 with 0 as value"),
+        Some(non_zero_value) => non_zero_value,
+    }
 }
 
 /// Compute a POSIX-style CRC32 checksum of a slice.

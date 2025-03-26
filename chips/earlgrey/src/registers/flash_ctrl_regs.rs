@@ -85,29 +85,29 @@ register_structs! {
         /// Default region properties
         (0x0090 => pub(crate) default_region: ReadWrite<u32, DEFAULT_REGION::Register>),
         /// Memory region registers configuration enable.
-        (0x0094 => pub(crate) bank0_info0_regwen: [ReadWrite<u32, BANK0_INFO0_REGWEN::Register>; 10]),
+        (0x0094 => pub(crate) bank0_info0_regwen: [ReadWrite<u32, INFO_REGWEN::Register>; 10]),
         ///   Memory property configuration for info partition in bank0,
-        (0x00bc => pub(crate) bank0_info0_page_cfg: [ReadWrite<u32, BANK0_INFO0_PAGE_CFG::Register>; 10]),
+        (0x00bc => pub(crate) bank0_info0_page_cfg: [ReadWrite<u32, INFO_PAGE_CFG::Register>; 10]),
         /// Memory region registers configuration enable.
-        (0x00e4 => pub(crate) bank0_info1_regwen: [ReadWrite<u32, BANK0_INFO1_REGWEN::Register>; 1]),
+        (0x00e4 => pub(crate) bank0_info1_regwen: [ReadWrite<u32, INFO_REGWEN::Register>; 1]),
         ///   Memory property configuration for info partition in bank0,
-        (0x00e8 => pub(crate) bank0_info1_page_cfg: [ReadWrite<u32, BANK0_INFO1_PAGE_CFG::Register>; 1]),
+        (0x00e8 => pub(crate) bank0_info1_page_cfg: [ReadWrite<u32, INFO_PAGE_CFG::Register>; 1]),
         /// Memory region registers configuration enable.
-        (0x00ec => pub(crate) bank0_info2_regwen: [ReadWrite<u32, BANK0_INFO2_REGWEN::Register>; 2]),
+        (0x00ec => pub(crate) bank0_info2_regwen: [ReadWrite<u32, INFO_REGWEN::Register>; 2]),
         ///   Memory property configuration for info partition in bank0,
-        (0x00f4 => pub(crate) bank0_info2_page_cfg: [ReadWrite<u32, BANK0_INFO2_PAGE_CFG::Register>; 2]),
+        (0x00f4 => pub(crate) bank0_info2_page_cfg: [ReadWrite<u32, INFO_PAGE_CFG::Register>; 2]),
         /// Memory region registers configuration enable.
-        (0x00fc => pub(crate) bank1_info0_regwen: [ReadWrite<u32, BANK1_INFO0_REGWEN::Register>; 10]),
+        (0x00fc => pub(crate) bank1_info0_regwen: [ReadWrite<u32, INFO_REGWEN::Register>; 10]),
         ///   Memory property configuration for info partition in bank1,
-        (0x0124 => pub(crate) bank1_info0_page_cfg: [ReadWrite<u32, BANK1_INFO0_PAGE_CFG::Register>; 10]),
+        (0x0124 => pub(crate) bank1_info0_page_cfg: [ReadWrite<u32, INFO_PAGE_CFG::Register>; 10]),
         /// Memory region registers configuration enable.
-        (0x014c => pub(crate) bank1_info1_regwen: [ReadWrite<u32, BANK1_INFO1_REGWEN::Register>; 1]),
+        (0x014c => pub(crate) bank1_info1_regwen: [ReadWrite<u32, INFO_REGWEN::Register>; 1]),
         ///   Memory property configuration for info partition in bank1,
-        (0x0150 => pub(crate) bank1_info1_page_cfg: [ReadWrite<u32, BANK1_INFO1_PAGE_CFG::Register>; 1]),
+        (0x0150 => pub(crate) bank1_info1_page_cfg: [ReadWrite<u32, INFO_PAGE_CFG::Register>; 1]),
         /// Memory region registers configuration enable.
-        (0x0154 => pub(crate) bank1_info2_regwen: [ReadWrite<u32, BANK1_INFO2_REGWEN::Register>; 2]),
+        (0x0154 => pub(crate) bank1_info2_regwen: [ReadWrite<u32, INFO_REGWEN::Register>; 2]),
         ///   Memory property configuration for info partition in bank1,
-        (0x015c => pub(crate) bank1_info2_page_cfg: [ReadWrite<u32, BANK1_INFO2_PAGE_CFG::Register>; 2]),
+        (0x015c => pub(crate) bank1_info2_page_cfg: [ReadWrite<u32, INFO_PAGE_CFG::Register>; 2]),
         /// HW interface info configuration rule overrides
         (0x0164 => pub(crate) hw_info_cfg_override: ReadWrite<u32, HW_INFO_CFG_OVERRIDE::Register>),
         /// Bank configuration registers configuration enable.
@@ -145,12 +145,27 @@ register_structs! {
         /// Current program and read fifo depth
         (0x01ac => pub(crate) curr_fifo_lvl: ReadWrite<u32, CURR_FIFO_LVL::Register>),
         /// Memory area: Flash program FIFO.
-        (0x01b0 => pub(crate) prog_fifo: [WriteOnly<u32>; 1]),
+        (0x01b0 => pub(crate) prog_fifo: WriteOnly<u32>),
         /// Memory area: Flash read FIFO.
-        (0x01b4 => pub(crate) rd_fifo: [ReadOnly<u32>; 1]),
+        (0x01b4 => pub(crate) rd_fifo: ReadOnly<u32>),
         (0x01b8 => @END),
     }
 }
+
+macro_rules! region_enable_magic_value {
+    () => {
+        0x6
+    };
+}
+
+macro_rules! region_disable_magic_value {
+    () => {
+        0x9
+    };
+}
+
+#[cfg(feature = "test_flash_ctrl")]
+pub(crate) use region_enable_magic_value;
 
 register_bitfields![u32,
     /// Common Interrupt Offsets
@@ -196,8 +211,15 @@ register_bitfields![u32,
             PAGE_ERASE = 0,
             BANK_ERASE = 1,
         ],
-        PARTITION_SEL OFFSET(8) NUMBITS(1) [],
-        INFO_SEL OFFSET(9) NUMBITS(2) [],
+        PARTITION_SEL OFFSET(8) NUMBITS(1) [
+            DATA = 0,
+            INFO = 1,
+        ],
+        INFO_SEL OFFSET(9) NUMBITS(2) [
+            TYPE0 = 0,
+            TYPE1 = 1,
+            TYPE2 = 2,
+        ],
         NUM OFFSET(16) NUMBITS(12) [],
     ],
     pub(crate) ADDR [
@@ -211,121 +233,106 @@ register_bitfields![u32,
         REQ OFFSET(0) NUMBITS(1) [],
     ],
     pub(crate) REGION_CFG_REGWEN [
-        REGION_0 OFFSET(0) NUMBITS(1) [
+        REGION OFFSET(0) NUMBITS(1) [
             REGION_LOCKED = 0,
             REGION_ENABLED = 1,
         ],
     ],
     pub(crate) MP_REGION_CFG [
-        EN_0 OFFSET(0) NUMBITS(4) [],
-        RD_EN_0 OFFSET(4) NUMBITS(4) [],
-        PROG_EN_0 OFFSET(8) NUMBITS(4) [],
-        ERASE_EN_0 OFFSET(12) NUMBITS(4) [],
-        SCRAMBLE_EN_0 OFFSET(16) NUMBITS(4) [],
-        ECC_EN_0 OFFSET(20) NUMBITS(4) [],
-        HE_EN_0 OFFSET(24) NUMBITS(4) [],
+        EN OFFSET(0) NUMBITS(4) [
+            Set = region_enable_magic_value!(),
+            Clear = region_disable_magic_value!(),
+        ],
+        RD_EN OFFSET(4) NUMBITS(4) [
+            Set = region_enable_magic_value!(),
+            Clear = region_disable_magic_value!(),
+        ],
+        PROG_EN OFFSET(8) NUMBITS(4) [
+            Set = region_enable_magic_value!(),
+            Clear = region_disable_magic_value!(),
+        ],
+        ERASE_EN OFFSET(12) NUMBITS(4) [
+            Set = region_enable_magic_value!(),
+            Clear = region_disable_magic_value!(),
+        ],
+        SCRAMBLE_EN OFFSET(16) NUMBITS(4) [
+            Set = region_enable_magic_value!(),
+            Clear = region_disable_magic_value!(),
+        ],
+        ECC_EN OFFSET(20) NUMBITS(4) [
+            Set = region_enable_magic_value!(),
+            Clear = region_disable_magic_value!(),
+        ],
+        HE_EN OFFSET(24) NUMBITS(4) [
+            Set = region_enable_magic_value!(),
+            Clear = region_disable_magic_value!(),
+        ],
     ],
     pub(crate) MP_REGION [
-        BASE_0 OFFSET(0) NUMBITS(9) [],
-        SIZE_0 OFFSET(9) NUMBITS(10) [],
+        BASE OFFSET(0) NUMBITS(9) [],
+        SIZE OFFSET(9) NUMBITS(10) [],
     ],
     pub(crate) DEFAULT_REGION [
-        RD_EN OFFSET(0) NUMBITS(4) [],
-        PROG_EN OFFSET(4) NUMBITS(4) [],
-        ERASE_EN OFFSET(8) NUMBITS(4) [],
-        SCRAMBLE_EN OFFSET(12) NUMBITS(4) [],
-        ECC_EN OFFSET(16) NUMBITS(4) [],
-        HE_EN OFFSET(20) NUMBITS(4) [],
+        RD_EN OFFSET(0) NUMBITS(4) [
+            Set = region_enable_magic_value!(),
+            Clear = region_disable_magic_value!(),
+        ],
+        PROG_EN OFFSET(4) NUMBITS(4) [
+            Set = region_enable_magic_value!(),
+            Clear = region_disable_magic_value!(),
+        ],
+        ERASE_EN OFFSET(8) NUMBITS(4) [
+            Set = region_enable_magic_value!(),
+            Clear = region_disable_magic_value!(),
+        ],
+        SCRAMBLE_EN OFFSET(12) NUMBITS(4) [
+            Set = region_enable_magic_value!(),
+            Clear = region_disable_magic_value!(),
+        ],
+        ECC_EN OFFSET(16) NUMBITS(4) [
+            Set = region_enable_magic_value!(),
+            Clear = region_disable_magic_value!(),
+        ],
+        HE_EN OFFSET(20) NUMBITS(4) [
+            Set = region_enable_magic_value!(),
+            Clear = region_disable_magic_value!(),
+        ],
     ],
-    pub(crate) BANK0_INFO0_REGWEN [
-        REGION_0 OFFSET(0) NUMBITS(1) [
+    pub(crate) INFO_REGWEN [
+        REGION OFFSET(0) NUMBITS(1) [
             PAGE_LOCKED = 0,
             PAGE_ENABLED = 1,
         ],
     ],
-    pub(crate) BANK0_INFO0_PAGE_CFG [
-        EN_0 OFFSET(0) NUMBITS(4) [],
-        RD_EN_0 OFFSET(4) NUMBITS(4) [],
-        PROG_EN_0 OFFSET(8) NUMBITS(4) [],
-        ERASE_EN_0 OFFSET(12) NUMBITS(4) [],
-        SCRAMBLE_EN_0 OFFSET(16) NUMBITS(4) [],
-        ECC_EN_0 OFFSET(20) NUMBITS(4) [],
-        HE_EN_0 OFFSET(24) NUMBITS(4) [],
-    ],
-    pub(crate) BANK0_INFO1_REGWEN [
-        REGION_0 OFFSET(0) NUMBITS(1) [
-            PAGE_LOCKED = 0,
-            PAGE_ENABLED = 1,
+    pub(crate) INFO_PAGE_CFG [
+        EN OFFSET(0) NUMBITS(4) [
+            Set = region_enable_magic_value!(),
+            Clear = region_disable_magic_value!(),
         ],
-    ],
-    pub(crate) BANK0_INFO1_PAGE_CFG [
-        EN_0 OFFSET(0) NUMBITS(4) [],
-        RD_EN_0 OFFSET(4) NUMBITS(4) [],
-        PROG_EN_0 OFFSET(8) NUMBITS(4) [],
-        ERASE_EN_0 OFFSET(12) NUMBITS(4) [],
-        SCRAMBLE_EN_0 OFFSET(16) NUMBITS(4) [],
-        ECC_EN_0 OFFSET(20) NUMBITS(4) [],
-        HE_EN_0 OFFSET(24) NUMBITS(4) [],
-    ],
-    pub(crate) BANK0_INFO2_REGWEN [
-        REGION_0 OFFSET(0) NUMBITS(1) [
-            PAGE_LOCKED = 0,
-            PAGE_ENABLED = 1,
+        RD_EN OFFSET(4) NUMBITS(4) [
+            Set = region_enable_magic_value!(),
+            Clear = region_disable_magic_value!(),
         ],
-    ],
-    pub(crate) BANK0_INFO2_PAGE_CFG [
-        EN_0 OFFSET(0) NUMBITS(4) [],
-        RD_EN_0 OFFSET(4) NUMBITS(4) [],
-        PROG_EN_0 OFFSET(8) NUMBITS(4) [],
-        ERASE_EN_0 OFFSET(12) NUMBITS(4) [],
-        SCRAMBLE_EN_0 OFFSET(16) NUMBITS(4) [],
-        ECC_EN_0 OFFSET(20) NUMBITS(4) [],
-        HE_EN_0 OFFSET(24) NUMBITS(4) [],
-    ],
-    pub(crate) BANK1_INFO0_REGWEN [
-        REGION_0 OFFSET(0) NUMBITS(1) [
-            PAGE_LOCKED = 0,
-            PAGE_ENABLED = 1,
+        PROG_EN OFFSET(8) NUMBITS(4) [
+            Set = region_enable_magic_value!(),
+            Clear = region_disable_magic_value!(),
         ],
-    ],
-    pub(crate) BANK1_INFO0_PAGE_CFG [
-        EN_0 OFFSET(0) NUMBITS(4) [],
-        RD_EN_0 OFFSET(4) NUMBITS(4) [],
-        PROG_EN_0 OFFSET(8) NUMBITS(4) [],
-        ERASE_EN_0 OFFSET(12) NUMBITS(4) [],
-        SCRAMBLE_EN_0 OFFSET(16) NUMBITS(4) [],
-        ECC_EN_0 OFFSET(20) NUMBITS(4) [],
-        HE_EN_0 OFFSET(24) NUMBITS(4) [],
-    ],
-    pub(crate) BANK1_INFO1_REGWEN [
-        REGION_0 OFFSET(0) NUMBITS(1) [
-            PAGE_LOCKED = 0,
-            PAGE_ENABLED = 1,
+        ERASE_EN OFFSET(12) NUMBITS(4) [
+            Set = region_enable_magic_value!(),
+            Clear = region_disable_magic_value!(),
         ],
-    ],
-    pub(crate) BANK1_INFO1_PAGE_CFG [
-        EN_0 OFFSET(0) NUMBITS(4) [],
-        RD_EN_0 OFFSET(4) NUMBITS(4) [],
-        PROG_EN_0 OFFSET(8) NUMBITS(4) [],
-        ERASE_EN_0 OFFSET(12) NUMBITS(4) [],
-        SCRAMBLE_EN_0 OFFSET(16) NUMBITS(4) [],
-        ECC_EN_0 OFFSET(20) NUMBITS(4) [],
-        HE_EN_0 OFFSET(24) NUMBITS(4) [],
-    ],
-    pub(crate) BANK1_INFO2_REGWEN [
-        REGION_0 OFFSET(0) NUMBITS(1) [
-            PAGE_LOCKED = 0,
-            PAGE_ENABLED = 1,
+        SCRAMBLE_EN OFFSET(16) NUMBITS(4) [
+            Set = region_enable_magic_value!(),
+            Clear = region_disable_magic_value!(),
         ],
-    ],
-    pub(crate) BANK1_INFO2_PAGE_CFG [
-        EN_0 OFFSET(0) NUMBITS(4) [],
-        RD_EN_0 OFFSET(4) NUMBITS(4) [],
-        PROG_EN_0 OFFSET(8) NUMBITS(4) [],
-        ERASE_EN_0 OFFSET(12) NUMBITS(4) [],
-        SCRAMBLE_EN_0 OFFSET(16) NUMBITS(4) [],
-        ECC_EN_0 OFFSET(20) NUMBITS(4) [],
-        HE_EN_0 OFFSET(24) NUMBITS(4) [],
+        ECC_EN OFFSET(20) NUMBITS(4) [
+            Set = region_enable_magic_value!(),
+            Clear = region_disable_magic_value!(),
+        ],
+        HE_EN OFFSET(24) NUMBITS(4) [
+            Set = region_enable_magic_value!(),
+            Clear = region_disable_magic_value!(),
+        ],
     ],
     pub(crate) HW_INFO_CFG_OVERRIDE [
         SCRAMBLE_DIS OFFSET(0) NUMBITS(4) [],

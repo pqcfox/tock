@@ -7,12 +7,19 @@ name = "capsules-extra"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
+license = "Apache-2.0 OR MIT"
+
 
 [dependencies]
 kernel = { path = "../../kernel" }
+earlgrey = { path = "../../chips/earlgrey" }
 enum_primitive = { path = "../../libraries/enum_primitive" }
 tickv = { path = "../../libraries/tickv" }
 capsules-core = { path = "../core" }
 
 [lints]
 workspace = true
+
+[features]
+test_resetmanager = []
+

@@ -8,18 +8,29 @@
 #![crate_name = "lowrisc"]
 #![crate_type = "rlib"]
 
+#[cfg(feature = "ffi")]
+pub use registers;
+
+pub mod aes;
 pub mod aon_timer;
 pub mod csrng;
+#[cfg(feature = "ffi")]
+pub mod ffi;
 pub mod flash_ctrl;
 pub mod gpio;
 pub mod hmac;
 pub mod i2c;
 pub mod otbn;
-pub mod padctrl;
-pub mod pwrmgr;
+pub mod otp;
+pub mod pattgen;
+#[cfg(not(feature = "ffi"))]
 pub mod registers;
 pub mod rsa;
+pub mod rv_core_ibex;
 pub mod spi_host;
+pub mod sysrst_ctrl;
+pub mod timer;
 pub mod uart;
-pub mod usbdev;
+pub mod usb;
+mod utils;
 pub mod virtual_otbn;

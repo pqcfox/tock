@@ -159,18 +159,17 @@ impl<'a> CsRng<'a> {
             return;
         }
 
-        if irqs.is_set(INTR::CMD_REQ_DONE) {
-            if self
+        if irqs.is_set(INTR::CMD_REQ_DONE)
+            && self
                 .client
                 .map(move |client| client.entropy_available(&mut CsRngIter(self), Ok(())))
                 == Some(Continue::More)
-            {
-                // We need more
-                if let Err(e) = self.get() {
-                    self.client.map(move |client| {
-                        client.entropy_available(&mut (0..0), Err(e));
-                    });
-                }
+        {
+            // We need more
+            if let Err(e) = self.get() {
+                self.client.map(move |client| {
+                    client.entropy_available(&mut (0..0), Err(e));
+                });
             }
         }
     }

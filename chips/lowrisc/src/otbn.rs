@@ -29,7 +29,7 @@ register_structs! {
         (0x0C => alert_test: WriteOnly<u32, ALERT_TEST::Register>),
         (0x10 => cmd: ReadWrite<u32, CMD::Register>),
         (0x14 => ctrl: ReadWrite<u32, CTRL::Register>),
-        (0x18 => status: ReadOnly<u32, STATUS::Register>),
+        (0x18 => pub(crate) status: ReadOnly<u32, STATUS::Register>),
         (0x1C => err_bits: ReadOnly<u32, ERR_BITS::Register>),
         (0x20 => fatal_alert_cause: ReadOnly<u32, FATAL_ALERT_CAUSE::Register>),
         (0x24 => insn_cnt: ReadWrite<u32>),
@@ -60,7 +60,7 @@ register_bitfields![u32,
     CTRL [
         SOFTWARE_ERRS_FATAL OFFSET(0) NUMBITS(1) [],
     ],
-    STATUS [
+    pub(crate) STATUS [
         STATUS OFFSET(0) NUMBITS(8) [
             IDLE = 0x00,
             BUSY_EXECUTE = 0x01,
@@ -142,7 +142,7 @@ impl<'a> Otbn<'a> {
                     .get()
                     .to_ne_bytes();
 
-                out_buf[idx + 0] = d[0];
+                out_buf[idx] = d[0];
                 out_buf[idx + 1] = d[1];
                 out_buf[idx + 2] = d[2];
                 out_buf[idx + 3] = d[3];
@@ -179,7 +179,7 @@ impl<'a> Otbn<'a> {
         for i in 0..(input.len() / 4) {
             let idx = i * 4;
 
-            let mut d = (input[idx + 0] as u32) << 0;
+            let mut d = input[idx] as u32;
             d |= (input[idx + 1] as u32) << 8;
             d |= (input[idx + 2] as u32) << 16;
             d |= (input[idx + 3] as u32) << 24;
@@ -204,7 +204,7 @@ impl<'a> Otbn<'a> {
         for i in 0..(data.len() / 4) {
             let idx = i * 4;
 
-            let mut d = (data[idx + 0] as u32) << 0;
+            let mut d = data[idx] as u32;
             d |= (data[idx + 1] as u32) << 8;
             d |= (data[idx + 2] as u32) << 16;
             d |= (data[idx + 3] as u32) << 24;

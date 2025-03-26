@@ -96,6 +96,16 @@ Protocol stacks and other libraries.
   encryption.
 - **[Public Key Cryptography](src/public_key_crypto)**: Asymmetric
   encryption.
+- **[Oneshot Hash Functions](src/oneshot_digest/hash.rs)**: SHA-2/3 hash
+  operations that operate directly on allow parameters.
+- **[Oneshot SHAKE](src/oneshot_digest/shake.rs)**: SHAKE XOF operations that
+  operate directly on allow parameters.
+- **[Oneshot cSHAKE](src/oneshot_digest/cshake.rs)**: cSHAKE XOF operations that
+  operate directly on allow parameters.
+- **[Oneshot HMAC](src/oneshot_digest/hmac.rs)**: HMAC operations that operate
+  directly on allow parameters.
+- **[Oneshot KMAC](src/oneshot_digest/kmac.rs)**: KMAC operations that operate
+  directly on allow parameters.
 
 
 MCU Peripherals for Userspace
@@ -107,6 +117,11 @@ These capsules provide a `Driver` interface for common MCU peripherals.
 - **[CRC](src/crc.rs)**: CRC calculation.
 - **[DAC](src/dac.rs)**: Digital to analog conversion.
 - **[CAN](src/can.rs)**: CAN communication.
+- **[InfoFlash](src/info_flash.rs)**: OpenTitan Flash Information Pages
+- **[ResetManager](src/reset_manager.rs)**: OpenTitan Reset Manager
+- **[AlertHandler](src/opentitan_alerthandler.rs)**: OpenTitan Alert Handler
+- **[SysRst](src/opentitan_sysrst.rs)**: OpenTitan System Reset Controller
+- **[Pattgen](src/pattgen.rs)**: Pattern Generator
 
 
 Helpful Userspace Capsules
@@ -127,6 +142,7 @@ These provide common and better abstractions for userspace.
 - **[Key-Value Store](src/kv_driver.rs)**: Store key-value data.
 - **[LED Matrix](src/led_matrix.rs)**: Control a 2D array of LEDs.
 - **[Moisture](src/moisture.rs)**: Query moisture sensors.
+- **[OpenTitan Attestation](src/opentitan_attestation.rs)**: OpenTitan attestation API.
 - **[Pressure](src/pressure.rs)**: Pressure sensors.
 - **[Proximity](src/proximity.rs)**: Proximity sensors.
 - **[PWM](src/pwm.rs)**: Pulse-width modulation support.
@@ -174,6 +190,8 @@ Other capsules that implement reusable logic.
 - **[TicKV](src/tickv.rs)**: Key-value storage.
 - **[TicKV KV Store](src/tickv_kv_store.rs)**: Provide `hil::kv::KV` with TickV.
 - **[Virtual KV](src/virtual_kv.rs)**: Virtualize access to KV with permissions.
+- **[Oneshot Digest Utils](src/oneshot_digest/utils.rs)**: Internal utilities
+  used by oneshot digest capsules.
 
 
 Debugging Capsules
