@@ -25,17 +25,20 @@ pub struct Port<'a> {
     pins: [GpioPin<'a, PadConfig>; 32],
 }
 
-impl From<GpioBitfield> for PinmuxPeripheralIn {
-    fn from(pin: GpioBitfield) -> PinmuxPeripheralIn {
+/// Wrapper type to get around the orphan rule.
+pub struct Bitfield(GpioBitfield);
+
+impl From<Bitfield> for PinmuxPeripheralIn {
+    fn from(pin: Bitfield) -> PinmuxPeripheralIn {
         // We used fact that first 0-31 values are directly maped to GPIO
-        Self::try_from(pin.shift as u32).unwrap()
+        Self::try_from(pin.0.shift as u32).unwrap()
     }
 }
 
-impl From<GpioBitfield> for PinmuxOutsel {
-    fn from(pin: GpioBitfield) -> Self {
+impl From<Bitfield> for PinmuxOutsel {
+    fn from(pin: Bitfield) -> Self {
         // We skip first 3 constans to convert value to output selector
-        match Self::try_from(pin.shift as u32 + PINMUX_PERIPH_OUTSEL_IDX_OFFSET as u32) {
+        match Self::try_from(pin.0.shift as u32 + PINMUX_PERIPH_OUTSEL_IDX_OFFSET as u32) {
             Ok(outsel) => outsel,
             Err(_) => PinmuxOutsel::ConstantHighZ,
         }
@@ -44,7 +47,7 @@ impl From<GpioBitfield> for PinmuxOutsel {
 
 // This function use extract GPIO mapping from initial pinmux configurations
 pub fn gpio_pad_config<Layout: EarlGreyPinmuxConfig>(pin: GpioBitfield) -> PadConfig {
-    let inp: PinmuxPeripheralIn = PinmuxPeripheralIn::from(pin);
+    let inp: PinmuxPeripheralIn = PinmuxPeripheralIn::from(Bitfield(pin));
     match Layout::INPUT[inp as usize] {
         // Current implementation don't support Output only GPIO
         PinmuxInsel::ConstantZero | PinmuxInsel::ConstantOne => PadConfig::Unconnected,
@@ -54,7 +57,7 @@ pub fn gpio_pad_config<Layout: EarlGreyPinmuxConfig>(pin: GpioBitfield) -> PadCo
             ) {
                 let out: PinmuxOutsel = Layout::OUTPUT[pad as usize];
                 // Checking for bi-directional I/O
-                if out == PinmuxOutsel::from(pin) {
+                if out == PinmuxOutsel::from(Bitfield(pin)) {
                     PadConfig::InOut(pad, inp, out)
                 } else {
                     PadConfig::Input(pad, inp)
