@@ -13,10 +13,8 @@ QEMU ?= ../../../tools/qemu/build/qemu-system-riscv32
 # This offset is calculated (from the linker file) as:
 # ORIGIN(rom) + size_manifest = 0x20000000 + 0x400
 QEMU_ENTRY_POINT=0x20000400
-# OpenTitan commit edf5e35f5d50a5377641c90a315109a351de7635 is on the
-# earlgrey_es branch. earlgrey_es is what is being taped out in the first
-# Earlgrey chip.
-OPENTITAN_SUPPORTED_SHA := edf5e35f5d50a5377641c90a315109a351de7635
+# Upstream OpenTitan commit; earlgrey_1.0.0 branch as of 26 Mar 2025.
+OPENTITAN_SUPPORTED_SHA := 4ea24f059011012ab89793009ebf3dbb4a68a6e3
 # Disable virtual function elimination
 VFUNC_ELIM=1
 FPGA_FLAGS := --features=fpga,sival
