@@ -664,7 +664,7 @@ pub mod tests {
         kernel::debug!("Starting testing hardware configure digest.");
 
         let actual_digest = otp
-            .read_hw_cfg_digest()
+            .read_hw_cfg0_digest()
             .expect("Reading hardware configure digest failed");
         const EXPECTED_DIGEST: u64 = 0x4e723d153038967f;
 
