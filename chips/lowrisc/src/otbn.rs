@@ -109,6 +109,12 @@ pub struct Otbn<'a> {
     copy_address: Cell<usize>,
 }
 
+#[derive(Clone, Copy)]
+pub enum OtbnInterrupt {
+    /// OTBN has completed the operation.
+    Done,
+}
+
 impl<'a> Otbn<'a> {
     pub fn new(base: StaticRef<OtbnRegisters>) -> Self {
         Otbn {
@@ -119,38 +125,41 @@ impl<'a> Otbn<'a> {
         }
     }
 
-    pub fn handle_interrupt(&self) {
+    pub fn handle_interrupt(&self, interrupt: OtbnInterrupt) {
         self.registers.intr_enable.set(0x00);
-        self.registers.intr_state.set(0xFFFF_FFFF);
+        match interrupt {
+            OtbnInterrupt::Done => {
+                self.registers.intr_state.modify(INTR::DONE::SET);
+                // Check if there is an error
+                if self.registers.err_bits.get() > 0 {
+                    self.client.map(|client| {
+                        self.out_buffer.take().map(|buf| {
+                            client.op_done(Err(ErrorCode::FAIL), buf);
+                        })
+                    });
+                    return;
+                }
 
-        // Check if there is an error
-        if self.registers.err_bits.get() > 0 {
-            self.client.map(|client| {
-                self.out_buffer.take().map(|buf| {
-                    client.op_done(Err(ErrorCode::FAIL), buf);
-                })
-            });
-            return;
-        }
+                if self.registers.status.matches_all(STATUS::STATUS::IDLE) {
+                    let out_buf = self.out_buffer.take().unwrap();
 
-        if self.registers.status.matches_all(STATUS::STATUS::IDLE) {
-            let out_buf = self.out_buffer.take().unwrap();
+                    for i in 0..(out_buf.len() / 4) {
+                        let idx = i * 4;
+                        let d = self.registers.dmem[self.copy_address.get() / 4 + i]
+                            .get()
+                            .to_ne_bytes();
 
-            for i in 0..(out_buf.len() / 4) {
-                let idx = i * 4;
-                let d = self.registers.dmem[self.copy_address.get() / 4 + i]
-                    .get()
-                    .to_ne_bytes();
+                        out_buf[idx] = d[0];
+                        out_buf[idx + 1] = d[1];
+                        out_buf[idx + 2] = d[2];
+                        out_buf[idx + 3] = d[3];
+                    }
 
-                out_buf[idx] = d[0];
-                out_buf[idx + 1] = d[1];
-                out_buf[idx + 2] = d[2];
-                out_buf[idx + 3] = d[3];
+                    self.client.map(|client| {
+                        client.op_done(Ok(()), out_buf);
+                    });
+                }
             }
-
-            self.client.map(|client| {
-                client.op_done(Ok(()), out_buf);
-            });
         }
     }
 

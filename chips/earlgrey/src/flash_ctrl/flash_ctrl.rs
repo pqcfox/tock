@@ -163,6 +163,22 @@ pub struct FlashCtrl<'a> {
     is_busy: Cell<BusyStatus>,
 }
 
+#[derive(Clone, Copy)]
+pub enum FlashCtrlInterrupt {
+    /// Program FIFO empty
+    ProgEmpty,
+    /// Program FIFO drained to level
+    ProgLvl,
+    /// Read FIFO full
+    RdFull,
+    /// Read FIFO filled to level
+    RdLvl,
+    /// Operation complete
+    OpDone,
+    /// Correctable error encountered
+    CorrErr,
+}
+
 macro_rules! convert_info_memory_protection_region_to_register_value {
     {$function:ident, $cfg:ident} => {
 
@@ -1883,7 +1899,6 @@ impl FlashCtrl<'_> {
 
     /// Handler for operation done interrupt
     pub(crate) fn handle_operation_done(&self) {
-        self.clear_operation_done_interrupt();
         self.clear_operation_done_status();
         self.stop_flash_operation();
 
@@ -1956,6 +1971,36 @@ impl FlashCtrl<'_> {
     #[cfg(feature = "test_flash_ctrl")]
     pub(super) fn get_registers(&self) -> &StaticRef<FlashCtrlRegisters> {
         &self.registers
+    }
+
+    pub fn handle_interrupt(&self, interrupt: FlashCtrlInterrupt) {
+        let regs = &self.registers;
+        match interrupt {
+            FlashCtrlInterrupt::ProgEmpty => {
+                regs.intr_state.modify(INTR::PROG_EMPTY::SET);
+                // TODO: handle this
+            }
+            FlashCtrlInterrupt::ProgLvl => {
+                regs.intr_state.modify(INTR::PROG_LVL::SET);
+                // TODO: handle this
+            }
+            FlashCtrlInterrupt::RdFull => {
+                regs.intr_state.modify(INTR::RD_FULL::SET);
+                // TODO: handle this
+            }
+            FlashCtrlInterrupt::RdLvl => {
+                regs.intr_state.modify(INTR::RD_LVL::SET);
+                // TODO: handle this
+            }
+            FlashCtrlInterrupt::OpDone => {
+                self.clear_operation_done_interrupt();
+                self.handle_operation_done();
+            }
+            FlashCtrlInterrupt::CorrErr => {
+                regs.intr_state.modify(INTR::CORR_ERR::SET);
+                // TODO: handle this
+            }
+        }
     }
 }
 

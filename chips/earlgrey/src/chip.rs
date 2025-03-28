@@ -19,16 +19,18 @@ use crate::alert_handler::{AlertClass, LocalAlertFlags};
 use crate::alert_handler::{AlertFlags, AlertHandler};
 use crate::aon_timer::AON_TIMER;
 use crate::chip_config::EarlGreyConfig;
-use crate::interrupts;
 use crate::pinmux_config::EarlGreyPinmuxConfig;
 use crate::plic::Plic;
 use crate::plic::PLIC;
+use crate::pwrmgr::PwrMgrInterrupt;
 use crate::registers::top_earlgrey::AlertId;
+use crate::registers::top_earlgrey::PlicIrqId;
 use crate::registers::top_earlgrey::RV_TIMER_BASE_ADDR;
 #[cfg(not(feature = "qemu"))]
 use crate::registers::top_earlgrey::SYSRST_CTRL_AON_BASE_ADDR;
 use crate::rstmgr::RstMgr;
 use crate::rv_core_ibex::{IBEX_EXTERNAL_NMI_MCAUSE, RV_CORE_IBEX};
+use lowrisc::aon_timer::AonTimerInterrupt;
 
 pub struct EarlGrey<
     'a,
@@ -50,20 +52,34 @@ pub struct EarlGrey<
 pub struct EarlGreyDefaultPeripherals<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig> {
     #[cfg(not(feature = "qemu"))]
     pub sram_ret: crate::sram_ret::SramCtrl,
+    pub adc_ctrl: crate::adc_ctrl::AdcCtrl<'a>,
     pub aes: lowrisc::aes::Aes<'a>,
+    pub csrng: lowrisc::csrng::CsRng<'a>,
+    pub edn0: lowrisc::edn::Edn<'a>,
+    pub edn1: lowrisc::edn::Edn<'a>,
+    pub entropy_src: lowrisc::entropy_src::EntropySrc<'a>,
     pub hmac: lowrisc::hmac::Hmac<'a>,
+    pub keymgr: lowrisc::keymgr::Keymgr<'a>,
+    pub kmac: lowrisc::kmac::Kmac<'a>,
     pub clkmgr: crate::clkmgr::Clkmgr,
     pub usb: lowrisc::usb::Usb<'a>,
     pub uart0: lowrisc::uart::Uart<'a>,
+    pub uart1: lowrisc::uart::Uart<'a>,
+    pub uart2: lowrisc::uart::Uart<'a>,
+    pub uart3: lowrisc::uart::Uart<'a>,
     pub otbn: lowrisc::otbn::Otbn<'a>,
     pub otp: lowrisc::otp::Otp,
     pub gpio_port: crate::gpio::Port<'a>,
     pub i2c0: lowrisc::i2c::I2c<'a>,
+    pub i2c1: lowrisc::i2c::I2c<'a>,
+    pub i2c2: lowrisc::i2c::I2c<'a>,
     pub spi_host0: lowrisc::spi_host::SpiHost<'a>,
     pub spi_host1: lowrisc::spi_host::SpiHost<'a>,
+    pub spi_device: lowrisc::spi_device::SpiDevice<'a>,
     pub flash_ctrl: crate::flash_ctrl::FlashCtrl<'a>,
     pub rng: lowrisc::csrng::CsRng<'a>,
     pub watchdog: &'a lowrisc::aon_timer::AonTimer<'static>,
+    pub sensor_ctrl: crate::sensor_ctrl::SensorCtrl<'a>,
     #[cfg(not(feature = "qemu"))]
     pub sysreset: lowrisc::sysrst_ctrl::SysRstCtrl<'a>,
     pub timer: RvTimer<'static>,
@@ -84,15 +100,29 @@ impl<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig>
         Self {
             #[cfg(not(feature = "qemu"))]
             sram_ret: crate::sram_ret::SramCtrl::new(),
+            adc_ctrl: lowrisc::adc_ctrl::AdcCtrl::new(crate::adc_ctrl::ADC_CTRL_BASE),
             aes: lowrisc::aes::Aes::new(crate::aes::AES_BASE),
+            csrng: lowrisc::csrng::CsRng::new(crate::csrng::CSRNG_BASE),
+            edn0: lowrisc::edn::Edn::new(crate::edn::EDN0_BASE),
+            edn1: lowrisc::edn::Edn::new(crate::edn::EDN1_BASE),
+            entropy_src: lowrisc::entropy_src::EntropySrc::new(
+                crate::entropy_src::ENTROPY_SRC_BASE,
+            ),
             hmac: lowrisc::hmac::Hmac::new(crate::hmac::HMAC0_BASE),
+            keymgr: lowrisc::keymgr::Keymgr::new(crate::keymgr::KEYMGR_BASE),
+            kmac: lowrisc::kmac::Kmac::new(crate::kmac::KMAC_BASE),
             clkmgr: crate::clkmgr::Clkmgr::new(),
             usb: lowrisc::usb::Usb::new(crate::usbdev::USB0_BASE),
             uart0: lowrisc::uart::Uart::new(crate::uart::UART0_BASE, CFG::PERIPHERAL_FREQ),
+            uart1: lowrisc::uart::Uart::new(crate::uart::UART1_BASE, CFG::PERIPHERAL_FREQ),
+            uart2: lowrisc::uart::Uart::new(crate::uart::UART2_BASE, CFG::PERIPHERAL_FREQ),
+            uart3: lowrisc::uart::Uart::new(crate::uart::UART3_BASE, CFG::PERIPHERAL_FREQ),
             otbn: lowrisc::otbn::Otbn::new(crate::otbn::OTBN_BASE),
             otp: lowrisc::otp::Otp::new(crate::otp::OTP_BASE),
             gpio_port: crate::gpio::Port::new::<PINMUX>(),
             i2c0: lowrisc::i2c::I2c::new(crate::i2c::I2C0_BASE, (1 / CFG::CPU_FREQ) * 1000 * 1000),
+            i2c1: lowrisc::i2c::I2c::new(crate::i2c::I2C1_BASE, (1 / CFG::CPU_FREQ) * 1000 * 1000),
+            i2c2: lowrisc::i2c::I2c::new(crate::i2c::I2C2_BASE, (1 / CFG::CPU_FREQ) * 1000 * 1000),
             spi_host0: lowrisc::spi_host::SpiHost::new(
                 crate::spi_host::SPIHOST0_BASE,
                 CFG::CPU_FREQ,
@@ -101,9 +131,11 @@ impl<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig>
                 crate::spi_host::SPIHOST1_BASE,
                 CFG::CPU_FREQ,
             ),
+            spi_device: lowrisc::spi_device::SpiDevice::new(crate::spi_device::SPIDEVICE_BASE),
             flash_ctrl: crate::flash_ctrl::FlashCtrl::new(flash_memory_protection_configuration),
             rng: lowrisc::csrng::CsRng::new(crate::csrng::CSRNG_BASE),
             watchdog: &*addr_of!(AON_TIMER),
+            sensor_ctrl: crate::sensor_ctrl::SensorCtrl::new(),
             #[cfg(not(feature = "qemu"))]
             sysreset: lowrisc::sysrst_ctrl::SysRstCtrl::new(SYSRST_CTRL_AON_BASE_ADDR),
             timer: RvTimer::new(
@@ -126,6 +158,9 @@ impl<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig>
     pub fn init(&'static self) {
         kernel::deferred_call::DeferredCallClient::register(&self.aes);
         kernel::deferred_call::DeferredCallClient::register(&self.uart0);
+        kernel::deferred_call::DeferredCallClient::register(&self.uart1);
+        kernel::deferred_call::DeferredCallClient::register(&self.uart2);
+        kernel::deferred_call::DeferredCallClient::register(&self.uart3);
         // Recommended value by documentation
         const INTEGRITY_CHECK_PERIOD: u32 = 0x3_FFFF;
         // Recommended value by documentation
@@ -203,95 +238,6 @@ impl<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig>
     }
 }
 
-impl<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig> InterruptService
-    for EarlGreyDefaultPeripherals<'a, CFG, PINMUX>
-{
-    unsafe fn service_interrupt(&self, interrupt: u32) -> bool {
-        match interrupt {
-            interrupts::UART0_TX_WATERMARK..=interrupts::UART0_RX_PARITYERR => {
-                self.uart0.handle_interrupt();
-            }
-            int_pin @ interrupts::GPIO_PIN0..=interrupts::GPIO_PIN31 => {
-                let pin = &self.gpio_port[(int_pin - interrupts::GPIO_PIN0) as usize];
-                pin.handle_interrupt();
-            }
-            interrupts::HMAC_HMACDONE..=interrupts::HMAC_HMACERR => {
-                self.hmac.handle_interrupt();
-            }
-            raw_usb_interrupt @ interrupts::USBDEV_PKTRECEIVED..=interrupts::USBDEV_LINKOUTERR => {
-                // PANIC: raw_usb_interrupt is a valid interrupt because of the match arm
-                // CAST: u32 == usize on RV32I
-                let usb_interrupt =
-                    lowrisc::usb::UsbInterrupt::try_from_usize(raw_usb_interrupt as usize).unwrap();
-                self.usb.handle_interrupt(usb_interrupt);
-            }
-            interrupts::FLASHCTRL_PROGEMPTY => {
-                // Since writing is done on chunks of FIFO depth level, this interrupt is useless.
-                return false;
-            }
-            interrupts::FLASHCTRL_PROGLVL => {
-                // Since writing is done on chunks of FIFO depth level, this interrupt is useless.
-                return false;
-            }
-            interrupts::FLASHCTRL_RDFULL => {
-                // Since reading is done on chunks of FIFO depth level, this interrupt is useless.
-                return false;
-            }
-            interrupts::FLASHCTRL_RDLVL => {
-                // Since reading is done on chunks of FIFO depth level, this interrupt is useless.
-                return false;
-            }
-            interrupts::FLASHCTRL_OPDONE => {
-                self.flash_ctrl.handle_operation_done();
-            }
-            interrupts::FLASHCTRL_CORRERR => {
-                // This interrupt may only occur due to a driver bug.
-                return false;
-            }
-            interrupts::I2C0_FMTWATERMARK..=interrupts::I2C0_HOSTTIMEOUT => {
-                self.i2c0.handle_interrupt()
-            }
-            interrupts::OTBN_DONE => self.otbn.handle_interrupt(),
-            interrupts::CSRNG_CSCMDREQDONE..=interrupts::CSRNG_CSFATALERR => {
-                self.rng.handle_interrupt()
-            }
-            interrupts::SPIHOST0_ERROR..=interrupts::SPIHOST0_SPIEVENT => {
-                self.spi_host0.handle_interrupt()
-            }
-            interrupts::SPIHOST1_ERROR..=interrupts::SPIHOST1_SPIEVENT => {
-                self.spi_host1.handle_interrupt()
-            }
-            #[cfg(not(feature = "qemu"))]
-            interrupts::SYSRST_CTRL_AON_SYSRST_CTRL => self.sysreset.handle_interrupt(),
-            interrupts::ALERTHANDLER_CLASSA => {
-                self.handle_alert_interrupt(AlertClass::ClassA);
-            }
-            interrupts::ALERTHANDLER_CLASSB => {
-                self.handle_alert_interrupt(AlertClass::ClassB);
-            }
-            interrupts::ALERTHANDLER_CLASSC => {
-                self.handle_alert_interrupt(AlertClass::ClassC);
-            }
-            interrupts::ALERTHANDLER_CLASSD => {
-                self.handle_alert_interrupt(AlertClass::ClassD);
-            }
-            interrupts::RVTIMERTIMEREXPIRED0_0 => self.timer.service_interrupt(),
-            raw_pattgen_interrupt @ interrupts::PATTGENDONECH0..=interrupts::PATTGENDONECH1 => {
-                // PANIC: raw_pattgen_interrupt is a valid interrupt because of the match arm
-                // CAST: u32 == usize on RV32I
-                let pattgen_interrupt =
-                    lowrisc::pattgen::PattgenInterrupt::try_from(raw_pattgen_interrupt as usize)
-                        .unwrap();
-                self.pattgen.handle_interrupt(pattgen_interrupt);
-            }
-            interrupts::AON_TIMER_AON_WKUP_TIMER_EXPIRED
-                ..=interrupts::AON_TIMER_AON_WDOG_TIMER_BARK => self.watchdog.handle_interrupt(),
-            _ => return false,
-        }
-        true
-    }
-}
-
 impl<
         'a,
         const MPU_REGIONS: usize,
@@ -320,51 +266,21 @@ impl<
 
     unsafe fn handle_plic_interrupts(&self) {
         while let Some(interrupt) = self.plic.get_saved_interrupts() {
-            match interrupt {
-                interrupts::PWRMGRAONWAKEUP => {
-                    self.pwrmgr.handle_interrupt();
-                    self.check_until_true_or_interrupt(
-                        || self.pwrmgr.check_clock_propagation(),
-                        None,
-                    );
-                }
-                _ => {
-                    if interrupt >= interrupts::HMAC_HMACDONE
-                        && interrupt <= interrupts::HMAC_HMACERR
-                    {
-                        // Claim the interrupt before we handle it.
-                        // Currently the interrupt has been claimed but not completed.
-                        // This means that if the interrupt re-asserts we will loose the
-                        // re-assertion. Generally this isn't a problem, but some of the
-                        // interrupt handlers expect that interrupts could occur.
-                        // For example the HMAC interrupt handler will write data to the
-                        // HMAC buffer. We then rely on an interrupt triggering when that
-                        // buffer becomes empty. This can happen while we are still in the
-                        // interrupt handler. To ensure we don't loose the interrupt we
-                        // claim it here.
-                        // In order to stop an interrupt loop, we first disable the
-                        // interrupt. `service_pending_interrupts()` will re-enable
-                        // interrupts once they are all handled.
-                        self.atomic(|| {
-                            // Safe as interrupts are disabled
-                            self.plic.disable(interrupt);
-                            self.plic.complete(interrupt);
-                        });
-                    }
-                    if !self.plic_interrupt_service.service_interrupt(interrupt) {
-                        panic!("Unknown interrupt: {}", interrupt);
-                    }
-                }
+            // Handle pwrmgr interrupts
+            if let Ok(PlicIrqId::PwrmgrAonWakeup) = PlicIrqId::try_from(interrupt) {
+                self.pwrmgr.handle_interrupt(PwrMgrInterrupt::AonWakeup);
+                self.check_until_true_or_interrupt(|| self.pwrmgr.check_clock_propagation(), None);
+            }
+            if !self.plic_interrupt_service.service_interrupt(interrupt) {
+                // PANIC: Using the interrupt handler in
+                // `crate:handle_interrupts.rs`, this panic should be
+                // unreachable, because every interrupt is handled.
+                panic!("Unknown interrupt: {}", interrupt);
             }
 
-            match interrupt {
-                interrupts::HMAC_HMACDONE..=interrupts::HMAC_HMACERR => {}
-                _ => {
-                    self.atomic(|| {
-                        self.plic.complete(interrupt);
-                    });
-                }
-            }
+            self.atomic(|| {
+                self.plic.complete(interrupt);
+            });
         }
     }
 
@@ -544,8 +460,12 @@ unsafe fn handle_interrupt(intr: mcause::Interrupt) {
                 // Both external NMI sourcess for Earl Grey are from the AON
                 // timer, and in the production ROM in upstream OpenTitan's
                 // rom.c, only the watchdog NMI is enabled.
+                //
+                // Update (Feb 2025): In earlgrey_1.0.0, this property still
+                // holds, but the ROM code to set it is now at
+                // opentitan:sw/device/silicon_creator/rom/rom_start.S:143.
                 IBEX_EXTERNAL_NMI_MCAUSE => {
-                    AON_TIMER.handle_interrupt();
+                    AON_TIMER.handle_interrupt(AonTimerInterrupt::AonWdogTimerBark);
                     RV_CORE_IBEX.clear_wdog_nmi();
                 }
                 _ => panic!("interrupt of unknown cause"),

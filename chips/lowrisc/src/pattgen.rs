@@ -209,7 +209,9 @@ impl PattGen<'_> {
 
 /// List of all pattgen interrupts
 pub enum PattgenInterrupt {
-    Channel0Done = 122,
+    /// raise if pattern generation on Channel 0 is complete
+    Channel0Done,
+    /// raise if pattern generation on Channel 1 is complete
     Channel1Done,
 }
 

@@ -94,6 +94,19 @@ pub struct CsRng<'a> {
     client: OptionalCell<&'a dyn Client32>,
 }
 
+#[derive(Clone, Copy)]
+pub enum CsrngInterrupt {
+    /// Asserted when a command request is completed.
+    CsCmdReqDone,
+    /// Asserted when a request for entropy has been made
+    CsEntropyReq,
+    /// Asserted when a hardware-attached CSRNG instance encounters a command exception
+    CsHwInstExc,
+    /// Asserted when a FIFO error or a fatal alert occurs. Check the `ERR_CODE`
+    /// register to get more information.
+    CsFatalErr,
+}
+
 struct CsRngIter<'a, 'b: 'a>(&'a CsRng<'b>);
 
 impl Iterator for CsRngIter<'_, '_> {
@@ -141,35 +154,35 @@ impl<'a> CsRng<'a> {
         );
     }
 
-    pub fn handle_interrupt(&self) {
-        let irqs = self.registers.intr_state.extract();
+    pub fn handle_interrupt(&self, interrupt: CsrngInterrupt) {
         self.disable_interrupts();
-
-        if irqs.is_set(INTR::HW_INST_EXC) {
-            self.client.map(move |client| {
-                client.entropy_available(&mut (0..0), Err(ErrorCode::FAIL));
-            });
-            return;
-        }
-
-        if irqs.is_set(INTR::FATAL_ERR) {
-            self.client.map(move |client| {
-                client.entropy_available(&mut (0..0), Err(ErrorCode::FAIL));
-            });
-            return;
-        }
-
-        if irqs.is_set(INTR::CMD_REQ_DONE)
-            && self
-                .client
-                .map(move |client| client.entropy_available(&mut CsRngIter(self), Ok(())))
-                == Some(Continue::More)
-        {
-            // We need more
-            if let Err(e) = self.get() {
+        match interrupt {
+            CsrngInterrupt::CsHwInstExc => {
                 self.client.map(move |client| {
-                    client.entropy_available(&mut (0..0), Err(e));
+                    client.entropy_available(&mut (0..0), Err(ErrorCode::FAIL));
                 });
+            }
+            CsrngInterrupt::CsFatalErr => {
+                self.client.map(move |client| {
+                    client.entropy_available(&mut (0..0), Err(ErrorCode::FAIL));
+                });
+            }
+            CsrngInterrupt::CsCmdReqDone => {
+                if self
+                    .client
+                    .map(move |client| client.entropy_available(&mut CsRngIter(self), Ok(())))
+                    == Some(Continue::More)
+                {
+                    // We need more
+                    if let Err(e) = self.get() {
+                        self.client.map(move |client| {
+                            client.entropy_available(&mut (0..0), Err(e));
+                        });
+                    }
+                }
+            }
+            CsrngInterrupt::CsEntropyReq => {
+                // TODO: handle this
             }
         }
     }

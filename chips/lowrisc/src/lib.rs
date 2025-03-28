@@ -11,9 +11,12 @@
 #[cfg(feature = "ffi")]
 pub use multitop_registers as registers;
 
+pub mod adc_ctrl;
 pub mod aes;
 pub mod aon_timer;
 pub mod csrng;
+pub mod edn;
+pub mod entropy_src;
 #[cfg(feature = "ffi")]
 pub mod ffi;
 #[cfg(not(feature = "ffi"))]
@@ -21,6 +24,8 @@ pub mod flash_ctrl;
 pub mod gpio;
 pub mod hmac;
 pub mod i2c;
+pub mod keymgr;
+pub mod kmac;
 pub mod otbn;
 pub mod otp;
 pub mod pattgen;
@@ -28,6 +33,7 @@ pub mod pattgen;
 pub mod registers;
 pub mod rsa;
 pub mod rv_core_ibex;
+pub mod spi_device;
 pub mod spi_host;
 pub mod sysrst_ctrl;
 pub mod timer;

@@ -16,6 +16,12 @@ use kernel::utilities::StaticRef;
 
 pub type GpioBitfield = Field<u32, INTR::Register>;
 
+#[derive(Copy, Clone)]
+pub enum GpioInterrupt {
+    /// raised if any of GPIO pin detects configured interrupt mode
+    Gpio,
+}
+
 pub struct GpioPin<'a, PAD> {
     gpio_registers: StaticRef<GpioRegisters>,
     padctl: PAD,
@@ -82,14 +88,18 @@ impl<'a, PAD> GpioPin<'a, PAD> {
         }
     }
 
-    pub fn handle_interrupt(&self) {
-        let pin = intr_pin(self.pin);
+    pub fn handle_interrupt(&self, interrupt: GpioInterrupt) {
+        match interrupt {
+            GpioInterrupt::Gpio => {
+                let pin = intr_pin(self.pin);
 
-        if self.gpio_registers.intr_state.is_set(pin) {
-            self.gpio_registers.intr_state.modify(pin.val(1));
-            self.client.map(|client| {
-                client.fired();
-            });
+                if self.gpio_registers.intr_state.is_set(pin) {
+                    self.gpio_registers.intr_state.modify(pin.val(1));
+                    self.client.map(|client| {
+                        client.fired();
+                    });
+                }
+            }
         }
     }
 }

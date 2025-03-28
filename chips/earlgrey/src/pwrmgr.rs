@@ -16,6 +16,11 @@ pub struct PwrMgr {
     registers: StaticRef<PwrmgrRegisters>,
 }
 
+#[derive(Clone, Copy)]
+pub enum PwrMgrInterrupt {
+    AonWakeup,
+}
+
 impl PwrMgr {
     pub const fn new(base: StaticRef<PwrmgrRegisters>) -> PwrMgr {
         PwrMgr { registers: base }
@@ -31,14 +36,18 @@ impl PwrMgr {
         false
     }
 
-    pub fn handle_interrupt(&self) {
-        let regs = self.registers;
+    pub fn handle_interrupt(&self, interrupt: PwrMgrInterrupt) {
+        match interrupt {
+            PwrMgrInterrupt::AonWakeup => {
+                let regs = self.registers;
 
-        // Disable power saving
-        regs.control.write(CONTROL::LOW_POWER_HINT::CLEAR);
+                // Disable power saving
+                regs.control.write(CONTROL::LOW_POWER_HINT::CLEAR);
 
-        // Propagate changes to slow clock domain
-        regs.cfg_cdc_sync.write(CFG_CDC_SYNC::SYNC::SET);
+                // Propagate changes to slow clock domain
+                regs.cfg_cdc_sync.write(CFG_CDC_SYNC::SYNC::SET);
+            }
+        }
     }
 
     pub fn enable_low_power(&self) {

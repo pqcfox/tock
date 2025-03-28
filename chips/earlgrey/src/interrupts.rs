@@ -2,221 +2,343 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // Copyright Tock Contributors 2022.
 
-//! Named interrupts for the Earl Grey chip.
+//! Top-level interrupt handler for Earlgrey.
 
-#![allow(dead_code)]
+use crate::alert_handler::AlertClass;
+use crate::chip::EarlGreyDefaultPeripherals;
+use crate::chip_config::EarlGreyConfig;
+use crate::flash_ctrl::FlashCtrlInterrupt;
+use crate::pinmux_config::EarlGreyPinmuxConfig;
+use crate::registers::top_earlgrey::PlicIrqId;
+use crate::sensor_ctrl::SensorCtrlInterrupt;
+use kernel::platform::chip::InterruptService;
+use lowrisc::adc_ctrl::AdcCtrlInterrupt;
+use lowrisc::aon_timer::AonTimerInterrupt;
+use lowrisc::csrng::CsrngInterrupt;
+use lowrisc::edn::EdnInterrupt;
+use lowrisc::entropy_src::EntropySrcInterrupt;
+use lowrisc::gpio::GpioInterrupt;
+use lowrisc::hmac::HmacInterrupt;
+use lowrisc::i2c::I2cInterrupt;
+use lowrisc::keymgr::KeymgrInterrupt;
+use lowrisc::kmac::KmacInterrupt;
+use lowrisc::otbn::OtbnInterrupt;
+use lowrisc::otp::OtpCtrlInterrupt;
+use lowrisc::pattgen::PattgenInterrupt;
+use lowrisc::spi_device::SpiDeviceInterrupt;
+use lowrisc::spi_host::SpiHostInterrupt;
+#[cfg(not(feature = "qemu"))]
+use lowrisc::sysrst_ctrl::SysRstCtrlInterrupt;
+use lowrisc::timer::RvTimerInterrupt;
+use lowrisc::uart::UartInterrupt;
+use lowrisc::usb::UsbInterrupt;
 
-pub const NONE: u32 = 0;
+// Macro that:
+// - Generates the top-level interrupt handler based on individual handlers
+// - Generates a function that selectively enables interrupts depending on
+//   whether the associated driver is included in the kernel configuration.
+macro_rules! interrupts {
+    [
+        $({$peripheral:ident, $plic_name:ident, $local_name:expr},)*
+    ] => {
+        /// Top-level handler for interrupts from Earlgrey peripherals.
+        impl<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig> InterruptService
+            for EarlGreyDefaultPeripherals<'a, CFG, PINMUX>
+        where
+            CFG: EarlGreyConfig,
+            PINMUX: EarlGreyPinmuxConfig,
+        {
+            unsafe fn service_interrupt(&self, interrupt: u32) -> bool {
+                let interrupt = PlicIrqId::try_from(interrupt).expect("Invalid interrupt ID");
 
-pub const UART0_TX_WATERMARK: u32 = 1;
-pub const UART0_RX_WATERMARK: u32 = 2;
-pub const UART0_TX_EMPTY: u32 = 3;
-pub const UART0_RX_OVERFLOW: u32 = 4;
-pub const UART0_RX_FRAMEERR: u32 = 5;
-pub const UART0_RX_BREAKERR: u32 = 6;
-pub const UART0_RX_TIMEOUT: u32 = 7;
-pub const UART0_RX_PARITYERR: u32 = 8;
+                match interrupt {
+                    // Special cases:
+                    //
+                    // No-op
+                    PlicIrqId::None => {},
+                    // Unreachable; handled by calling function
+                    PlicIrqId::PwrmgrAonWakeup => {},
+                    // GPIOs are array-indexed and do not follow the pattern below.
+                    PlicIrqId::GpioGpio0 => self.handle_gpio_interrupt(0),
+                    PlicIrqId::GpioGpio1 => self.handle_gpio_interrupt(1),
+                    PlicIrqId::GpioGpio2 => self.handle_gpio_interrupt(2),
+                    PlicIrqId::GpioGpio3 => self.handle_gpio_interrupt(3),
+                    PlicIrqId::GpioGpio4 => self.handle_gpio_interrupt(4),
+                    PlicIrqId::GpioGpio5 => self.handle_gpio_interrupt(5),
+                    PlicIrqId::GpioGpio6 => self.handle_gpio_interrupt(6),
+                    PlicIrqId::GpioGpio7 => self.handle_gpio_interrupt(7),
+                    PlicIrqId::GpioGpio8 => self.handle_gpio_interrupt(8),
+                    PlicIrqId::GpioGpio9 => self.handle_gpio_interrupt(9),
+                    PlicIrqId::GpioGpio10 => self.handle_gpio_interrupt(10),
+                    PlicIrqId::GpioGpio11 => self.handle_gpio_interrupt(11),
+                    PlicIrqId::GpioGpio12 => self.handle_gpio_interrupt(12),
+                    PlicIrqId::GpioGpio13 => self.handle_gpio_interrupt(13),
+                    PlicIrqId::GpioGpio14 => self.handle_gpio_interrupt(14),
+                    PlicIrqId::GpioGpio15 => self.handle_gpio_interrupt(15),
+                    PlicIrqId::GpioGpio16 => self.handle_gpio_interrupt(16),
+                    PlicIrqId::GpioGpio17 => self.handle_gpio_interrupt(17),
+                    PlicIrqId::GpioGpio18 => self.handle_gpio_interrupt(18),
+                    PlicIrqId::GpioGpio19 => self.handle_gpio_interrupt(19),
+                    PlicIrqId::GpioGpio20 => self.handle_gpio_interrupt(20),
+                    PlicIrqId::GpioGpio21 => self.handle_gpio_interrupt(21),
+                    PlicIrqId::GpioGpio22 => self.handle_gpio_interrupt(22),
+                    PlicIrqId::GpioGpio23 => self.handle_gpio_interrupt(23),
+                    PlicIrqId::GpioGpio24 => self.handle_gpio_interrupt(24),
+                    PlicIrqId::GpioGpio25 => self.handle_gpio_interrupt(25),
+                    PlicIrqId::GpioGpio26 => self.handle_gpio_interrupt(26),
+                    PlicIrqId::GpioGpio27 => self.handle_gpio_interrupt(27),
+                    PlicIrqId::GpioGpio28 => self.handle_gpio_interrupt(28),
+                    PlicIrqId::GpioGpio29 => self.handle_gpio_interrupt(29),
+                    PlicIrqId::GpioGpio30 => self.handle_gpio_interrupt(30),
+                    PlicIrqId::GpioGpio31 => self.handle_gpio_interrupt(31),
 
-pub const UART1_TX_WATERMARK: u32 = 9;
-pub const UART1_RX_WATERMARK: u32 = 10;
-pub const UART1_TX_EMPTY: u32 = 11;
-pub const UART1_RX_OVERFLOW: u32 = 12;
-pub const UART1_RX_FRAMEERR: u32 = 13;
-pub const UART1_RX_BREAKERR: u32 = 14;
-pub const UART1_RX_TIMEOUT: u32 = 15;
-pub const UART1_RX_PARITYERR: u32 = 16;
 
-pub const UART2_TX_WATERMARK: u32 = 17;
-pub const UART2_RX_WATERMARK: u32 = 18;
-pub const UART2_TX_EMPTY: u32 = 19;
-pub const UART2_RX_OVERFLOW: u32 = 20;
-pub const UART2_RX_FRAMEERR: u32 = 21;
-pub const UART2_RX_BREAKERR: u32 = 22;
-pub const UART2_RX_TIMEOUT: u32 = 23;
-pub const UART2_RX_PARITYERR: u32 = 24;
+                    // TODO: This is temporary until we can remove the "qemu"
+                    // feature gate on `chip.sysreset` by optioning out the
+                    // unused peripherals.
+                    #[cfg(not(feature = "qemu"))]
+                    PlicIrqId::SysrstCtrlAonEventDetected => {
+                        self.sysreset.handle_interrupt(SysRstCtrlInterrupt::AonEventDetected)
+                    },
+                    #[cfg(feature = "qemu")]
+                    PlicIrqId::SysrstCtrlAonEventDetected => {},
 
-pub const UART3_TX_WATERMARK: u32 = 25;
-pub const UART3_RX_WATERMARK: u32 = 26;
-pub const UART3_TX_EMPTY: u32 = 27;
-pub const UART3_RX_OVERFLOW: u32 = 28;
-pub const UART3_RX_FRAMEERR: u32 = 29;
-pub const UART3_RX_BREAKERR: u32 = 30;
-pub const UART3_RX_TIMEOUT: u32 = 31;
-pub const UART3_RX_PARITYERR: u32 = 32;
+                    $(PlicIrqId::$plic_name => { self.$peripheral.handle_interrupt($local_name); },)*
+                }
+                true
+            }
+        }
 
-pub const GPIO_PIN0: u32 = 33;
-pub const GPIO_PIN1: u32 = 34;
-pub const GPIO_PIN2: u32 = 35;
-pub const GPIO_PIN3: u32 = 36;
-pub const GPIO_PIN4: u32 = 37;
-pub const GPIO_PIN5: u32 = 38;
-pub const GPIO_PIN6: u32 = 39;
-pub const GPIO_PIN7: u32 = 40;
-pub const GPIO_PIN8: u32 = 41;
-pub const GPIO_PIN9: u32 = 42;
-pub const GPIO_PIN10: u32 = 43;
-pub const GPIO_PIN11: u32 = 44;
-pub const GPIO_PIN12: u32 = 45;
-pub const GPIO_PIN13: u32 = 46;
-pub const GPIO_PIN14: u32 = 47;
-pub const GPIO_PIN15: u32 = 48;
-pub const GPIO_PIN16: u32 = 49;
-pub const GPIO_PIN17: u32 = 50;
-pub const GPIO_PIN18: u32 = 51;
-pub const GPIO_PIN19: u32 = 52;
-pub const GPIO_PIN20: u32 = 53;
-pub const GPIO_PIN21: u32 = 54;
-pub const GPIO_PIN22: u32 = 55;
-pub const GPIO_PIN23: u32 = 56;
-pub const GPIO_PIN24: u32 = 57;
-pub const GPIO_PIN25: u32 = 58;
-pub const GPIO_PIN26: u32 = 59;
-pub const GPIO_PIN27: u32 = 60;
-pub const GPIO_PIN28: u32 = 61;
-pub const GPIO_PIN29: u32 = 62;
-pub const GPIO_PIN30: u32 = 63;
-pub const GPIO_PIN31: u32 = 64;
+        impl<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig>
+            EarlGreyDefaultPeripherals<'a, CFG, PINMUX>
+        where
+            CFG: EarlGreyConfig,
+            PINMUX: EarlGreyPinmuxConfig,
+        {
+            #[inline]
+            fn handle_gpio_interrupt(&self, pin: usize) {
+                // The `map` should always produce a driver, because we do not
+                // enable interrupts for any drivers that are not part of the
+                // configuration (see `enable_plic_interrupts` below).
+                self.gpio_port[pin].handle_interrupt(GpioInterrupt::Gpio);
+            }
+        }
+    }
+}
 
-pub const SPI_DEVICE_GENERICRXFULL: u32 = 65;
-pub const SPI_DEVICE_GENERICRXWATERMARK: u32 = 66;
-pub const SPI_DEVICE_GENERICTXWATERMARK: u32 = 67;
-pub const SPI_DEVICE_GENERICRXERROR: u32 = 68;
-pub const SPI_DEVICE_GENERICRXOVERFLOW: u32 = 69;
-pub const SPI_DEVICE_GENERICTXUNDERFLOW: u32 = 70;
-pub const SPI_DEVICE_UPLOADCMDFIFONOTEMPTY: u32 = 71;
-pub const SPI_DEVICE_UPLOADPAYLOADNOTEMPTY: u32 = 72;
-pub const SPI_DEVICE_UPLOADPAYLOADOVERFLOW: u32 = 73;
-pub const SPI_DEVICE_READBUFWATERMARK: u32 = 74;
-pub const SPI_DEVICE_READBUFFLIP: u32 = 75;
-pub const SPI_DEVICE_TPMHEADERNOTEMPTY: u32 = 76;
+interrupts! [
+    // Format: { peripheral, PLIC interrupt name, driver interrupt name }
+    //
+    // UART0 interrupts
+    { uart0, Uart0TxEmpty, UartInterrupt::TxEmpty },
+    { uart0, Uart0RxParityErr, UartInterrupt::RxParityErr },
+    { uart0, Uart0RxTimeout, UartInterrupt::RxTimeout },
+    { uart0, Uart0RxBreakErr, UartInterrupt::RxBreakErr },
+    { uart0, Uart0RxFrameErr, UartInterrupt::RxFrameErr },
+    { uart0, Uart0RxOverflow, UartInterrupt::RxOverflow },
+    { uart0, Uart0TxDone, UartInterrupt::TxDone },
+    { uart0, Uart0RxWatermark, UartInterrupt::RxWatermark },
+    { uart0, Uart0TxWatermark, UartInterrupt::TxWatermark },
 
-pub const I2C0_FMTWATERMARK: u32 = 77;
-pub const I2C0_RXWATERMARK: u32 = 78;
-pub const I2C0_FMTOVERFLOW: u32 = 79;
-pub const I2C0_RXOVERFLOW: u32 = 80;
-pub const I2C0_NAK: u32 = 81;
-pub const I2C0_SCLINTERFERENCE: u32 = 82;
-pub const I2C0_SDAINTERFERENCE: u32 = 83;
-pub const I2C0_STRETCHTIMEOUT: u32 = 84;
-pub const I2C0_SDAUNSTABLE: u32 = 85;
-pub const I2C0_CMDCOMPLETE: u32 = 86;
-pub const I2C0_TXSTRETCH: u32 = 87;
-pub const I2C0_TXOVERFLOW: u32 = 88;
-pub const I2C0_ACQFULL: u32 = 89;
-pub const I2C0_UNEXPSTOP: u32 = 90;
-pub const I2C0_HOSTTIMEOUT: u32 = 91;
 
-pub const I2C1_FMTWATERMARK: u32 = 92;
-pub const I2C1_RXWATERMARK: u32 = 93;
-pub const I2C1_FMTOVERFLOW: u32 = 94;
-pub const I2C1_RXOVERFLOW: u32 = 95;
-pub const I2C1_NAK: u32 = 96;
-pub const I2C1_SCLINTERFERENCE: u32 = 97;
-pub const I2C1_SDAINTERFERENCE: u32 = 98;
-pub const I2C1_STRETCHTIMEOUT: u32 = 99;
-pub const I2C1_SDAUNSTABLE: u32 = 100;
-pub const I2C1_CMDCOMPLETE: u32 = 101;
-pub const I2C1_TXSTRETCH: u32 = 102;
-pub const I2C1_TXOVERFLOW: u32 = 103;
-pub const I2C1_ACQFULL: u32 = 104;
-pub const I2C1_UNEXPSTOP: u32 = 105;
-pub const I2C1_HOSTTIMEOUT: u32 = 106;
+    // UART1 interrupts
+    { uart1, Uart1TxEmpty, UartInterrupt::TxEmpty },
+    { uart1, Uart1RxParityErr, UartInterrupt::RxParityErr },
+    { uart1, Uart1RxTimeout, UartInterrupt::RxTimeout },
+    { uart1, Uart1RxBreakErr, UartInterrupt::RxBreakErr },
+    { uart1, Uart1RxFrameErr, UartInterrupt::RxFrameErr },
+    { uart1, Uart1RxOverflow, UartInterrupt::RxOverflow },
+    { uart1, Uart1TxDone, UartInterrupt::TxDone },
+    { uart1, Uart1RxWatermark, UartInterrupt::RxWatermark },
+    { uart1, Uart1TxWatermark, UartInterrupt::TxWatermark },
 
-pub const I2C2_FMTWATERMARK: u32 = 107;
-pub const I2C2_RXWATERMARK: u32 = 108;
-pub const I2C2_FMTOVERFLOW: u32 = 109;
-pub const I2C2_RXOVERFLOW: u32 = 110;
-pub const I2C2_NAK: u32 = 111;
-pub const I2C2_SCLINTERFERENCE: u32 = 112;
-pub const I2C2_SDAINTERFERENCE: u32 = 113;
-pub const I2C2_STRETCHTIMEOUT: u32 = 114;
-pub const I2C2_SDAUNSTABLE: u32 = 115;
-pub const I2C2_CMDCOMPLETE: u32 = 116;
-pub const I2C2_TXSTRETCH: u32 = 117;
-pub const I2C2_TXOVERFLOW: u32 = 118;
-pub const I2C2_ACQFULL: u32 = 119;
-pub const I2C2_UNEXPSTOP: u32 = 120;
-pub const I2C2_HOSTTIMEOUT: u32 = 121;
+    // UART2 interrupts
+    { uart2, Uart2TxEmpty, UartInterrupt::TxEmpty },
+    { uart2, Uart2RxParityErr, UartInterrupt::RxParityErr },
+    { uart2, Uart2RxTimeout, UartInterrupt::RxTimeout },
+    { uart2, Uart2RxBreakErr, UartInterrupt::RxBreakErr },
+    { uart2, Uart2RxFrameErr, UartInterrupt::RxFrameErr },
+    { uart2, Uart2RxOverflow, UartInterrupt::RxOverflow },
+    { uart2, Uart2TxDone, UartInterrupt::TxDone },
+    { uart2, Uart2RxWatermark, UartInterrupt::RxWatermark },
+    { uart2, Uart2TxWatermark, UartInterrupt::TxWatermark },
 
-pub const PATTGENDONECH0: u32 = 122;
-pub const PATTGENDONECH1: u32 = 123;
+    // UART3 interrupts
+    { uart3, Uart3TxEmpty, UartInterrupt::TxEmpty },
+    { uart3, Uart3RxParityErr, UartInterrupt::RxParityErr },
+    { uart3, Uart3RxTimeout, UartInterrupt::RxTimeout },
+    { uart3, Uart3RxBreakErr, UartInterrupt::RxBreakErr },
+    { uart3, Uart3RxFrameErr, UartInterrupt::RxFrameErr },
+    { uart3, Uart3RxOverflow, UartInterrupt::RxOverflow },
+    { uart3, Uart3TxDone, UartInterrupt::TxDone },
+    { uart3, Uart3RxWatermark, UartInterrupt::RxWatermark },
+    { uart3, Uart3TxWatermark, UartInterrupt::TxWatermark },
 
-pub const RVTIMERTIMEREXPIRED0_0: u32 = 124;
+    // SPI Device interrupts
+    { spi_device, SpiDeviceUploadCmdfifoNotEmpty, SpiDeviceInterrupt::UploadCmdfifoNotEmpty },
+    { spi_device, SpiDeviceUploadPayloadNotEmpty, SpiDeviceInterrupt::UploadPayloadNotEmpty },
+    { spi_device, SpiDeviceUploadPayloadOverflow, SpiDeviceInterrupt::UploadPayloadOverflow },
+    { spi_device, SpiDeviceReadbufWatermark, SpiDeviceInterrupt::ReadbufWatermark },
+    { spi_device, SpiDeviceReadbufFlip, SpiDeviceInterrupt::ReadbufFlip },
+    { spi_device, SpiDeviceTpmHeaderNotEmpty, SpiDeviceInterrupt::TpmHeaderNotEmpty },
+    { spi_device, SpiDeviceTpmRdfifoCmdEnd, SpiDeviceInterrupt::TpmRdfifoCmdEnd },
+    { spi_device, SpiDeviceTpmRdfifoDrop, SpiDeviceInterrupt::TpmRdfifoDrop },
 
-pub const OTPCTRL_OTPOPERATIONDONE: u32 = 125;
-pub const OTPCTRL_OTPERROR: u32 = 126;
+    // I2C0 interrupts
+    { i2c0, I2c0FmtThreshold, I2cInterrupt::FmtThreshold },
+    { i2c0, I2c0RxThreshold, I2cInterrupt::RxThreshold },
+    { i2c0, I2c0AcqThreshold, I2cInterrupt::AcqThreshold },
+    { i2c0, I2c0RxOverflow, I2cInterrupt::RxOverflow },
+    { i2c0, I2c0ControllerHalt, I2cInterrupt::ControllerHalt },
+    { i2c0, I2c0SclInterference, I2cInterrupt::SclInterference },
+    { i2c0, I2c0SdaInterference, I2cInterrupt::SdaInterference },
+    { i2c0, I2c0StretchTimeout, I2cInterrupt::StretchTimeout },
+    { i2c0, I2c0SdaUnstable, I2cInterrupt::SdaUnstable },
+    { i2c0, I2c0CmdComplete, I2cInterrupt::CmdComplete },
+    { i2c0, I2c0TxStretch, I2cInterrupt::TxStretch },
+    { i2c0, I2c0TxThreshold, I2cInterrupt::TxThreshold },
+    { i2c0, I2c0AcqStretch, I2cInterrupt::AcqStretch },
+    { i2c0, I2c0UnexpStop, I2cInterrupt::UnexpStop },
+    { i2c0, I2c0HostTimeout, I2cInterrupt::HostTimeout },
 
-pub const ALERTHANDLER_CLASSA: u32 = 127;
-pub const ALERTHANDLER_CLASSB: u32 = 128;
-pub const ALERTHANDLER_CLASSC: u32 = 129;
-pub const ALERTHANDLER_CLASSD: u32 = 130;
+    // I2C1 interrupts
+    { i2c1, I2c1FmtThreshold, I2cInterrupt::FmtThreshold },
+    { i2c1, I2c1RxThreshold, I2cInterrupt::RxThreshold },
+    { i2c1, I2c1AcqThreshold, I2cInterrupt::AcqThreshold },
+    { i2c1, I2c1RxOverflow, I2cInterrupt::RxOverflow },
+    { i2c1, I2c1ControllerHalt, I2cInterrupt::ControllerHalt },
+    { i2c1, I2c1SclInterference, I2cInterrupt::SclInterference },
+    { i2c1, I2c1SdaInterference, I2cInterrupt::SdaInterference },
+    { i2c1, I2c1StretchTimeout, I2cInterrupt::StretchTimeout },
+    { i2c1, I2c1SdaUnstable, I2cInterrupt::SdaUnstable },
+    { i2c1, I2c1CmdComplete, I2cInterrupt::CmdComplete },
+    { i2c1, I2c1TxStretch, I2cInterrupt::TxStretch },
+    { i2c1, I2c1TxThreshold, I2cInterrupt::TxThreshold },
+    { i2c1, I2c1AcqStretch, I2cInterrupt::AcqStretch },
+    { i2c1, I2c1UnexpStop, I2cInterrupt::UnexpStop },
+    { i2c1, I2c1HostTimeout, I2cInterrupt::HostTimeout },
 
-pub const SPIHOST0_ERROR: u32 = 131;
-pub const SPIHOST0_SPIEVENT: u32 = 132;
+    // I2C2 interrupts
+    { i2c2, I2c2FmtThreshold, I2cInterrupt::FmtThreshold },
+    { i2c2, I2c2RxThreshold, I2cInterrupt::RxThreshold },
+    { i2c2, I2c2AcqThreshold, I2cInterrupt::AcqThreshold },
+    { i2c2, I2c2RxOverflow, I2cInterrupt::RxOverflow },
+    { i2c2, I2c2ControllerHalt, I2cInterrupt::ControllerHalt },
+    { i2c2, I2c2SclInterference, I2cInterrupt::SclInterference },
+    { i2c2, I2c2SdaInterference, I2cInterrupt::SdaInterference },
+    { i2c2, I2c2StretchTimeout, I2cInterrupt::StretchTimeout },
+    { i2c2, I2c2SdaUnstable, I2cInterrupt::SdaUnstable },
+    { i2c2, I2c2CmdComplete, I2cInterrupt::CmdComplete },
+    { i2c2, I2c2TxStretch, I2cInterrupt::TxStretch },
+    { i2c2, I2c2TxThreshold, I2cInterrupt::TxThreshold },
+    { i2c2, I2c2AcqStretch, I2cInterrupt::AcqStretch },
+    { i2c2, I2c2UnexpStop, I2cInterrupt::UnexpStop },
+    { i2c2, I2c2HostTimeout, I2cInterrupt::HostTimeout },
 
-pub const SPIHOST1_ERROR: u32 = 133;
-pub const SPIHOST1_SPIEVENT: u32 = 134;
+    // Pattgen interrupts
+    { pattgen, PattgenDoneCh0, PattgenInterrupt::Channel0Done },
+    { pattgen, PattgenDoneCh1, PattgenInterrupt::Channel1Done },
 
-pub const USBDEV_PKTRECEIVED: u32 = 135;
-pub const USBDEV_PKTSENT: u32 = 136;
-pub const USBDEV_DISCONNECTED: u32 = 137;
-pub const USBDEV_HOSTLOST: u32 = 138;
-pub const USBDEV_LINKRESET: u32 = 139;
-pub const USBDEV_LINKSUSPEND: u32 = 140;
-pub const USBDEV_LINKRESUME: u32 = 141;
-pub const USBDEV_AVEMPTY: u32 = 142;
-pub const USBDEV_RXFULL: u32 = 143;
-pub const USBDEV_AVOVERFLOW: u32 = 144;
-pub const USBDEV_LINKINERR: u32 = 145;
-pub const USBDEV_RXCRCERR: u32 = 146;
-pub const USBDEV_RXPIDERR: u32 = 147;
-pub const USBDEV_RXBITSTUFFERR: u32 = 148;
-pub const USBDEV_FRAME: u32 = 149;
-pub const USBDEV_POWERED: u32 = 150;
-pub const USBDEV_LINKOUTERR: u32 = 151;
+    // RvTimer interrupts
+    { timer, RvTimerTimerExpiredHart0Timer0, RvTimerInterrupt::ExpiredHart0Timer0 },
 
-pub const PWRMGRAONWAKEUP: u32 = 152;
-pub const SYSRST_CTRL_AON_SYSRST_CTRL: u32 = 153;
-pub const ADC_CTRL_AON_MATCH_DONE: u32 = 154;
+    // OTP Controller interrupts
+    { otp, OtpCtrlOtpOperationDone, OtpCtrlInterrupt::OtpOperationDone },
+    { otp, OtpCtrlOtpError, OtpCtrlInterrupt::OtpError },
 
-pub const AON_TIMER_AON_WKUP_TIMER_EXPIRED: u32 = 155;
-pub const AON_TIMER_AON_WDOG_TIMER_BARK: u32 = 156;
+    // Alert Handler interrupts
+    { alert_handler, AlertHandlerClassa, AlertClass::ClassA },
+    { alert_handler, AlertHandlerClassb, AlertClass::ClassB },
+    { alert_handler, AlertHandlerClassc, AlertClass::ClassC },
+    { alert_handler, AlertHandlerClassd, AlertClass::ClassD },
 
-pub const SENSOR_CTRL_IO_STATUS_CHANGE: u32 = 157;
-pub const SENSOR_CTRL_INIT_STATUS_CHANGE: u32 = 158;
+    // SPI Host0 interrupts
+    { spi_host0, SpiHost0Error, SpiHostInterrupt::Error },
+    { spi_host0, SpiHost0SpiEvent, SpiHostInterrupt::Event },
 
-pub const FLASHCTRL_PROGEMPTY: u32 = 159;
-pub const FLASHCTRL_PROGLVL: u32 = 160;
-pub const FLASHCTRL_RDFULL: u32 = 161;
-pub const FLASHCTRL_RDLVL: u32 = 162;
-pub const FLASHCTRL_OPDONE: u32 = 163;
-pub const FLASHCTRL_CORRERR: u32 = 164;
+    // SPI Host1 interrupts
+    { spi_host1, SpiHost1Error, SpiHostInterrupt::Error },
+    { spi_host1, SpiHost1SpiEvent, SpiHostInterrupt::Event },
 
-pub const HMAC_HMACDONE: u32 = 165;
-pub const HMAC_FIFOEMPTY: u32 = 166;
-pub const HMAC_HMACERR: u32 = 167;
+    // USBDEV interrupts
+    { usb, UsbdevPktReceived, UsbInterrupt::PacketReceived },
+    { usb, UsbdevPktSent, UsbInterrupt::PacketSent },
+    { usb, UsbdevDisconnected, UsbInterrupt::Disconnected },
+    { usb, UsbdevHostLost, UsbInterrupt::HostLost },
+    { usb, UsbdevLinkReset, UsbInterrupt::LinkReset },
+    { usb, UsbdevLinkSuspend, UsbInterrupt::LinkSuspended },
+    { usb, UsbdevLinkResume, UsbInterrupt::LinkResume },
+    { usb, UsbdevAvOutEmpty, UsbInterrupt::AvOutEmpty },
+    { usb, UsbdevRxFull, UsbInterrupt::RxFull },
+    { usb, UsbdevAvOverflow, UsbInterrupt::AvOverflow },
+    { usb, UsbdevLinkInErr, UsbInterrupt::LinkInErr },
+    { usb, UsbdevRxCrcErr, UsbInterrupt::RxCrcErr },
+    { usb, UsbdevRxPidErr, UsbInterrupt::RxPidErr },
+    { usb, UsbdevRxBitstuffErr, UsbInterrupt::RxBitstuffErr },
+    { usb, UsbdevFrame, UsbInterrupt::Frame },
+    { usb, UsbdevPowered, UsbInterrupt::Powered },
+    { usb, UsbdevLinkOutErr, UsbInterrupt::LinkOutErr },
+    { usb, UsbdevAvSetupEmpty, UsbInterrupt::AvSetupEmpty },
 
-pub const KMAC_KMACDONE: u32 = 168;
-pub const KMAC_FIFOEMPTY: u32 = 169;
-pub const KMAC_KMACERR: u32 = 170;
 
-pub const OTBN_DONE: u32 = 171;
+    // TODO: This is temporarily commented out until we can remove the "qemu"
+    // feature gate on `chip.sysreset` by optioning out the unused peripherals.
+    //
+    // System Reset Controller interrupts
+    //{ sysreset, SysrstCtrlAonEventDetected, SysRstCtrlInterrupt::AonEventDetected },
 
-pub const KEYMGR_OP_DONE: u32 = 172;
+    // ADC Controller interrupts
+    { adc_ctrl, AdcCtrlAonMatchPending, AdcCtrlInterrupt::MatchPending },
 
-pub const CSRNG_CSCMDREQDONE: u32 = 173;
-pub const CSRNG_CSENTROPYREQ: u32 = 174;
-pub const CSRNG_CSHWINSTEXC: u32 = 175;
-pub const CSRNG_CSFATALERR: u32 = 176;
+    // AON Timer interrupts
+    { watchdog, AonTimerAonWkupTimerExpired, AonTimerInterrupt::AonWkupTimerExpired },
+    { watchdog, AonTimerAonWdogTimerBark, AonTimerInterrupt::AonWdogTimerBark },
 
-pub const ENTROPY_SRC_ES_ENTROPY_VALID: u32 = 177;
-pub const ENTROPY_SRC_ES_HEALTH_TEST_FAILED: u32 = 178;
-pub const ENTROPY_SRC_ES_OBSERVE_FIFO_READY: u32 = 179;
-pub const ENTROPY_SRC_ES_FATAL_ERR: u32 = 180;
+    // Sensor Control interrupts
+    { sensor_ctrl, SensorCtrlAonIoStatusChange, SensorCtrlInterrupt::IoStatusChange },
+    { sensor_ctrl, SensorCtrlAonInitStatusChange, SensorCtrlInterrupt::InitStatusChange },
 
-pub const EDN0_EDN_CMD_REQ_DONE: u32 = 181;
-pub const EDN0_EDN_FATAL_ERR: u32 = 182;
-pub const EDN1_EDN_CMD_REQ_DONE: u32 = 183;
-pub const EDN1_EDN_FATAL_ERR: u32 = 184;
-// Last valid plic interrupt ID
-pub const IRQ_ID_LAST: u32 = 184;
+    // Flash Controller interrupts
+    { flash_ctrl, FlashCtrlProgEmpty, FlashCtrlInterrupt::ProgEmpty },
+    { flash_ctrl, FlashCtrlProgLvl, FlashCtrlInterrupt::ProgLvl },
+    { flash_ctrl, FlashCtrlRdFull, FlashCtrlInterrupt::RdFull },
+    { flash_ctrl, FlashCtrlRdLvl, FlashCtrlInterrupt::RdLvl },
+    { flash_ctrl, FlashCtrlOpDone, FlashCtrlInterrupt::OpDone },
+    { flash_ctrl, FlashCtrlCorrErr, FlashCtrlInterrupt::CorrErr },
+
+    // HMAC interrupts
+    { hmac, HmacHmacDone, HmacInterrupt::HmacDone },
+    { hmac, HmacFifoEmpty, HmacInterrupt::FifoEmpty },
+    { hmac, HmacHmacErr, HmacInterrupt::HmacErr },
+
+    // KMAC interrupts
+    { kmac, KmacKmacDone, KmacInterrupt::KmacDone },
+    { kmac, KmacFifoEmpty, KmacInterrupt::FifoEmpty },
+    { kmac, KmacKmacErr, KmacInterrupt::KmacErr },
+
+    // OTBN interrupts
+    { otbn, OtbnDone, OtbnInterrupt::Done },
+
+    // Key Manager interrupts
+    { keymgr, KeymgrOpDone, KeymgrInterrupt::OpDone },
+
+    // CSRNG interrupts
+    { csrng, CsrngCsCmdReqDone, CsrngInterrupt::CsCmdReqDone },
+    { csrng, CsrngCsEntropyReq, CsrngInterrupt::CsEntropyReq },
+    { csrng, CsrngCsHwInstExc, CsrngInterrupt::CsHwInstExc },
+    { csrng, CsrngCsFatalErr, CsrngInterrupt::CsFatalErr },
+
+    // Entropy Source interrupts
+    { entropy_src, EntropySrcEsEntropyValid, EntropySrcInterrupt::EsEntropyValid },
+    { entropy_src, EntropySrcEsHealthTestFailed, EntropySrcInterrupt::EsHealthTestFailed },
+    { entropy_src, EntropySrcEsObserveFifoReady, EntropySrcInterrupt::EsObserveFifoReady },
+    { entropy_src, EntropySrcEsFatalErr, EntropySrcInterrupt::EsFatalErr },
+
+    // EDN0 interrupts
+    { edn0, Edn0EdnCmdReqDone, EdnInterrupt::EdnCmdReqDone },
+    { edn0, Edn0EdnFatalErr, EdnInterrupt::EdnFatalErr },
+
+    // EDN1 interrupts
+    { edn1, Edn1EdnCmdReqDone, EdnInterrupt::EdnCmdReqDone },
+    { edn1, Edn1EdnFatalErr, EdnInterrupt::EdnFatalErr },
+];

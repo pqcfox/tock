@@ -10,77 +10,66 @@
 #[repr(usize)]
 /// A list of all USB interrupts
 pub enum UsbInterrupt {
-    /// A packet has been received
-    PacketReceived = 135,
-    /// A packet has been sent
+    /// Raised if a packet was received using an OUT or SETUP transaction.  This
+    /// interrupt is directly tied to whether the RX FIFO is empty, so it should
+    /// be cleared only after handling the FIFO entry.
+    PacketReceived,
+    /// Raised if a packet was sent as part of an IN transaction.  This
+    /// interrupt is directly tied to whether a sent packet has not been
+    /// acknowledged in the `in_sent` register.  It should be cleared only after
+    /// clearing all bits in the `in_sent` register.
     PacketSent,
-    /// VBUS disconnected
+    /// Raised if VBUS is lost, thus the link is disconnected.
     Disconnected,
-    /// No frame packet for more than 4.096ms
+    /// Raised if link is active but SOF was not received from host for 4.096
+    /// ms. The SOF should be every 1 ms.
     HostLost,
-    /// The host reset the link
+    /// Raised if the link is at SE0 longer than 3 us indicating a link reset
+    /// (host asserts for min 10 ms, device can react after 2.5 us).
     LinkReset,
-    /// No link activity for more than 3ms
+    /// Raised if the line has signaled J for longer than 3ms and is therefore
+    /// in suspend state.
     LinkSuspended,
-    /// Link active again after being suspended
+    /// Raised when the link becomes active again after being suspended.
     LinkResume,
-    /// Empty available buffer FIFO
-    AvEmpty,
-    /// Receive FIFO full.
+    /// Raised when the Available OUT Buffer FIFO is empty and the device
+    /// interface is enabled.  This interrupt is directly tied to the FIFO
+    /// status, so the Available OUT Buffer FIFO must be provided with a free
+    /// buffer before the interrupt can be cleared.
+    AvOutEmpty,
+    /// Raised when the RX FIFO is full and the device interface is enabled.
+    /// This interrupt is directly tied to the FIFO status, so the RX FIFO must
+    /// have an entry removed before the interrupt is cleared. If the condition
+    /// is not cleared, the interrupt can re-assert.
     RxFull,
-    /// Attempt to write to available buffer FIFO when full
+    /// Raised if a write was done to either the Available OUT Buffer FIFO or
+    /// the Available SETUP Buffer FIFO when the FIFO was full.
     AvOverflow,
-    /// Error during IN transaction
+    /// Raised if a packet to an IN endpoint started to be received but was then
+    /// dropped due to an error. After transmitting the IN payload, the USB
+    /// device expects a valid ACK handshake packet. This error is raised if
+    /// either the packet or CRC is invalid, leading to a NAK instead, or if a
+    /// different token was received.
     LinkInErr,
-    /// Packet received with invalid CRC
+    /// Raised if a CRC error occurred on a received packet.
     RxCrcErr,
-    /// Packet received with invalid PID
+    /// Raised if an invalid Packet IDentifier (PID) was received.
     RxPidErr,
-    /// Invalid bitstuffing received
+    /// Raised if an invalid bitstuffing was received.
     RxBitstuffErr,
-    /// Frame packet received
+    /// Raised when the USB frame number is updated with a valid SOF.
     Frame,
-    /// VBUS applied
+    /// Raised if VBUS is applied.
     Powered,
-    /// Error during OUT/SETUP transaction
+    /// Raised if a packet to an OUT endpoint started to be received but was
+    /// then dropped due to an error.  This error is raised if the data toggle,
+    /// token, packet and/or CRC are invalid, or if the appropriate Available
+    /// OUT Buffer FIFO is empty and/or the Received Buffer FIFO is full when a
+    /// packet should have been received.
     LinkOutErr,
-}
-
-/// Returned when an invalid USB interrupt ID is provided.
-#[derive(Debug)]
-pub struct UsbInvalidInterruptError;
-
-impl UsbInterrupt {
-    /// Converts a usize to a USB interrupt
-    ///
-    /// # Parameters
-    ///
-    /// + `value`: the usize to be converted
-    ///
-    /// # Return value
-    ///
-    /// + Ok: if value >= 135 && value <= 151
-    /// + Err: if value < 135 || value > 151
-    pub fn try_from_usize(value: usize) -> Result<Self, UsbInvalidInterruptError> {
-        match value {
-            135 => Ok(UsbInterrupt::PacketReceived),
-            136 => Ok(UsbInterrupt::PacketSent),
-            137 => Ok(UsbInterrupt::Disconnected),
-            138 => Ok(UsbInterrupt::HostLost),
-            139 => Ok(UsbInterrupt::LinkReset),
-            140 => Ok(UsbInterrupt::LinkSuspended),
-            141 => Ok(UsbInterrupt::LinkResume),
-            142 => Ok(UsbInterrupt::AvEmpty),
-            143 => Ok(UsbInterrupt::RxFull),
-            144 => Ok(UsbInterrupt::AvOverflow),
-            145 => Ok(UsbInterrupt::LinkInErr),
-            146 => Ok(UsbInterrupt::RxCrcErr),
-            147 => Ok(UsbInterrupt::RxPidErr),
-            148 => Ok(UsbInterrupt::RxBitstuffErr),
-            149 => Ok(UsbInterrupt::Frame),
-            150 => Ok(UsbInterrupt::Powered),
-            151 => Ok(UsbInterrupt::LinkOutErr),
-            _ => Err(UsbInvalidInterruptError),
-        }
-    }
+    /// Raised when the Available SETUP Buffer FIFO is empty and the device
+    /// interface is enabled.  This interrupt is directly tied to the FIFO
+    /// status, so the Available SETUP Buffer FIFO must be provided with a free
+    /// buffer before the interrupt can be cleared.
+    AvSetupEmpty,
 }

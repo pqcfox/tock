@@ -38,6 +38,16 @@ pub struct SpiHost<'a> {
     tx_offset: Cell<usize>,
     rx_offset: Cell<usize>,
 }
+
+pub enum SpiHostInterrupt {
+    /// Error-related interrupts, see ERROR_ENABLE register for more
+    /// information.
+    Error,
+    /// Event-related interrupts, see EVENT_ENABLE register for more
+    /// information.
+    Event,
+}
+
 // SPI Host Command Direction: Bidirectional
 const SPI_HOST_CMD_BIDIRECTIONAL: u32 = 3;
 // SPI Host Command Speed: Standard SPI
@@ -61,74 +71,72 @@ impl<'a> SpiHost<'a> {
         }
     }
 
-    pub fn handle_interrupt(&self) {
+    pub fn handle_interrupt(&self, interrupt: SpiHostInterrupt) {
         let regs = self.registers;
-        let irq = regs.intr_state.extract();
         self.disable_interrupts();
+        match interrupt {
+            SpiHostInterrupt::Error => {
+                //Clear all pending errors.
+                self.clear_err_interrupt();
+                //Something went wrong, reset IP and clear buffers
+                self.reset_spi_ip();
+                self.reset_internal_state();
+                //r/w_done() may call r/w_bytes() to re-attempt transfer
+                self.client.map(|client| match self.tx_buf.take() {
+                    None => (),
+                    Some(tx_buf) => client.read_write_done(
+                        tx_buf,
+                        self.rx_buf.take(),
+                        self.tx_offset.get(),
+                        Err(ErrorCode::FAIL),
+                    ),
+                });
+            }
+            SpiHostInterrupt::Event => {
+                let status = regs.status.extract();
+                self.clear_event_interrupt();
 
-        if irq.is_set(INTR::ERROR) {
-            //Clear all pending errors.
-            self.clear_err_interrupt();
-            //Something went wrong, reset IP and clear buffers
-            self.reset_spi_ip();
-            self.reset_internal_state();
-            //r/w_done() may call r/w_bytes() to re-attempt transfer
-            self.client.map(|client| match self.tx_buf.take() {
-                None => (),
-                Some(tx_buf) => client.read_write_done(
-                    tx_buf,
-                    self.rx_buf.take(),
-                    self.tx_offset.get(),
-                    Err(ErrorCode::FAIL),
-                ),
-            });
-            return;
-        }
+                //This could be set at init, so only follow through
+                //once a transfer has started (is_busy())
+                if status.is_set(STATUS::TXEMPTY) && self.is_busy() {
+                    match self.continue_transfer() {
+                        Ok(SpiHostStatus::SpiTransferCmplt) => {
+                            // Transfer success
+                            self.client.map(|client| match self.tx_buf.take() {
+                                None => (),
+                                Some(tx_buf) => client.read_write_done(
+                                    tx_buf,
+                                    self.rx_buf.take(),
+                                    self.tx_len.get(),
+                                    Ok(()),
+                                ),
+                            });
 
-        if irq.is_set(INTR::SPI_EVENT) {
-            let status = regs.status.extract();
-            self.clear_event_interrupt();
-
-            //This could be set at init, so only follow through
-            //once a transfer has started (is_busy())
-            if status.is_set(STATUS::TXEMPTY) && self.is_busy() {
-                match self.continue_transfer() {
-                    Ok(SpiHostStatus::SpiTransferCmplt) => {
-                        // Transfer success
-                        self.client.map(|client| match self.tx_buf.take() {
-                            None => (),
-                            Some(tx_buf) => client.read_write_done(
-                                tx_buf,
-                                self.rx_buf.take(),
-                                self.tx_len.get(),
-                                Ok(()),
-                            ),
-                        });
-
-                        self.disable_tx_interrupt();
-                        self.reset_internal_state();
+                            self.disable_tx_interrupt();
+                            self.reset_internal_state();
+                        }
+                        Ok(SpiHostStatus::SpiTransferInprog) => {}
+                        Err(err) => {
+                            //Transfer failed, lets clean up
+                            //Clear all pending interrupts.
+                            self.clear_err_interrupt();
+                            //Something went wrong, reset IP and clear buffers
+                            self.reset_spi_ip();
+                            self.reset_internal_state();
+                            self.client.map(|client| match self.tx_buf.take() {
+                                None => (),
+                                Some(tx_buf) => client.read_write_done(
+                                    tx_buf,
+                                    self.rx_buf.take(),
+                                    self.tx_offset.get(),
+                                    Err(err),
+                                ),
+                            });
+                        }
                     }
-                    Ok(SpiHostStatus::SpiTransferInprog) => {}
-                    Err(err) => {
-                        //Transfer failed, lets clean up
-                        //Clear all pending interrupts.
-                        self.clear_err_interrupt();
-                        //Something went wrong, reset IP and clear buffers
-                        self.reset_spi_ip();
-                        self.reset_internal_state();
-                        self.client.map(|client| match self.tx_buf.take() {
-                            None => (),
-                            Some(tx_buf) => client.read_write_done(
-                                tx_buf,
-                                self.rx_buf.take(),
-                                self.tx_offset.get(),
-                                Err(err),
-                            ),
-                        });
-                    }
+                } else {
+                    self.enable_interrupts();
                 }
-            } else {
-                self.enable_interrupts();
             }
         }
     }
