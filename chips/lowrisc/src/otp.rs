@@ -10,8 +10,9 @@ use kernel::utilities::helpers::create_non_zero_usize;
 use crate::registers::otp_ctrl_regs::{
     OtpCtrlRegisters, CHECK_REGWEN, DIRECT_ACCESS_ADDRESS, DIRECT_ACCESS_CMD,
     OTP_CTRL_PARAM_DEVICE_ID_OFFSET, OTP_CTRL_PARAM_DEVICE_ID_SIZE,
-    OTP_CTRL_PARAM_EN_SRAM_IFETCH_OFFSET, OTP_CTRL_PARAM_HW_CFG_DIGEST_OFFSET,
-    OTP_CTRL_PARAM_MANUF_STATE_OFFSET, OTP_CTRL_PARAM_MANUF_STATE_SIZE, STATUS,
+    OTP_CTRL_PARAM_EN_SRAM_IFETCH_OFFSET, OTP_CTRL_PARAM_HW_CFG0_DIGEST_OFFSET,
+    OTP_CTRL_PARAM_HW_CFG1_DIGEST_OFFSET, OTP_CTRL_PARAM_MANUF_STATE_OFFSET,
+    OTP_CTRL_PARAM_MANUF_STATE_SIZE, STATUS,
 };
 
 use kernel::utilities::registers::interfaces::{ReadWriteable, Readable, Writeable};
@@ -228,8 +229,10 @@ const EN_ENTROPY_SRC_FW_READ_FIELD_ADDRESS: OtpAddress32 = EN_SRAM_IFETCH_FIELD_
 // EN_ENTROPY_SRC_FW_OVER belongs to the same OPT word as EN_SRAM_IFETCH
 const EN_ENTROPY_SRC_FW_OVER_FIELD_ADDRESS: OtpAddress32 = EN_SRAM_IFETCH_FIELD_ADDRESS;
 /// The starting address of HW_CFG_DIGEST field
-const HW_CFG_DIGEST_FIELD_ADDRESS: OtpAddress64 =
-    OtpAddress64::new_or_panic(OTP_CTRL_PARAM_HW_CFG_DIGEST_OFFSET);
+const HW_CFG0_DIGEST_FIELD_ADDRESS: OtpAddress64 =
+    OtpAddress64::new_or_panic(OTP_CTRL_PARAM_HW_CFG0_DIGEST_OFFSET);
+const HW_CFG1_DIGEST_FIELD_ADDRESS: OtpAddress64 =
+    OtpAddress64::new_or_panic(OTP_CTRL_PARAM_HW_CFG1_DIGEST_OFFSET);
 
 /// OTP peripheral driver
 pub struct Otp {
@@ -556,14 +559,24 @@ impl Otp {
         Ok(word.to_ne_bytes()[EN_ENTROPY_SRC_FW_OVER_BYTE_INDEX.get()])
     }
 
-    /// Read the hardware configure partition digest
+    /// Read the HW_CFG0 partition digest
     ///
     /// # Return value
     ///
     /// + Ok(u64): the read digest
     /// + Err(ErrorCode): an error occurred during reading
-    pub fn read_hw_cfg_digest(&self) -> Result<u64, ErrorCode> {
-        self.read_word64(HW_CFG_DIGEST_FIELD_ADDRESS)
+    pub fn read_hw_cfg0_digest(&self) -> Result<u64, ErrorCode> {
+        self.read_word64(HW_CFG0_DIGEST_FIELD_ADDRESS)
+    }
+
+    /// Read the HW_CFG1 partition digest
+    ///
+    /// # Return value
+    ///
+    /// + Ok(u64): the read digest
+    /// + Err(ErrorCode): an error occurred during reading
+    pub fn read_hw_cfg1_digest(&self) -> Result<u64, ErrorCode> {
+        self.read_word64(HW_CFG1_DIGEST_FIELD_ADDRESS)
     }
 }
 
@@ -651,7 +664,7 @@ pub mod tests {
         kernel::debug!("Starting testing hardware configure digest.");
 
         let actual_digest = otp
-            .read_hw_cfg_digest()
+            .read_hw_cfg0_digest()
             .expect("Reading hardware configure digest failed");
         const EXPECTED_DIGEST: u64 = 0x4e723d153038967f;
 
