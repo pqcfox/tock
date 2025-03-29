@@ -466,12 +466,12 @@ impl<C: Chip + 'static> TockMain<C> {
                 }
                 #[cfg(not(feature = "test_flash_ctrl"))]
                 {
-                    // SAFETY: &_stext represents a valid flash address in the host address space.
+                    #[allow(clippy::undocumented_unsafe_blocks)]
                     let starting_address = unsafe {
                         earlgrey::flash_ctrl::FlashAddress::new_from_host_address(&_stext as *const u8)
                             .unwrap()
                     };
-                    // SAFETY: &_etext represents a valid flash address in the host address space.
+                    #[allow(clippy::undocumented_unsafe_blocks)]
                     let ending_address = unsafe {
                         earlgrey::flash_ctrl::FlashAddress::new_from_host_address(&_etext as *const u8)
                             .unwrap()

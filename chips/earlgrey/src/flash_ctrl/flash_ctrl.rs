@@ -1526,13 +1526,10 @@ impl FlashCtrl<'_> {
     ///
     /// # Return value
     ///
-    /// [PageChunkIterator] representing the current stored page chunk iterator
-    ///
-    /// # Panic
-    ///
-    /// This method panics if there is no page chunk stored
-    fn take_page_chunk_iterator(&self) -> PageChunkIterator<'static> {
-        self.page_chunk_iterator.take().unwrap()
+    /// [Option<PageChunkIterator>] representing the current stored page chunk iterator
+    /// or `None` if none is present.
+    fn take_page_chunk_iterator(&self) -> Option<PageChunkIterator<'static>> {
+        self.page_chunk_iterator.take()
     }
 
     /// Store the given page chunk iterator
@@ -1544,23 +1541,20 @@ impl FlashCtrl<'_> {
         self.page_chunk_iterator.set(page_chunk_iterator);
     }
 
-    /// Helper function to apply a closure on the stored page chunk iterator
-    ///
+    /// Helper function to apply a closure on the stored page chunk iterator.
+    /// No-op if there is no page chunk iterator stored.
     ///
     /// # Parameters
     ///
     /// + `closure`: the closure to be applied on the stored page chunk iterator
-    ///
-    /// # Panic
-    ///
-    /// This method panics if there is no page chunk stored
     fn operate_on_page_chunk_iterator<F>(&self, closure: F)
     where
         F: FnOnce(&mut PageChunkIterator<'static>),
     {
-        let mut page_chunk_iterator = self.take_page_chunk_iterator();
-        closure(&mut page_chunk_iterator);
-        self.set_page_chunk_iterator(page_chunk_iterator);
+        if let Some(mut page_chunk_iterator) = self.take_page_chunk_iterator() {
+            closure(&mut page_chunk_iterator);
+            self.set_page_chunk_iterator(page_chunk_iterator);
+        };
     }
 
     /// Create a new info page position
@@ -1910,20 +1904,19 @@ impl FlashCtrl<'_> {
             match finished_operation {
                 FlashOperationType::Read => {
                     self.flush_read_buffer();
-                    // This may never panic because before an operation starts, the user of the
-                    // driver has to provide a reference to a page from which the iterator is
-                    // created and stored.
-                    let page_chunk_iterator = self.take_page_chunk_iterator();
-                    let raw_page = page_chunk_iterator.to_raw_page();
-                    self.read_complete(raw_page, Err(error));
+                    if let Some(page_chunk_iterator) = self.take_page_chunk_iterator() {
+                        let raw_page = page_chunk_iterator.to_raw_page();
+                        self.read_complete(raw_page, Err(error));
+                    };
                 }
                 FlashOperationType::Write => {
                     // This may never panic because before an operation starts, the user of the
                     // driver has to provide a reference to a page from which the iterator is
                     // created and stored.
-                    let page_chunk_iterator = self.take_page_chunk_iterator();
-                    let raw_page = page_chunk_iterator.to_raw_page();
-                    self.write_complete(raw_page, Err(error));
+                    if let Some(page_chunk_iterator) = self.take_page_chunk_iterator() {
+                        let raw_page = page_chunk_iterator.to_raw_page();
+                        self.write_complete(raw_page, Err(error));
+                    }
                 }
                 FlashOperationType::Erase => self.erase_complete(Err(error)),
             }
@@ -1934,33 +1927,31 @@ impl FlashCtrl<'_> {
         match finished_operation {
             FlashOperationType::Read => {
                 self.read_data();
-                // This may never panic because before an operation starts, the user of the
-                // driver has to provide a reference to a page from which the iterator is
-                // created and stored.
-                let page_chunk_iterator = self.take_page_chunk_iterator();
-                let empty_status = page_chunk_iterator.empty();
+                if let Some(page_chunk_iterator) = self.take_page_chunk_iterator() {
+                    let empty_status = page_chunk_iterator.empty();
 
-                if PageChunkIteratorEmpty::Empty == empty_status {
-                    let raw_page = page_chunk_iterator.to_raw_page();
-                    self.read_complete(raw_page, Ok(()));
-                } else {
-                    self.set_page_chunk_iterator(page_chunk_iterator);
-                    self.start_next_read();
+                    if PageChunkIteratorEmpty::Empty == empty_status {
+                        let raw_page = page_chunk_iterator.to_raw_page();
+                        self.read_complete(raw_page, Ok(()));
+                    } else {
+                        self.set_page_chunk_iterator(page_chunk_iterator);
+                        self.start_next_read();
+                    }
                 }
             }
             FlashOperationType::Write => {
                 // This may never panic because before an operation starts, the user of the
                 // driver has to provide a reference to a page from which the iterator is
                 // created and stored.
-                let page_chunk_iterator = self.take_page_chunk_iterator();
-                let empty_status = page_chunk_iterator.empty();
-
-                if PageChunkIteratorEmpty::Empty == empty_status {
-                    let raw_page = page_chunk_iterator.to_raw_page();
-                    self.write_complete(raw_page, Ok(()));
-                } else {
-                    self.page_chunk_iterator.set(page_chunk_iterator);
-                    self.write_data();
+                if let Some(page_chunk_iterator) = self.take_page_chunk_iterator() {
+                    let empty_status = page_chunk_iterator.empty();
+                    if PageChunkIteratorEmpty::Empty == empty_status {
+                        let raw_page = page_chunk_iterator.to_raw_page();
+                        self.write_complete(raw_page, Ok(()));
+                    } else {
+                        self.page_chunk_iterator.set(page_chunk_iterator);
+                        self.write_data();
+                    }
                 }
             }
             FlashOperationType::Erase => self.erase_complete(Ok(())),
