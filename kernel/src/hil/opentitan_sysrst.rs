@@ -49,7 +49,9 @@ pub type SRCInputPinStatus = LocalRegisterCopy<u32, SRCInputPinState::Register>;
 
 /// Struct that holds the Key Interrupt feature's configuration
 /// ::default() returns configuration that disables this feature
-/// Each field of the format signal_edge specifies if a h2l (high to low) or l2h ( low to high) edge on the signal should trigger a key interrupt.
+///
+/// Each field of the format signal_edge specifies if a h2l (high to low) or l2h
+/// (low to high) edge on the signal should trigger a key interrupt.
 #[derive(Debug, PartialEq, Eq, Default)]
 pub struct SRCKeyInterruptConfig {
     pub pwrb_h2l: bool,
@@ -70,7 +72,12 @@ pub struct SRCKeyInterruptConfig {
 
 /// struct that holds the Allowed Output Pin State feauture's configuration
 /// ::default() returns configuration that disables this feature
-/// These fields configure which pins are allowed to be overriden, not which are actually overriden. Each signal can be allowed to be overriden to low level if the associated field ending with '_0' is set and each signal can be allowed to be overriden to high level if the associated field ending wiht '_1' is set.
+///
+/// These fields configure which pins are allowed to be overriden, not which
+/// are actually overriden. Each signal can be allowed to be overriden to low
+/// level if the associated field ending with '_0' is set and each signal can
+/// be allowed to be overriden to high level if the associated field ending wiht
+/// '_1' is set.
 #[derive(Debug, PartialEq, Eq, Default)]
 pub struct SRCAllowedPinConfig {
     pub bat_disable_0: bool,
@@ -95,7 +102,9 @@ pub struct SRCAllowedPinConfig {
 
 /// struct that holds the Pin Inversion feature's confiugration
 /// ::default() returns configuration that disables this feature
-/// Signals can be inverted at input stage (before arriving at any circuit) or output stage (before arriving at the output pins)
+///
+/// Signals can be inverted at input stage (before arriving at any circuit) or
+/// output stage (before arriving at the output pins)
 #[derive(Debug, PartialEq, Eq, Default)]
 pub struct SRCPinInversionConfig {
     pub z3_wakeup_output: bool,

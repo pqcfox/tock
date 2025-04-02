@@ -343,6 +343,7 @@ mod upcall {
     /// Upcall identifiers. Matches the subscribe numbers in the API
     /// definition at the top of this file.
     #[repr(usize)]
+    #[derive(Clone, Copy)]
     pub enum UpcallId {
         VerifyDone,
     }

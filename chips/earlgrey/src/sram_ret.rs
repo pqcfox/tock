@@ -57,6 +57,7 @@ impl SramCtrl {
     }
     /// This function _forces_ the reinitialization of the init. Normally,this should not be necessary, but
     /// in case it is, we copy the rram data, we init and then restore the rram data.
+    #[allow(static_mut_refs)]
     pub fn forced_safe_init(&self) -> Result<(), ErrorCode> {
         unsafe {
             let ram_creator_backup = RET_RAM_CREATOR;
@@ -100,6 +101,7 @@ impl SramCtrl {
     }
 
     /// Interface to read rram data from the creator area. Addressed through ID's and returning u32 data.
+    #[allow(static_mut_refs)]
     pub fn get_creator_rram_data(&self, id: usize) -> Result<u32, ErrorCode> {
         unsafe {
             if id <= RET_RAM_CREATOR.len() {
@@ -111,6 +113,7 @@ impl SramCtrl {
         }
     }
     /// Interface to read rram data from the owner area. Addressed through ID's and returning u32 data.
+    #[allow(static_mut_refs)]
     pub fn get_owner_rram_data(&self, id: usize) -> Result<u32, ErrorCode> {
         unsafe {
             if id <= RET_RAM_OWNER.len() {
@@ -123,6 +126,7 @@ impl SramCtrl {
     }
 
     /// Interface to read rram data from the owner area. Addressed through ID's and returning u32 data.
+    #[allow(static_mut_refs)]
     pub fn set_owner_rram_data(&self, id: usize, val: u32) -> Result<(), ErrorCode> {
         unsafe {
             if id <= RET_RAM_OWNER.len() {

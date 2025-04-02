@@ -247,8 +247,10 @@ impl<F: hil::flash::Flash> hil::flash::Flash for FlashUser<'_, F> {
 // Info flash multiplexer
 
 /// Handle keeping a list of active users of flash hardware and serialize their
-/// requests. After each completed request the list is checked to see if there
-/// is another flash user with an outstanding read, write, or erase request.
+/// requests.
+///
+/// After each completed request the list is checked to see if there is another
+/// flash user with an outstanding read, write, or erase request.
 pub struct MuxInfoFlash<'a, F: hil::flash::InfoFlash + 'static>
 where
     F::InfoType: Copy,
@@ -396,9 +398,10 @@ enum InfoOp<P: Copy, B: Copy> {
 }
 
 /// Keep state for each flash user. All uses of the virtualized flash interface
-/// need to create one of these to be a user of the flash. The `new()` function
-/// handles most of the work, a user only has to pass in a reference to the
-/// MuxFlash object.
+/// need to create one of these to be a user of the flash.
+///
+/// The `new()` function handles most of the work, a user only has to pass in a
+/// reference to the MuxFlash object.
 pub struct InfoFlashUser<'a, F: hil::flash::InfoFlash + 'static>
 where
     F::InfoType: Copy,
@@ -439,7 +442,7 @@ where
     }
 }
 
-impl<'a, F: hil::flash::InfoFlash> hil::flash::InfoClient<F> for InfoFlashUser<'a, F>
+impl<F: hil::flash::InfoFlash> hil::flash::InfoClient<F> for InfoFlashUser<'_, F>
 where
     F::InfoType: Copy,
     F::BankType: Copy,

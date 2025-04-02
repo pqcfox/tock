@@ -139,7 +139,7 @@ ifneq ($(OPENTITAN_TREE),)
 endif
 	mkdir -p $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/deps/
 	$(Q)cp test_layout.ld $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/deps/layout.ld
-	$(Q)cp ../../kernel_layout.ld $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/
+	$(Q)cp ../../build_scripts/tock_kernel_layout.ld $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/
 # Not all the tests whose feature flags are listed here will
 # necessarily be run; some are hard-coded to ignore the default "qemu"
 # feature because QEMU cannot emulate them.

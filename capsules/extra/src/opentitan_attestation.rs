@@ -206,6 +206,7 @@ const RW_ALLOW_COUNT: u8 = 1;
 
 /// Read-write buffer identifier
 #[repr(usize)]
+#[derive(Clone, Copy)]
 enum RwAllowId {
     /// A boot stage certificate read from the flash info partition
     Certificate = 0,
@@ -225,6 +226,7 @@ mod upcall {
     /// Upcall identifiers. Matches the subscribe numbers in the API
     /// definition at the top of this file.
     #[repr(usize)]
+    #[derive(Clone, Copy)]
     pub enum UpcallId {
         CertAvailable = 0,
     }
@@ -288,7 +290,7 @@ impl<'a, CertReader: CertificateReader<'a>> SyscallDriver for Attestation<'a, Ce
     }
 }
 
-impl<'a, CertReader> CertificateReaderClient for Attestation<'a, CertReader> {
+impl<CertReader> CertificateReaderClient for Attestation<'_, CertReader> {
     /// Indicates a certificate is available. On success, the
     /// certificate is guaranteed to at least contain the entire
     /// certificate, but may contain additional bytes afterwards.

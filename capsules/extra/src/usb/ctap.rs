@@ -205,7 +205,7 @@ impl<'a, U: hil::usb::UsbController<'a>> hil::usb_hid::UsbHid<'a, [u8; 64]> for 
         recv: &'static mut [u8; 64],
     ) -> Result<(), (ErrorCode, &'static mut [u8; 64])> {
         self.recv_buffer.replace(recv);
-        self.controller().endpoint_resume_out(ENDPOINT_NUM);
+        self.controller().endpoint_resume_out(ENDPOINT_NUM).unwrap();
         Ok(())
     }
 

@@ -470,7 +470,7 @@ impl DeferredCallClient for Uart<'_> {
     }
 }
 
-impl<'a> TransmitSynch for Uart<'a> {
+impl TransmitSynch for Uart<'_> {
     fn transmit_sync(&self, bytes: &[u8]) {
         self.transmit_sync(bytes);
     }

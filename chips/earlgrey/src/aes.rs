@@ -13,4 +13,3 @@ use lowrisc::registers::aes_regs::AesRegisters;
 // https://docs.opentitan.org/hw/top_earlgrey/doc/
 pub const AES_BASE: StaticRef<AesRegisters> =
     unsafe { StaticRef::new(AES_BASE_ADDR as *const AesRegisters) };
-

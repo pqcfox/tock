@@ -76,7 +76,7 @@ impl<'a, M: ResetManagment> ResetManager<'a, M> {
     }
 }
 
-impl<'a, M: ResetManagment> SyscallDriver for ResetManager<'a, M> {
+impl<M: ResetManagment> SyscallDriver for ResetManager<'_, M> {
     /// Read reset reason, reset information or trigger a MCU reset.
     ///
     ///
@@ -161,7 +161,7 @@ impl<'a, M: ResetManagment> SyscallDriver for ResetManager<'a, M> {
 }
 
 /// pass-through implementation for `ResetManagment` trait. Used by capsules to access reset information.
-impl<'a, M: ResetManagment> ResetManagment for ResetManager<'a, M> {
+impl<M: ResetManagment> ResetManagment for ResetManager<'_, M> {
     type ResetInfo = M::ResetInfo;
 
     fn reset_reason(&self) -> Option<ResetReason> {

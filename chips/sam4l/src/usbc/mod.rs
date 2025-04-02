@@ -612,7 +612,11 @@ impl<'a> Usbc<'a> {
     }
 
     /// Configure and enable an endpoint
-    fn endpoint_enable(&self, endpoint: usize, endpoint_config: EndpointConfigValue) {
+    fn endpoint_enable(
+        &self,
+        endpoint: usize,
+        endpoint_config: EndpointConfigValue,
+    ) -> Result<(), hil::usb::Error> {
         self.endpoint_record_config(endpoint, endpoint_config);
         self.endpoint_write_config(endpoint, endpoint_config);
 
@@ -628,6 +632,8 @@ impl<'a> Usbc<'a> {
         usbc_regs().udinteset.set(1 << (12 + endpoint));
 
         debug1!("Enabled endpoint {}", endpoint);
+
+        Ok(())
     }
 
     fn endpoint_record_config(&self, endpoint: usize, endpoint_config: EndpointConfigValue) {
@@ -1454,21 +1460,33 @@ impl<'a> hil::usb::UsbController<'a> for Usbc<'a> {
         self.endpoint_bank_set_buffer(EndpointIndex::new(0), BankIndex::Bank0, buf);
     }
 
-    fn endpoint_set_in_buffer(&self, endpoint: usize, buf: &'a [VolatileCell<u8>]) {
+    fn endpoint_set_in_buffer(
+        &self,
+        endpoint: usize,
+        buf: &'a [VolatileCell<u8>],
+    ) -> Result<(), hil::usb::Error> {
         if buf.len() < 8 {
             client_err!("Bad endpoint buffer size");
         }
 
         self.endpoint_bank_set_buffer(EndpointIndex::new(endpoint), BankIndex::Bank0, buf);
+
+        Ok(())
     }
 
-    fn endpoint_set_out_buffer(&self, endpoint: usize, buf: &'a [VolatileCell<u8>]) {
+    fn endpoint_set_out_buffer(
+        &self,
+        endpoint: usize,
+        buf: &'a [VolatileCell<u8>],
+    ) -> Result<(), hil::usb::Error> {
         if buf.len() < 8 {
             client_err!("Bad endpoint buffer size");
         }
 
         // XXX: when implementing in_out endpoints, this should probably set a different slice than endpoint_set_in_buffer.
         self.endpoint_bank_set_buffer(EndpointIndex::new(endpoint), BankIndex::Bank0, buf);
+
+        Ok(())
     }
 
     fn enable_as_device(&self, speed: hil::usb::DeviceSpeed) {
@@ -1520,7 +1538,11 @@ impl<'a> hil::usb::UsbController<'a> for Usbc<'a> {
         );
     }
 
-    fn endpoint_in_enable(&self, transfer_type: TransferType, endpoint: usize) {
+    fn endpoint_in_enable(
+        &self,
+        transfer_type: TransferType,
+        endpoint: usize,
+    ) -> Result<(), hil::usb::Error> {
         let endpoint_cfg = match transfer_type {
             TransferType::Control => {
                 panic!("There is no IN control endpoint");
@@ -1537,7 +1559,11 @@ impl<'a> hil::usb::UsbController<'a> for Usbc<'a> {
         self.endpoint_enable(endpoint, endpoint_cfg)
     }
 
-    fn endpoint_out_enable(&self, transfer_type: TransferType, endpoint: usize) {
+    fn endpoint_out_enable(
+        &self,
+        transfer_type: TransferType,
+        endpoint: usize,
+    ) -> Result<(), hil::usb::Error> {
         let endpoint_cfg = match transfer_type {
             TransferType::Control => LocalRegisterCopy::new(From::from(
                 EndpointConfig::EPTYPE::Control
@@ -1557,25 +1583,33 @@ impl<'a> hil::usb::UsbController<'a> for Usbc<'a> {
         self.endpoint_enable(endpoint, endpoint_cfg)
     }
 
-    fn endpoint_in_out_enable(&self, _transfer_type: TransferType, _endpoint: usize) {
+    fn endpoint_in_out_enable(
+        &self,
+        _transfer_type: TransferType,
+        _endpoint: usize,
+    ) -> Result<(), hil::usb::Error> {
         unimplemented!()
     }
 
-    fn endpoint_resume_in(&self, endpoint: usize) {
+    fn endpoint_resume_in(&self, endpoint: usize) -> Result<(), hil::usb::Error> {
         let mut requests = self.requests[endpoint].get();
         requests.resume_in = true;
         self.requests[endpoint].set(requests);
 
         // Immediately handle the request to resume the endpoint.
         self.handle_requests();
+
+        Ok(())
     }
 
-    fn endpoint_resume_out(&self, endpoint: usize) {
+    fn endpoint_resume_out(&self, endpoint: usize) -> Result<(), hil::usb::Error> {
         let mut requests = self.requests[endpoint].get();
         requests.resume_out = true;
         self.requests[endpoint].set(requests);
 
         // Immediately handle the request to resume the endpoint.
         self.handle_requests();
+
+        Ok(())
     }
 }

@@ -8,7 +8,7 @@ use core::ops::{Index, IndexMut};
 
 use kernel::utilities::StaticRef;
 pub use lowrisc::gpio::{GpioBitfield, GpioPin};
-use lowrisc::registers::gpio_regs::{GpioRegisters};
+use lowrisc::registers::gpio_regs::GpioRegisters;
 
 use crate::pinmux::PadConfig;
 use crate::pinmux_config::EarlGreyPinmuxConfig;

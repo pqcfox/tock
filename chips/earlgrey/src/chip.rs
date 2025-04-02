@@ -80,6 +80,7 @@ pub struct EarlGreyDefaultPeripherals<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyP
 impl<CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig>
     EarlGreyDefaultPeripherals<'_, CFG, PINMUX>
 {
+    #[allow(static_mut_refs)]
     pub unsafe fn new(
         flash_memory_protection_configuration: crate::flash_ctrl::MemoryProtectionConfiguration,
     ) -> Self {
@@ -504,6 +505,7 @@ fn handle_exception(exception: mcause::Exception) {
     }
 }
 
+#[allow(static_mut_refs)]
 unsafe fn handle_interrupt(intr: mcause::Interrupt) {
     match intr {
         mcause::Interrupt::UserSoft

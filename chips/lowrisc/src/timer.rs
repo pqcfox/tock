@@ -52,7 +52,7 @@ pub enum SetClkResult {
     Error,
 }
 
-impl<'a> RvTimer<'a> {
+impl RvTimer<'_> {
     pub fn new(register_base: StaticRef<RvTimerRegisters>, clock_frequency: u32) -> Self {
         Self {
             registers: register_base,

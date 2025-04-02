@@ -151,6 +151,7 @@ pub struct AppData;
 
 /// An identifier for read-write buffers
 #[repr(usize)]
+#[derive(Clone, Copy)]
 enum RwAllowId {
     Read = 0,
 }
@@ -165,6 +166,7 @@ impl RwAllowId {
 
 /// An identifier for read-only buffers
 #[repr(usize)]
+#[derive(Clone, Copy)]
 enum RoAllowId {
     Write = 0,
 }
@@ -179,6 +181,7 @@ impl RoAllowId {
 
 /// An identifier for upcalls
 #[repr(usize)]
+#[derive(Clone, Copy)]
 enum UpcallId {
     ReadDone = 0,
     WriteDone = 1,
@@ -486,7 +489,7 @@ impl<Flash: InfoFlashTrait> InfoFlash<'static, Flash> {
     }
 }
 
-impl<'a, Flash: InfoFlashTrait> InfoClientTrait<Flash> for InfoFlash<'a, Flash> {
+impl<Flash: InfoFlashTrait> InfoClientTrait<Flash> for InfoFlash<'_, Flash> {
     fn info_read_complete(&self, read_buffer: &'static mut Flash::Page, result: Result<(), Error>) {
         self.current_process.take().map(|process_id| {
             self.grant.enter(process_id, |_, kernel_data| {

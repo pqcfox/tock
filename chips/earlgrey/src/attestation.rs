@@ -171,7 +171,7 @@ impl<'a, Flash: InfoFlashTrait> CertificateReader<'a> for Attestation<'a, Flash>
     }
 }
 
-impl<'a, Flash: InfoFlashTrait> InfoClientTrait<Flash> for Attestation<'a, Flash> {
+impl<Flash: InfoFlashTrait> InfoClientTrait<Flash> for Attestation<'_, Flash> {
     fn info_read_complete(
         &self,
         read_buffer: &'static mut Flash::Page,
