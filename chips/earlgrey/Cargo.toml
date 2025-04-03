@@ -18,6 +18,8 @@ kernel = { path = "../../kernel" }
 workspace = true
 
 [features]
+# Enable when linking with OpenTitan FFI dependencies
+ffi = []
 clkmgr_tests = []
 sival = []
 qemu = []

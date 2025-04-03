@@ -166,10 +166,16 @@ pub fn find_app(name: &str, app_flash: &'static [u8]) -> Result<(usize, usize, u
 
                 let dmem_length = tbf_header.get_minimum_app_ram_size();
 
+                // SAFETY: `header_length` is set so the offset will be in
+                // bounds of the app memory and will not wrap around the size of
+                // an `isize`.
                 let imem_start =
                     unsafe { entry_flash.as_ptr().offset(header_length as isize) as usize };
                 let imem_length = entry_length - dmem_length - header_length as u32 - 4;
 
+                // SAFETY: `header_length` is set so the offset will be in
+                // bounds of the app memory and will not wrap around the size of
+                // an `isize`.
                 let dmem_start = unsafe {
                     entry_flash
                         .as_ptr()

@@ -6,11 +6,11 @@
 
 use crate::registers::aon_timer_regs::{
     AonTimerRegisters, INTR_STATE, WDOG_BARK_THOLD, WDOG_BITE_THOLD, WDOG_CTRL, WDOG_REGWEN,
-    WKUP_COUNT, WKUP_CTRL, WKUP_THOLD,
+    WKUP_COUNT_HI, WKUP_COUNT_LO, WKUP_CTRL, WKUP_THOLD_HI, WKUP_THOLD_LO,
 };
 
 use kernel::utilities::cells::OptionalCell;
-use kernel::utilities::registers::interfaces::{Readable, Writeable};
+use kernel::utilities::registers::interfaces::{ReadWriteable, Readable, Writeable};
 use kernel::utilities::StaticRef;
 use kernel::{platform, ErrorCode};
 
@@ -32,7 +32,32 @@ pub struct AonTimer<'a> {
     registers: StaticRef<AonTimerRegisters>,
     wakeup_notification: OptionalCell<&'a dyn Fn()>,
     bark_notification: OptionalCell<&'a dyn Fn()>,
-    aon_clk_freq: OptionalCell<u32>, //Hz, this differs for FPGA/Verilator
+    // Making this field a `u64` was the source of a very gnarly alignment bug.
+    //
+    // A `u64` and a `[u32; 2]` are the same size, but they have different
+    // alignment requirements. A `u64` is guaranteed to be 8-byte aligned,
+    // whereas a `[u32; 2]` is only guaranteed to be 4-byte aligned. Using a
+    // `u64` caused the 8-byte alignment requirement to be propagated to all the
+    // fields of `AonTimer`, including `registers`.
+    //
+    // Currently, Tock cannot cope with `self.registers` being forced to have
+    // 8-byte alignment. It causes the ELF to fail to account for the 4 bytes of
+    // padding inserted at the beginning of the `.relocate` section of the
+    // binary, causing undefined behavior because `self.registers` is actually
+    // loaded at an address 4 bytes higher than `rustc` tells the binary it is.
+    //
+    // TODO: this is likely a bug with a linker script or one of the static
+    // initialization types. This type should be able to be reverted to a `u64`
+    // if the root cause is found.
+    aon_clk_freq: OptionalCell<[u32; 2]>, //Hz, this differs for FPGA/Verilator
+}
+
+#[derive(Clone, Copy)]
+pub enum AonTimerInterrupt {
+    /// Raised if the wakeup timer has hit the specified threshold
+    AonWkupTimerExpired,
+    /// Raised if the watchdog timer has hit the bark threshold
+    AonWdogTimerBark,
 }
 
 impl<'a> AonTimer<'a> {
@@ -45,8 +70,9 @@ impl<'a> AonTimer<'a> {
         }
     }
 
-    pub fn set_clk_freq(&self, freq: u32) {
-        self.aon_clk_freq.insert(Some(freq));
+    pub fn set_clk_freq(&self, freq: u64) {
+        self.aon_clk_freq
+            .insert(Some([(freq & 0xFFFF_FFFF) as u32, (freq >> 32) as u32]));
     }
 
     fn wakeup_set_prescaler_and_enable(&self, prescaler: u32) -> Result<(), ErrorCode> {
@@ -64,42 +90,55 @@ impl<'a> AonTimer<'a> {
     }
 
     // Enable wakeup after a number of milliseconds. This can fail if the ms number is out of range.
-    pub fn wakeup_enable_after_ms(&self, ms: u32) -> Result<(), ErrorCode> {
+    pub fn wakeup_enable_after_ms(&self, ms: u64) -> Result<(), ErrorCode> {
         let wakeup_cycles = self.ms_to_cycles(ms)?;
 
         self.wakeup_disable();
 
         self.reset_wkup();
 
-        self.registers
-            .wkup_thold
-            .write(WKUP_THOLD::THRESHOLD.val(wakeup_cycles));
+        // PANIC: These `unwrap` calls cannot panic because the partial values are constructed to
+        // be in the range of a `u32`.
+        self.registers.wkup_thold_lo.write(
+            WKUP_THOLD_LO::THRESHOLD_LO
+                .val(u32::try_from(wakeup_cycles & u64::from(u32::MAX)).unwrap()),
+        );
+        self.registers.wkup_thold_hi.write(
+            WKUP_THOLD_HI::THRESHOLD_HI.val(u32::try_from(wakeup_cycles >> u32::BITS).unwrap()),
+        );
 
         self.wakeup_set_prescaler_and_enable(0)
     }
 
     /// Reset  wake up timer count value.
     pub fn reset_wkup(&self) {
-        self.registers.wkup_count.set(0x00);
+        self.registers.wkup_count_lo.set(0x00);
+        self.registers.wkup_count_hi.set(0x00);
     }
 
     /// Get the ms remaining until wakeup will happen.
     ///
     /// Returns Ok(ms) if aon_clk_freq has been set via set_clk_freq,
     /// otherwise returns Err(ErrorCode::FAIL).
-    pub fn get_ms_to_wkup(&self) -> Result<u32, ErrorCode> {
-        self.cycles_to_ms(
-            // The wakeup register addition can not overflow because of the possible range of the prescaler register.
-            self.registers
-                .wkup_thold
-                .read(WKUP_THOLD::THRESHOLD)
-                .saturating_sub(
-                    self.registers
-                        .wkup_count
-                        .read(WKUP_COUNT::COUNT)
-                        .saturating_mul(self.registers.wkup_ctrl.read(WKUP_CTRL::PRESCALER) + 1),
-                ),
-        )
+    pub fn get_ms_to_wkup(&self) -> Result<u64, ErrorCode> {
+        let wkup_count_lo = self.registers.wkup_count_lo.read(WKUP_COUNT_LO::COUNT_LO);
+        let wkup_count_hi = self.registers.wkup_count_hi.read(WKUP_COUNT_HI::COUNT_HI);
+        let wkup_count = (u64::from(wkup_count_lo) + (u64::from(wkup_count_hi) << u32::BITS))
+            .saturating_mul(u64::from(
+                self.registers.wkup_ctrl.read(WKUP_CTRL::PRESCALER) + 1,
+            ));
+        let wkup_thold_lo = self
+            .registers
+            .wkup_thold_lo
+            .read(WKUP_THOLD_LO::THRESHOLD_LO);
+        let wkup_thold_hi = self
+            .registers
+            .wkup_thold_hi
+            .read(WKUP_THOLD_HI::THRESHOLD_HI);
+        let wkup_thold = u64::from(wkup_thold_lo) + (u64::from(wkup_thold_hi) << u32::BITS);
+        // The wakeup register addition can not overflow because of the
+        // possible range of the prescaler register.
+        self.cycles_to_ms(wkup_thold.saturating_sub(wkup_count))
     }
 
     /// Function to register a callback for the wakeup event.
@@ -132,7 +171,11 @@ impl<'a> AonTimer<'a> {
         // Watchdog period may need to be revised with kernel changes/updates
         // since the watchdog is `tickled()` at the start of every kernel loop
         // see: https://github.com/tock/tock/blob/eb3f7ce59434b7ac1b77ef1ab7dd2afad1a62ac5/kernel/src/kernel.rs#L448
-        let bite_cycles = self.ms_to_cycles(ms)?;
+        let bite_cycles = match u32::try_from(self.ms_to_cycles(u64::from(ms))?) {
+            Ok(c) => c,
+            // Value passed was too large for a 32-bit register.
+            Err(_) => return Err(ErrorCode::SIZE),
+        };
 
         self.registers
             .wdog_bite_thold
@@ -146,7 +189,11 @@ impl<'a> AonTimer<'a> {
         // Watchdog period may need to be revised with kernel changes/updates
         // since the watchdog is `tickled()` at the start of every kernel loop
         // see: https://github.com/tock/tock/blob/eb3f7ce59434b7ac1b77ef1ab7dd2afad1a62ac5/kernel/src/kernel.rs#L448
-        let bark_cycles = self.ms_to_cycles(ms)?;
+        let bark_cycles = match u32::try_from(self.ms_to_cycles(u64::from(ms))?) {
+            Ok(c) => c,
+            // Value passed was too large for a 32-bit register.
+            Err(_) => return Err(ErrorCode::SIZE),
+        };
 
         self.registers
             .wdog_bark_thold
@@ -184,10 +231,10 @@ impl<'a> AonTimer<'a> {
     ///
     /// Returns Ok(cycles) if aon_clk_freq has been set via set_clk_freq,
     /// otherwise returns Err(ErrorCode::FAIL).
-    fn ms_to_cycles(&self, ms: u32) -> Result<u32, ErrorCode> {
+    fn ms_to_cycles(&self, ms: u64) -> Result<u64, ErrorCode> {
         // 250kHZ CW310 or 125kHz Verilator (as specified in chip config)
         self.aon_clk_freq
-            .map(|freq| ms.saturating_mul(freq).saturating_div(1000))
+            .map(|freq| ms.saturating_mul(parse_freq(freq)).saturating_div(1000))
             .ok_or(ErrorCode::FAIL)
     }
 
@@ -195,32 +242,32 @@ impl<'a> AonTimer<'a> {
     ///
     /// Returns Ok(ms) if aon_clk_freq has been set via set_clk_freq,
     /// otherwise returns Err(ErrorCode::FAIL).
-    fn cycles_to_ms(&self, cycles: u32) -> Result<u32, ErrorCode> {
+    fn cycles_to_ms(&self, cycles: u64) -> Result<u64, ErrorCode> {
         // 250kHZ CW310 or 125kHz Verilator (as specified in chip config)
         self.aon_clk_freq
-            .map(|freq| cycles.saturating_mul(1000).saturating_div(freq))
+            .map(|freq| cycles.saturating_mul(1000).saturating_div(parse_freq(freq)))
             .ok_or(ErrorCode::FAIL)
     }
 
     /// Function for handling interrupts related to wakeup and watchdog barks.
-    pub fn handle_interrupt(&self) {
+    pub fn handle_interrupt(&self, interrupt: AonTimerInterrupt) {
         let regs = self.registers;
-        let intr = self.registers.intr_state.extract();
-        if intr.is_set(INTR_STATE::WKUP_TIMER_EXPIRED) {
-            // Wake up timer has expired, sw must ack and clear
-            regs.wkup_cause.set(0x00);
-            regs.wkup_count.set(0x00); // To avoid re-triggers
-            self.reset_wkup();
-            // RW1C, clear the interrupt
-            regs.intr_state.write(INTR_STATE::WKUP_TIMER_EXPIRED::SET);
-            self.wakeup_notification.map(|a| a());
-        }
-
-        if intr.is_set(INTR_STATE::WDOG_TIMER_BARK) {
-            // Clear the bark (RW1C) and pet doggo
-            regs.intr_state.write(INTR_STATE::WDOG_TIMER_BARK::SET);
-            self.wdog_pet();
-            self.bark_notification.map(|a| a());
+        match interrupt {
+            AonTimerInterrupt::AonWkupTimerExpired => {
+                // Wake up timer has expired, sw must ack and clear
+                regs.wkup_cause.set(0x00);
+                // To avoid re-triggers
+                self.reset_wkup();
+                // RW1C, clear the interrupt
+                regs.intr_state.modify(INTR_STATE::WKUP_TIMER_EXPIRED::SET);
+                self.wakeup_notification.map(|a| a());
+            }
+            AonTimerInterrupt::AonWdogTimerBark => {
+                // Clear the bark (RW1C) and pet doggo
+                regs.intr_state.modify(INTR_STATE::WDOG_TIMER_BARK::SET);
+                self.wdog_pet();
+                self.bark_notification.map(|a| a());
+            }
         }
     }
 
@@ -487,4 +534,8 @@ impl platform::watchdog::WatchDog for AonTimer<'_> {
     fn resume(&self) {
         self.wdog_resume();
     }
+}
+
+fn parse_freq(arr: [u32; 2]) -> u64 {
+    (arr[0] as u64) | ((arr[1] as u64) << 32)
 }

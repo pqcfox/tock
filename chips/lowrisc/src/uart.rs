@@ -41,6 +41,29 @@ pub struct UartParams {
     pub parity: uart::Parity,
 }
 
+#[derive(Copy, Clone)]
+pub enum UartInterrupt {
+    /// raised if the transmit FIFO is past the high-water mark.
+    TxWatermark,
+    /// raised if the receive FIFO is past the high-water mark.
+    RxWatermark,
+    /// raised if the transmit FIFO has emptied and no transmit is ongoing.
+    TxDone,
+    /// raised if the receive FIFO has overflowed.
+    RxOverflow,
+    /// raised if a framing error has been detected on receive.
+    RxFrameErr,
+    /// raised if break condition has been detected on receive.
+    RxBreakErr,
+    /// raised if RX FIFO has characters remaining in the FIFO without being
+    /// retrieved for the programmed time period.
+    RxTimeout,
+    /// raised if the receiver has detected a parity error.
+    RxParityErr,
+    /// raised if the transmit FIFO is empty.
+    TxEmpty,
+}
+
 /// Compute a / b, rounding such that the result is within 2.5% error of the floating point result.
 fn div_round_bounded(a: u64, b: u64) -> Result<u64, ErrorCode> {
     let q = a / b;
@@ -225,93 +248,103 @@ impl<'a> Uart<'a> {
         });
     }
 
-    pub fn handle_interrupt(&self) {
-        let regs = self.registers;
-        let intrs = regs.intr_state.extract();
+    pub fn handle_interrupt(&self, interrupt: UartInterrupt) {
+        match interrupt {
+            UartInterrupt::TxEmpty => {
+                self.disable_tx_interrupt();
 
-        if intrs.is_set(INTR::TX_EMPTY) {
-            self.disable_tx_interrupt();
-
-            if self.tx_index.get() == self.tx_len.get() {
-                // We sent everything to the UART hardware, now from an
-                // interrupt callback we can issue the callback.
-                self.tx_client.map(|client| {
-                    if let Some(tx_buf) = self.tx_buffer.take() {
-                        client.transmitted_buffer(tx_buf, self.tx_len.get(), Ok(()));
+                if self.tx_index.get() == self.tx_len.get() {
+                    // We sent everything to the UART hardware, now from an
+                    // interrupt callback we can issue the callback.
+                    self.tx_client.map(|client| {
+                        if let Some(tx_buf) = self.tx_buffer.take() {
+                            client.transmitted_buffer(tx_buf, self.tx_len.get(), Ok(()));
+                        }
+                    });
+                } else {
+                    // We have more to transmit, so continue in tx_progress().
+                    self.tx_progress();
+                }
+            }
+            UartInterrupt::RxParityErr => {
+                self.disable_rx_interrupt();
+                self.rx_client.map(|client| {
+                    if let Some(rx_buf) = self.rx_buffer.take() {
+                        client.received_buffer(
+                            rx_buf,
+                            self.rx_index.get(),
+                            Err(kernel::ErrorCode::FAIL),
+                            uart::Error::ParityError,
+                        );
                     }
                 });
-            } else {
-                // We have more to transmit, so continue in tx_progress().
-                self.tx_progress();
             }
-        } else if intrs.is_set(INTR::RX_WATERMARK) {
-            self.disable_rx_interrupt();
-            self.consume_rx();
-        } else if intrs.is_set(INTR::RX_TIMEOUT) {
-            self.disable_rx_interrupt();
-            self.disable_rx_timeout();
+            UartInterrupt::RxTimeout => {
+                self.disable_rx_interrupt();
+                self.disable_rx_timeout();
 
-            // On timeout return whatever is in the buffer to the client.
-            self.rx_client.map(|client| {
-                self.rx_buffer.take().map(|rx_buf| {
-                    client.received_buffer(
-                        rx_buf,
-                        self.rx_index.get() + 1,
-                        Err(kernel::ErrorCode::SIZE),
-                        uart::Error::None,
-                    );
-                })
-            });
-        } else if intrs.is_set(INTR::TX_WATERMARK) {
-            // TODO: Additional logic or notification related to the watermark.
-        } else if intrs.is_set(INTR::RX_OVERFLOW) {
-            self.disable_rx_interrupt();
-            self.rx_client.map(|client| {
-                if let Some(rx_buf) = self.rx_buffer.take() {
-                    client.received_buffer(
-                        rx_buf,
-                        self.rx_index.get(),
-                        Err(kernel::ErrorCode::FAIL),
-                        uart::Error::OverrunError,
-                    );
-                }
-            });
-        } else if intrs.is_set(INTR::RX_FRAME_ERR) {
-            self.disable_rx_interrupt();
-            self.rx_client.map(|client| {
-                if let Some(rx_buf) = self.rx_buffer.take() {
-                    client.received_buffer(
-                        rx_buf,
-                        self.rx_index.get(),
-                        Err(kernel::ErrorCode::FAIL),
-                        uart::Error::FramingError,
-                    );
-                }
-            });
-        } else if intrs.is_set(INTR::RX_BREAK_ERR) {
-            self.disable_rx_interrupt();
-            self.rx_client.map(|client| {
-                if let Some(rx_buf) = self.rx_buffer.take() {
-                    client.received_buffer(
-                        rx_buf,
-                        self.rx_index.get(),
-                        Err(kernel::ErrorCode::FAIL),
-                        uart::Error::BreakError,
-                    );
-                }
-            });
-        } else if intrs.is_set(INTR::RX_PARITY_ERR) {
-            self.disable_rx_interrupt();
-            self.rx_client.map(|client| {
-                if let Some(rx_buf) = self.rx_buffer.take() {
-                    client.received_buffer(
-                        rx_buf,
-                        self.rx_index.get(),
-                        Err(kernel::ErrorCode::FAIL),
-                        uart::Error::ParityError,
-                    );
-                }
-            });
+                // On timeout return whatever is in the buffer to the client.
+                self.rx_client.map(|client| {
+                    self.rx_buffer.take().map(|rx_buf| {
+                        client.received_buffer(
+                            rx_buf,
+                            self.rx_index.get() + 1,
+                            Err(kernel::ErrorCode::SIZE),
+                            uart::Error::None,
+                        );
+                    })
+                });
+            }
+            UartInterrupt::RxBreakErr => {
+                self.disable_rx_interrupt();
+                self.rx_client.map(|client| {
+                    if let Some(rx_buf) = self.rx_buffer.take() {
+                        client.received_buffer(
+                            rx_buf,
+                            self.rx_index.get(),
+                            Err(kernel::ErrorCode::FAIL),
+                            uart::Error::BreakError,
+                        );
+                    }
+                });
+            }
+            UartInterrupt::RxFrameErr => {
+                self.disable_rx_interrupt();
+                self.rx_client.map(|client| {
+                    if let Some(rx_buf) = self.rx_buffer.take() {
+                        client.received_buffer(
+                            rx_buf,
+                            self.rx_index.get(),
+                            Err(kernel::ErrorCode::FAIL),
+                            uart::Error::FramingError,
+                        );
+                    }
+                });
+            }
+            UartInterrupt::RxOverflow => {
+                self.disable_rx_interrupt();
+                self.rx_client.map(|client| {
+                    if let Some(rx_buf) = self.rx_buffer.take() {
+                        client.received_buffer(
+                            rx_buf,
+                            self.rx_index.get(),
+                            Err(kernel::ErrorCode::FAIL),
+                            uart::Error::OverrunError,
+                        );
+                    }
+                });
+            }
+            UartInterrupt::TxDone => {
+                self.registers.intr_state.modify(INTR::TX_DONE::SET);
+                // TODO: handle this interrupt
+            }
+            UartInterrupt::RxWatermark => {
+                self.disable_rx_interrupt();
+                self.consume_rx();
+            }
+            UartInterrupt::TxWatermark => {
+                // TODO: Additional logic or notification related to the watermark.
+            }
         }
     }
 

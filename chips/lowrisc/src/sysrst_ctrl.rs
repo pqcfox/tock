@@ -34,6 +34,11 @@ pub struct SysRstCtrl<'a> {
     client: OptionalCell<&'a dyn OpenTitanSysRstrClient>,
 }
 
+#[derive(Clone, Copy)]
+pub enum SysRstCtrlInterrupt {
+    AonEventDetected,
+}
+
 impl<'a> SysRstCtrl<'a> {
     pub fn new(register_base: usize) -> Self {
         Self {
@@ -171,82 +176,102 @@ impl<'a> SysRstCtrl<'a> {
         self.registers.intr_state.write(INTR::EVENT_DETECTED.val(1));
     }
 
-    pub fn handle_interrupt(&self) {
-        let combo_state = self.registers.combo_intr_status.extract();
-        let key_interrupt_state = self.registers.key_intr_status.extract();
-        let input_pin_state = self.get_input_state();
-        let ulp_wakeup = self.ulp_wakeup_detected();
-        let wokeup = self.wakeup_detected();
+    pub fn handle_interrupt(&self, interrupt: SysRstCtrlInterrupt) {
+        match interrupt {
+            SysRstCtrlInterrupt::AonEventDetected => {
+                let combo_state = self.registers.combo_intr_status.extract();
+                let key_interrupt_state = self.registers.key_intr_status.extract();
+                let input_pin_state = self.get_input_state();
+                let ulp_wakeup = self.ulp_wakeup_detected();
+                let wokeup = self.wakeup_detected();
 
-        // 1st phase of ULP wakeup reset
-        if ulp_wakeup {
-            self.clear_ulp_wakeup();
-        }
+                // 1st phase of ULP wakeup reset
+                if ulp_wakeup {
+                    self.clear_ulp_wakeup();
+                }
 
-        self.clear_interrupt_flags();
+                self.clear_interrupt_flags();
 
-        self.client.map(|client| {
-            // if a combo detector's interrupt triggered then notify client
-            if combo_state.is_set(COMBO_INTR_STATUS::COMBO0_H2L) {
-                client.combo_detected(input_pin_state, SRCComboDetectorId::Zero);
-            }
-            if combo_state.is_set(COMBO_INTR_STATUS::COMBO1_H2L) {
-                client.combo_detected(input_pin_state, SRCComboDetectorId::One);
-            }
-            if combo_state.is_set(COMBO_INTR_STATUS::COMBO2_H2L) {
-                client.combo_detected(input_pin_state, SRCComboDetectorId::Two);
-            }
-            if combo_state.is_set(COMBO_INTR_STATUS::COMBO3_H2L) {
-                client.combo_detected(input_pin_state, SRCComboDetectorId::Three);
-            }
-            // if any key interrupt triggered, notify client
-            if key_interrupt_state.get() != 0 {
-                // determine which L2H transitions have triggered
-                let l2h = InMemoryRegister::new(0);
-                l2h.write(
-        SRCInputPinState::PowerButton
-            .val(key_interrupt_state.is_set(KEY_INTR_STATUS::PWRB_L2H) as u32)
-            + SRCInputPinState::Key0
-                .val(key_interrupt_state.is_set(KEY_INTR_STATUS::KEY0_IN_L2H) as u32)
-            + SRCInputPinState::Key1
-                .val(key_interrupt_state.is_set(KEY_INTR_STATUS::KEY1_IN_L2H) as u32)
-            + SRCInputPinState::Key2
-                .val(key_interrupt_state.is_set(KEY_INTR_STATUS::KEY2_IN_L2H) as u32)
-            + SRCInputPinState::AcPresent
-                .val(key_interrupt_state.is_set(KEY_INTR_STATUS::AC_PRESENT_L2H) as u32)
-            + SRCInputPinState::EcReset
-                .val(key_interrupt_state.is_set(KEY_INTR_STATUS::EC_RST_L_L2H) as u32)
-            + SRCInputPinState::FlashWP
-                .val(key_interrupt_state.is_set(KEY_INTR_STATUS::FLASH_WP_L_L2H) as u32),
-    );
-                // determine which H2L transition have triggered
-                let h2l = InMemoryRegister::new(0);
-                l2h.write(
-        SRCInputPinState::PowerButton
-            .val(key_interrupt_state.is_set(KEY_INTR_STATUS::PWRB_H2L) as u32)
-            + SRCInputPinState::Key0
-                .val(key_interrupt_state.is_set(KEY_INTR_STATUS::KEY0_IN_H2L) as u32)
-            + SRCInputPinState::Key1
-                .val(key_interrupt_state.is_set(KEY_INTR_STATUS::KEY1_IN_H2L) as u32)
-            + SRCInputPinState::Key2
-                .val(key_interrupt_state.is_set(KEY_INTR_STATUS::KEY2_IN_H2L) as u32)
-            + SRCInputPinState::AcPresent
-                .val(key_interrupt_state.is_set(KEY_INTR_STATUS::AC_PRESENT_H2L) as u32)
-            + SRCInputPinState::EcReset
-                .val(key_interrupt_state.is_set(KEY_INTR_STATUS::EC_RST_L_H2L) as u32)
-            + SRCInputPinState::FlashWP
-                .val(key_interrupt_state.is_set(KEY_INTR_STATUS::FLASH_WP_L_H2L) as u32),
-    );
-                client.key_interrupt(l2h.extract(), h2l.extract())
-            }
-            if wokeup {
-                client.wokeup(ulp_wakeup);
-            }
-        });
+                self.client.map(|client| {
+                    // if a combo detector's interrupt triggered then notify client
+                    if combo_state.is_set(COMBO_INTR_STATUS::COMBO0_H2L) {
+                        client.combo_detected(input_pin_state, SRCComboDetectorId::Zero);
+                    }
+                    if combo_state.is_set(COMBO_INTR_STATUS::COMBO1_H2L) {
+                        client.combo_detected(input_pin_state, SRCComboDetectorId::One);
+                    }
+                    if combo_state.is_set(COMBO_INTR_STATUS::COMBO2_H2L) {
+                        client.combo_detected(input_pin_state, SRCComboDetectorId::Two);
+                    }
+                    if combo_state.is_set(COMBO_INTR_STATUS::COMBO3_H2L) {
+                        client.combo_detected(input_pin_state, SRCComboDetectorId::Three);
+                    }
+                    // if any key interrupt triggered, notify client
+                    if key_interrupt_state.get() != 0 {
+                        // determine which L2H transitions have triggered
+                        let l2h = InMemoryRegister::new(0);
+                        l2h.write(
+                            SRCInputPinState::PowerButton
+                                .val(key_interrupt_state.is_set(KEY_INTR_STATUS::PWRB_L2H) as u32)
+                                + SRCInputPinState::Key0
+                                    .val(key_interrupt_state.is_set(KEY_INTR_STATUS::KEY0_IN_L2H)
+                                        as u32)
+                                + SRCInputPinState::Key1
+                                    .val(key_interrupt_state.is_set(KEY_INTR_STATUS::KEY1_IN_L2H)
+                                        as u32)
+                                + SRCInputPinState::Key2
+                                    .val(key_interrupt_state.is_set(KEY_INTR_STATUS::KEY2_IN_L2H)
+                                        as u32)
+                                + SRCInputPinState::AcPresent.val(
+                                    key_interrupt_state.is_set(KEY_INTR_STATUS::AC_PRESENT_L2H)
+                                        as u32,
+                                )
+                                + SRCInputPinState::EcReset
+                                    .val(key_interrupt_state.is_set(KEY_INTR_STATUS::EC_RST_L_L2H)
+                                        as u32)
+                                + SRCInputPinState::FlashWP.val(
+                                    key_interrupt_state.is_set(KEY_INTR_STATUS::FLASH_WP_L_L2H)
+                                        as u32,
+                                ),
+                        );
+                        // determine which H2L transition have triggered
+                        let h2l = InMemoryRegister::new(0);
+                        l2h.write(
+                            SRCInputPinState::PowerButton
+                                .val(key_interrupt_state.is_set(KEY_INTR_STATUS::PWRB_H2L) as u32)
+                                + SRCInputPinState::Key0
+                                    .val(key_interrupt_state.is_set(KEY_INTR_STATUS::KEY0_IN_H2L)
+                                        as u32)
+                                + SRCInputPinState::Key1
+                                    .val(key_interrupt_state.is_set(KEY_INTR_STATUS::KEY1_IN_H2L)
+                                        as u32)
+                                + SRCInputPinState::Key2
+                                    .val(key_interrupt_state.is_set(KEY_INTR_STATUS::KEY2_IN_H2L)
+                                        as u32)
+                                + SRCInputPinState::AcPresent.val(
+                                    key_interrupt_state.is_set(KEY_INTR_STATUS::AC_PRESENT_H2L)
+                                        as u32,
+                                )
+                                + SRCInputPinState::EcReset
+                                    .val(key_interrupt_state.is_set(KEY_INTR_STATUS::EC_RST_L_H2L)
+                                        as u32)
+                                + SRCInputPinState::FlashWP.val(
+                                    key_interrupt_state.is_set(KEY_INTR_STATUS::FLASH_WP_L_H2L)
+                                        as u32,
+                                ),
+                        );
+                        client.key_interrupt(l2h.extract(), h2l.extract())
+                    }
+                    if wokeup {
+                        client.wokeup(ulp_wakeup);
+                    }
+                });
 
-        // 2nd phase of ULP wakeup reset
-        if ulp_wakeup {
-            self.reset_ulp_wakeup();
+                // 2nd phase of ULP wakeup reset
+                if ulp_wakeup {
+                    self.reset_ulp_wakeup();
+                }
+            }
         }
     }
 

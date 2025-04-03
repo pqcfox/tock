@@ -32,7 +32,8 @@ use otbindgen::{
     otcrypto_hash_mode_kOtcryptoHashModeSha3_384 as HASH_MODE_SHA3_384,
     otcrypto_hash_mode_kOtcryptoHashModeSha3_512 as HASH_MODE_SHA3_512,
     otcrypto_hash_mode_kOtcryptoHashModeSha512 as HASH_MODE_SHA512,
-    otcrypto_key_mode_kOtcryptoKeyModeEcdsa as KEY_MODE_ECDSA,
+    otcrypto_key_mode_kOtcryptoKeyModeEcdsaP256 as KEY_MODE_ECDSA_P256,
+    otcrypto_key_mode_kOtcryptoKeyModeEcdsaP384 as KEY_MODE_ECDSA_P384,
     otcrypto_unblinded_key_t as OtCryptoUnblindedKey,
 };
 
@@ -40,7 +41,15 @@ use otbindgen::{
 pub const WDR_SIZE: usize = 32;
 
 macro_rules! ecdsa_driver {
-    {$driver:ident, $curve:ident, $trait:ident, $curve_type:ident, $verify_job:ident, $otbn_operation:ident} => {
+    {
+        driver = $driver:ident,
+        curve = $curve:ident,
+        hil = $hil:ident,
+        curve_type = $curve_type:ident,
+        key_mode = $key_mode:ident,
+        verify_job = $verify_job:ident,
+        otbn_operation = $otbn_operation:ident,
+    } => {
         /// OTBN utility that verifies an ECDSA signature based on the public key
         /// derived from a private key sideloaded by the KeyManager driver.
 
@@ -137,7 +146,7 @@ macro_rules! ecdsa_driver {
                 // OTBN memory and discards the pointers to them afterwards.
                 unsafe {
                     let mut public_key = OtCryptoUnblindedKey {
-                        key_mode: KEY_MODE_ECDSA,
+                        key_mode: $key_mode,
                         key_length: self.public_key.len() * size_of::<u32>(),
                         key: self.public_key.as_mut_ptr(),
                         checksum: 0xFFFF, // placeholder value
@@ -248,7 +257,7 @@ macro_rules! ecdsa_driver {
             }
         }
 
-        impl<'a, A: Alarm<'a>> $trait<'a> for $driver<'a, A> {
+        impl<'a, A: Alarm<'a>> $hil<'a> for $driver<'a, A> {
             /// Set the client instance which will receive the `verification_done()`
             /// callback.
             fn set_verify_client(
@@ -389,8 +398,24 @@ macro_rules! ecdsa_driver {
     }
 }
 
-ecdsa_driver! {OtCryptoEcdsaP256, P256, EcdsaP256, CURVE_TYPE_P256, EcdsaVerifyP256Job, EcdsaVerifyP256}
-ecdsa_driver! {OtCryptoEcdsaP384, P384, EcdsaP384, CURVE_TYPE_P384, EcdsaVerifyP384Job, EcdsaVerifyP384}
+ecdsa_driver! {
+    driver = OtCryptoEcdsaP256,
+    curve = P256,
+    hil = EcdsaP256,
+    curve_type = CURVE_TYPE_P256,
+    key_mode = KEY_MODE_ECDSA_P256,
+    verify_job = EcdsaVerifyP256Job,
+    otbn_operation = EcdsaVerifyP256,
+}
+ecdsa_driver! {
+    driver = OtCryptoEcdsaP384,
+    curve = P384,
+    hil = EcdsaP384,
+    curve_type = CURVE_TYPE_P384,
+    key_mode = KEY_MODE_ECDSA_P384,
+    verify_job = EcdsaVerifyP384Job,
+    otbn_operation = EcdsaVerifyP384,
+}
 
 impl<'a, A: Alarm<'a>> SetHashMode for OtCryptoEcdsaP256<'a, A> {
     fn set_hash_mode(&self, hash_mode: HashMode) -> Result<(), ErrorCode> {

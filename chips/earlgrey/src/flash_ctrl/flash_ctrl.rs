@@ -29,8 +29,11 @@ use super::page_position::{
 };
 
 use crate::registers::flash_ctrl_regs::{
-    FlashCtrlRegisters, ADDR, CONTROL, DEFAULT_REGION, ERR_CODE, FIFO_LVL, INFO_PAGE_CFG,
-    INFO_REGWEN, INTR, MP_REGION, MP_REGION_CFG, OP_STATUS, REGION_CFG_REGWEN, STATUS,
+    FlashCtrlRegisters, ADDR, BANK0_INFO0_PAGE_CFG, BANK0_INFO0_REGWEN, BANK0_INFO1_PAGE_CFG,
+    BANK0_INFO1_REGWEN, BANK0_INFO2_PAGE_CFG, BANK0_INFO2_REGWEN, BANK1_INFO0_PAGE_CFG,
+    BANK1_INFO0_REGWEN, BANK1_INFO1_PAGE_CFG, BANK1_INFO1_REGWEN, BANK1_INFO2_PAGE_CFG,
+    BANK1_INFO2_REGWEN, CONTROL, DEFAULT_REGION, ERR_CODE, FIFO_LVL, INTR, MP_REGION,
+    MP_REGION_CFG, OP_STATUS, REGION_CFG_REGWEN, STATUS,
 };
 use crate::registers::top_earlgrey::{FLASH_CTRL_CORE_BASE_ADDR, FLASH_CTRL_MEM_BASE_ADDR};
 use crate::utils;
@@ -45,6 +48,11 @@ use kernel::ErrorCode;
 
 use core::cell::Cell;
 use core::num::NonZeroUsize;
+
+/// Magic value to write to a 4-bit register that represents "CLEAR" or "DISABLED".
+const DISABLE_MAGIC_VALUE: u32 = 0x09;
+/// Magic value to write to a 4-bit register that represents "SET" or "ENABLED".
+const ENABLE_MAGIC_VALUE: u32 = 0x06;
 
 /// The base of flash registers
 pub(super) const FLASH_CTRL_BASE: StaticRef<FlashCtrlRegisters> =
@@ -155,6 +163,89 @@ pub struct FlashCtrl<'a> {
     is_busy: Cell<BusyStatus>,
 }
 
+#[derive(Clone, Copy)]
+pub enum FlashCtrlInterrupt {
+    /// Program FIFO empty
+    ProgEmpty,
+    /// Program FIFO drained to level
+    ProgLvl,
+    /// Read FIFO full
+    RdFull,
+    /// Read FIFO filled to level
+    RdLvl,
+    /// Operation complete
+    OpDone,
+    /// Correctable error encountered
+    CorrErr,
+}
+
+macro_rules! convert_info_memory_protection_region_to_register_value {
+    {$function:ident, $cfg:ident} => {
+
+        /// Convert a [InfoMemoryProtectionRegion] to a value suitable to be written to the appropriate
+        /// register
+        ///
+        /// # Parameters
+        ///
+        /// + `info_memory_protection_region`: [InfoMemoryProtectionRegion] to be converted
+        ///
+        /// # Return value
+        ///
+        /// The register value used to configure the appropriate register.
+        fn $function(region: &InfoMemoryProtectionRegion) -> FieldValue<u32, $cfg::Register> {
+            let high_endurance_enabled = match region.is_high_endurance_enabled()
+            {
+                HighEnduranceEnabledStatus::Disabled => $cfg::HE_EN_0.val(DISABLE_MAGIC_VALUE),
+                HighEnduranceEnabledStatus::Enabled => $cfg::HE_EN_0.val(ENABLE_MAGIC_VALUE),
+            };
+
+            let scramble_enabled = match region.is_scramble_enabled() {
+                ScrambleEnabledStatus::Disabled => $cfg::SCRAMBLE_EN_0.val(DISABLE_MAGIC_VALUE),
+                ScrambleEnabledStatus::Enabled => $cfg::SCRAMBLE_EN_0.val(ENABLE_MAGIC_VALUE),
+            };
+
+            let ecc_enabled = match region.is_ecc_enabled() {
+                EccEnabledStatus::Disabled => $cfg::ECC_EN_0.val(DISABLE_MAGIC_VALUE),
+                EccEnabledStatus::Enabled => $cfg::ECC_EN_0.val(ENABLE_MAGIC_VALUE),
+            };
+
+            let erase_enabled = match region.is_erase_enabled() {
+                EraseEnabledStatus::Disabled => $cfg::ERASE_EN_0.val(DISABLE_MAGIC_VALUE),
+                EraseEnabledStatus::Enabled => $cfg::ERASE_EN_0.val(ENABLE_MAGIC_VALUE),
+            };
+
+            let write_enabled = match region.is_write_enabled() {
+                WriteEnabledStatus::Disabled => $cfg::PROG_EN_0.val(DISABLE_MAGIC_VALUE),
+                WriteEnabledStatus::Enabled => $cfg::PROG_EN_0.val(ENABLE_MAGIC_VALUE),
+            };
+
+            let read_enabled = match region.is_read_enabled() {
+                ReadEnabledStatus::Disabled => $cfg::RD_EN_0.val(DISABLE_MAGIC_VALUE),
+                ReadEnabledStatus::Enabled => $cfg::RD_EN_0.val(ENABLE_MAGIC_VALUE),
+            };
+
+            let is_region_enabled = match region.is_enabled() {
+                MemoryProtectionRegionStatus::Disabled => $cfg::EN_0.val(DISABLE_MAGIC_VALUE),
+                MemoryProtectionRegionStatus::Enabled => $cfg::EN_0.val(ENABLE_MAGIC_VALUE),
+            };
+
+            high_endurance_enabled
+                + scramble_enabled
+                + ecc_enabled
+                + erase_enabled
+                + write_enabled
+                + read_enabled
+                + is_region_enabled
+        }
+    }
+}
+convert_info_memory_protection_region_to_register_value! {convert_bank0_info0_memory_protection_region_to_register_value, BANK0_INFO0_PAGE_CFG}
+convert_info_memory_protection_region_to_register_value! {convert_bank0_info1_memory_protection_region_to_register_value, BANK0_INFO1_PAGE_CFG}
+convert_info_memory_protection_region_to_register_value! {convert_bank0_info2_memory_protection_region_to_register_value, BANK0_INFO2_PAGE_CFG}
+convert_info_memory_protection_region_to_register_value! {convert_bank1_info0_memory_protection_region_to_register_value, BANK1_INFO0_PAGE_CFG}
+convert_info_memory_protection_region_to_register_value! {convert_bank1_info1_memory_protection_region_to_register_value, BANK1_INFO1_PAGE_CFG}
+convert_info_memory_protection_region_to_register_value! {convert_bank1_info2_memory_protection_region_to_register_value, BANK1_INFO2_PAGE_CFG}
+
 impl FlashCtrl<'_> {
     /// [FlashCtrl] constructor
     ///
@@ -240,35 +331,36 @@ impl FlashCtrl<'_> {
         &self,
         default_memory_protection_region: &DefaultMemoryProtectionRegion,
     ) {
-        let high_endurance_enabled =
-            match default_memory_protection_region.is_high_endurance_enabled() {
-                HighEnduranceEnabledStatus::Disabled => DEFAULT_REGION::HE_EN::Clear,
-                HighEnduranceEnabledStatus::Enabled => DEFAULT_REGION::HE_EN::Set,
-            };
+        let high_endurance_enabled = match default_memory_protection_region
+            .is_high_endurance_enabled()
+        {
+            HighEnduranceEnabledStatus::Disabled => DEFAULT_REGION::HE_EN.val(DISABLE_MAGIC_VALUE),
+            HighEnduranceEnabledStatus::Enabled => DEFAULT_REGION::HE_EN.val(ENABLE_MAGIC_VALUE),
+        };
 
         let scramble_enabled = match default_memory_protection_region.is_scramble_enabled() {
-            ScrambleEnabledStatus::Disabled => DEFAULT_REGION::SCRAMBLE_EN::Clear,
-            ScrambleEnabledStatus::Enabled => DEFAULT_REGION::SCRAMBLE_EN::Set,
+            ScrambleEnabledStatus::Disabled => DEFAULT_REGION::SCRAMBLE_EN.val(DISABLE_MAGIC_VALUE),
+            ScrambleEnabledStatus::Enabled => DEFAULT_REGION::SCRAMBLE_EN.val(ENABLE_MAGIC_VALUE),
         };
 
         let ecc_enabled = match default_memory_protection_region.is_ecc_enabled() {
-            EccEnabledStatus::Disabled => DEFAULT_REGION::ECC_EN::Clear,
-            EccEnabledStatus::Enabled => DEFAULT_REGION::ECC_EN::Set,
+            EccEnabledStatus::Disabled => DEFAULT_REGION::ECC_EN.val(DISABLE_MAGIC_VALUE),
+            EccEnabledStatus::Enabled => DEFAULT_REGION::ECC_EN.val(ENABLE_MAGIC_VALUE),
         };
 
         let erase_enabled = match default_memory_protection_region.is_erase_enabled() {
-            EraseEnabledStatus::Disabled => DEFAULT_REGION::ERASE_EN::Clear,
-            EraseEnabledStatus::Enabled => DEFAULT_REGION::ERASE_EN::Set,
+            EraseEnabledStatus::Disabled => DEFAULT_REGION::ERASE_EN.val(DISABLE_MAGIC_VALUE),
+            EraseEnabledStatus::Enabled => DEFAULT_REGION::ERASE_EN.val(ENABLE_MAGIC_VALUE),
         };
 
         let write_enabled = match default_memory_protection_region.is_write_enabled() {
-            WriteEnabledStatus::Disabled => DEFAULT_REGION::PROG_EN::Clear,
-            WriteEnabledStatus::Enabled => DEFAULT_REGION::PROG_EN::Set,
+            WriteEnabledStatus::Disabled => DEFAULT_REGION::PROG_EN.val(DISABLE_MAGIC_VALUE),
+            WriteEnabledStatus::Enabled => DEFAULT_REGION::PROG_EN.val(ENABLE_MAGIC_VALUE),
         };
 
         let read_enabled = match default_memory_protection_region.is_read_enabled() {
-            ReadEnabledStatus::Disabled => DEFAULT_REGION::RD_EN::Clear,
-            ReadEnabledStatus::Enabled => DEFAULT_REGION::RD_EN::Set,
+            ReadEnabledStatus::Disabled => DEFAULT_REGION::RD_EN.val(DISABLE_MAGIC_VALUE),
+            ReadEnabledStatus::Enabled => DEFAULT_REGION::RD_EN.val(ENABLE_MAGIC_VALUE),
         };
 
         self.registers.default_region.modify(
@@ -307,14 +399,14 @@ impl FlashCtrl<'_> {
         memory_protection_region_register: &ReadWrite<u32, MP_REGION::Register>,
         memory_protection_region: &DataMemoryProtectionRegion,
     ) {
-        let memory_protection_region_base = MP_REGION::BASE.val(
+        let memory_protection_region_base = MP_REGION::BASE_0.val(
             Self::convert_memory_protection_region_base_to_register_value(
                 memory_protection_region.get_base(),
             ),
         );
         // u32 == usize on Earlgrey
         let memory_protection_region_size =
-            MP_REGION::SIZE.val(memory_protection_region.get_size().inner() as u32);
+            MP_REGION::SIZE_0.val(memory_protection_region.get_size().inner() as u32);
 
         memory_protection_region_register
             .modify(memory_protection_region_base + memory_protection_region_size);
@@ -334,38 +426,40 @@ impl FlashCtrl<'_> {
         memory_protection_region: &DataMemoryProtectionRegion,
     ) {
         let high_endurance_enabled = match memory_protection_region.is_high_endurance_enabled() {
-            HighEnduranceEnabledStatus::Disabled => MP_REGION_CFG::HE_EN::Clear,
-            HighEnduranceEnabledStatus::Enabled => MP_REGION_CFG::HE_EN::Set,
+            HighEnduranceEnabledStatus::Disabled => MP_REGION_CFG::HE_EN_0.val(DISABLE_MAGIC_VALUE),
+            HighEnduranceEnabledStatus::Enabled => MP_REGION_CFG::HE_EN_0.val(ENABLE_MAGIC_VALUE),
         };
 
         let scramble_enabled = match memory_protection_region.is_scramble_enabled() {
-            ScrambleEnabledStatus::Disabled => MP_REGION_CFG::SCRAMBLE_EN::Clear,
-            ScrambleEnabledStatus::Enabled => MP_REGION_CFG::SCRAMBLE_EN::Set,
+            ScrambleEnabledStatus::Disabled => {
+                MP_REGION_CFG::SCRAMBLE_EN_0.val(DISABLE_MAGIC_VALUE)
+            }
+            ScrambleEnabledStatus::Enabled => MP_REGION_CFG::SCRAMBLE_EN_0.val(ENABLE_MAGIC_VALUE),
         };
 
         let ecc_enabled = match memory_protection_region.is_ecc_enabled() {
-            EccEnabledStatus::Disabled => MP_REGION_CFG::ECC_EN::Clear,
-            EccEnabledStatus::Enabled => MP_REGION_CFG::ECC_EN::Set,
+            EccEnabledStatus::Disabled => MP_REGION_CFG::ECC_EN_0.val(DISABLE_MAGIC_VALUE),
+            EccEnabledStatus::Enabled => MP_REGION_CFG::ECC_EN_0.val(ENABLE_MAGIC_VALUE),
         };
 
         let erase_enabled = match memory_protection_region.is_erase_enabled() {
-            EraseEnabledStatus::Disabled => MP_REGION_CFG::ERASE_EN::Clear,
-            EraseEnabledStatus::Enabled => MP_REGION_CFG::ERASE_EN::Set,
+            EraseEnabledStatus::Disabled => MP_REGION_CFG::ERASE_EN_0.val(DISABLE_MAGIC_VALUE),
+            EraseEnabledStatus::Enabled => MP_REGION_CFG::ERASE_EN_0.val(ENABLE_MAGIC_VALUE),
         };
 
         let write_enabled = match memory_protection_region.is_write_enabled() {
-            WriteEnabledStatus::Disabled => MP_REGION_CFG::PROG_EN::Clear,
-            WriteEnabledStatus::Enabled => MP_REGION_CFG::PROG_EN::Set,
+            WriteEnabledStatus::Disabled => MP_REGION_CFG::PROG_EN_0.val(DISABLE_MAGIC_VALUE),
+            WriteEnabledStatus::Enabled => MP_REGION_CFG::PROG_EN_0.val(ENABLE_MAGIC_VALUE),
         };
 
         let read_enabled = match memory_protection_region.is_read_enabled() {
-            ReadEnabledStatus::Disabled => MP_REGION_CFG::RD_EN::Clear,
-            ReadEnabledStatus::Enabled => MP_REGION_CFG::RD_EN::Set,
+            ReadEnabledStatus::Disabled => MP_REGION_CFG::RD_EN_0.val(DISABLE_MAGIC_VALUE),
+            ReadEnabledStatus::Enabled => MP_REGION_CFG::RD_EN_0.val(ENABLE_MAGIC_VALUE),
         };
 
         let is_region_enabled = match memory_protection_region.is_enabled() {
-            MemoryProtectionRegionStatus::Disabled => MP_REGION_CFG::EN::Clear,
-            MemoryProtectionRegionStatus::Enabled => MP_REGION_CFG::EN::Set,
+            MemoryProtectionRegionStatus::Disabled => MP_REGION_CFG::EN_0.val(DISABLE_MAGIC_VALUE),
+            MemoryProtectionRegionStatus::Enabled => MP_REGION_CFG::EN_0.val(ENABLE_MAGIC_VALUE),
         };
 
         memory_protection_region_register.modify(
@@ -390,7 +484,7 @@ impl FlashCtrl<'_> {
     fn configure_access_bank0_info0_memory_protection_region(
         &self,
         info0_page_index: Info0PageIndex,
-        field_value: FieldValue<u32, INFO_PAGE_CFG::Register>,
+        field_value: FieldValue<u32, BANK0_INFO0_PAGE_CFG::Register>,
     ) {
         // PANIC: Info0PageIndex guarantees correct access to bank0_info0_page_cfg
         let register = self
@@ -412,7 +506,7 @@ impl FlashCtrl<'_> {
     fn configure_access_bank1_info0_memory_protection_region(
         &self,
         info0_page_index: Info0PageIndex,
-        field_value: FieldValue<u32, INFO_PAGE_CFG::Register>,
+        field_value: FieldValue<u32, BANK1_INFO0_PAGE_CFG::Register>,
     ) {
         // PANIC: Info0PageIndex guarantees correct access to bank1_info0_page_cfg
         let register = self
@@ -434,7 +528,7 @@ impl FlashCtrl<'_> {
     fn configure_access_bank0_info1_memory_protection_region(
         &self,
         info1_page_index: Info1PageIndex,
-        field_value: FieldValue<u32, INFO_PAGE_CFG::Register>,
+        field_value: FieldValue<u32, BANK0_INFO1_PAGE_CFG::Register>,
     ) {
         // PANIC: Info1PageIndex guarantees correct access to bank0_info1_page_cfg
         let register = self
@@ -456,7 +550,7 @@ impl FlashCtrl<'_> {
     fn configure_access_bank1_info1_memory_protection_region(
         &self,
         info1_page_index: Info1PageIndex,
-        field_value: FieldValue<u32, INFO_PAGE_CFG::Register>,
+        field_value: FieldValue<u32, BANK1_INFO1_PAGE_CFG::Register>,
     ) {
         // PANIC: Info1PageIndex guarantees correct access to bank1_info1_page_cfg
         let register = self
@@ -478,7 +572,7 @@ impl FlashCtrl<'_> {
     fn configure_access_bank0_info2_memory_protection_region(
         &self,
         info2_page_index: Info2PageIndex,
-        field_value: FieldValue<u32, INFO_PAGE_CFG::Register>,
+        field_value: FieldValue<u32, BANK0_INFO2_PAGE_CFG::Register>,
     ) {
         // PANIC: Info2PageIndex guarantees correct access to bank0_info2_page_cfg
         let register = self
@@ -500,7 +594,7 @@ impl FlashCtrl<'_> {
     fn configure_access_bank1_info2_memory_protection_region(
         &self,
         info2_page_index: Info2PageIndex,
-        field_value: FieldValue<u32, INFO_PAGE_CFG::Register>,
+        field_value: FieldValue<u32, BANK1_INFO2_PAGE_CFG::Register>,
     ) {
         // PANIC: Info2PageIndex guarantees correct access to bank1_info2_page_cfg
         let register = self
@@ -509,64 +603,6 @@ impl FlashCtrl<'_> {
             .get(info2_page_index.to_usize())
             .unwrap();
         register.modify(field_value);
-    }
-
-    /// Convert a [InfoMemoryProtectionRegion] to a value suitable to be written to the appropriate
-    /// register
-    ///
-    /// # Parameters
-    ///
-    /// + `info_memory_protection_region`: [InfoMemoryProtectionRegion] to be converted
-    ///
-    /// # Return value
-    ///
-    /// The register value used to configure the appropriate register.
-    fn convert_info_memory_protection_region_to_register_value(
-        info_memory_protection_region: &InfoMemoryProtectionRegion,
-    ) -> FieldValue<u32, INFO_PAGE_CFG::Register> {
-        let high_endurance_enabled = match info_memory_protection_region.is_high_endurance_enabled()
-        {
-            HighEnduranceEnabledStatus::Disabled => INFO_PAGE_CFG::HE_EN::Clear,
-            HighEnduranceEnabledStatus::Enabled => INFO_PAGE_CFG::HE_EN::Set,
-        };
-
-        let scramble_enabled = match info_memory_protection_region.is_scramble_enabled() {
-            ScrambleEnabledStatus::Disabled => INFO_PAGE_CFG::SCRAMBLE_EN::Clear,
-            ScrambleEnabledStatus::Enabled => INFO_PAGE_CFG::SCRAMBLE_EN::Set,
-        };
-
-        let ecc_enabled = match info_memory_protection_region.is_ecc_enabled() {
-            EccEnabledStatus::Disabled => INFO_PAGE_CFG::ECC_EN::Clear,
-            EccEnabledStatus::Enabled => INFO_PAGE_CFG::ECC_EN::Set,
-        };
-
-        let erase_enabled = match info_memory_protection_region.is_erase_enabled() {
-            EraseEnabledStatus::Disabled => INFO_PAGE_CFG::ERASE_EN::Clear,
-            EraseEnabledStatus::Enabled => INFO_PAGE_CFG::ERASE_EN::Set,
-        };
-
-        let write_enabled = match info_memory_protection_region.is_write_enabled() {
-            WriteEnabledStatus::Disabled => INFO_PAGE_CFG::PROG_EN::Clear,
-            WriteEnabledStatus::Enabled => INFO_PAGE_CFG::PROG_EN::Set,
-        };
-
-        let read_enabled = match info_memory_protection_region.is_read_enabled() {
-            ReadEnabledStatus::Disabled => INFO_PAGE_CFG::RD_EN::Clear,
-            ReadEnabledStatus::Enabled => INFO_PAGE_CFG::RD_EN::Set,
-        };
-
-        let is_region_enabled = match info_memory_protection_region.is_enabled() {
-            MemoryProtectionRegionStatus::Disabled => INFO_PAGE_CFG::EN::Clear,
-            MemoryProtectionRegionStatus::Enabled => INFO_PAGE_CFG::EN::Set,
-        };
-
-        high_endurance_enabled
-            + scramble_enabled
-            + ecc_enabled
-            + erase_enabled
-            + write_enabled
-            + read_enabled
-            + is_region_enabled
     }
 
     /// Configure access permissions for info0 memory protection region.
@@ -581,20 +617,20 @@ impl FlashCtrl<'_> {
         info0_memory_protection_region_index: Info0MemoryProtectionRegionIndex,
         info0_memory_protection_region: &InfoMemoryProtectionRegion,
     ) {
-        let register_value = Self::convert_info_memory_protection_region_to_register_value(
-            info0_memory_protection_region,
-        );
-
         match info0_memory_protection_region_index {
             Info0MemoryProtectionRegionIndex::Bank0(info0_page_index) => self
                 .configure_access_bank0_info0_memory_protection_region(
                     info0_page_index,
-                    register_value,
+                    convert_bank0_info0_memory_protection_region_to_register_value(
+                        info0_memory_protection_region,
+                    ),
                 ),
             Info0MemoryProtectionRegionIndex::Bank1(info0_page_index) => self
                 .configure_access_bank1_info0_memory_protection_region(
                     info0_page_index,
-                    register_value,
+                    convert_bank1_info0_memory_protection_region_to_register_value(
+                        info0_memory_protection_region,
+                    ),
                 ),
         }
     }
@@ -611,20 +647,20 @@ impl FlashCtrl<'_> {
         info1_memory_protection_region_index: Info1MemoryProtectionRegionIndex,
         info1_memory_protection_region: &InfoMemoryProtectionRegion,
     ) {
-        let register_value = Self::convert_info_memory_protection_region_to_register_value(
-            info1_memory_protection_region,
-        );
-
         match info1_memory_protection_region_index {
             Info1MemoryProtectionRegionIndex::Bank0(info1_page_index) => self
                 .configure_access_bank0_info1_memory_protection_region(
                     info1_page_index,
-                    register_value,
+                    convert_bank0_info1_memory_protection_region_to_register_value(
+                        info1_memory_protection_region,
+                    ),
                 ),
             Info1MemoryProtectionRegionIndex::Bank1(info1_page_index) => self
                 .configure_access_bank1_info1_memory_protection_region(
                     info1_page_index,
-                    register_value,
+                    convert_bank1_info1_memory_protection_region_to_register_value(
+                        info1_memory_protection_region,
+                    ),
                 ),
         }
     }
@@ -641,20 +677,20 @@ impl FlashCtrl<'_> {
         info2_memory_protection_region_index: Info2MemoryProtectionRegionIndex,
         info2_memory_protection_region: &InfoMemoryProtectionRegion,
     ) {
-        let register_value = Self::convert_info_memory_protection_region_to_register_value(
-            info2_memory_protection_region,
-        );
-
         match info2_memory_protection_region_index {
             Info2MemoryProtectionRegionIndex::Bank0(info2_page_index) => self
                 .configure_access_bank0_info2_memory_protection_region(
                     info2_page_index,
-                    register_value,
+                    convert_bank0_info2_memory_protection_region_to_register_value(
+                        info2_memory_protection_region,
+                    ),
                 ),
             Info2MemoryProtectionRegionIndex::Bank1(info2_page_index) => self
                 .configure_access_bank1_info2_memory_protection_region(
                     info2_page_index,
-                    register_value,
+                    convert_bank1_info2_memory_protection_region_to_register_value(
+                        info2_memory_protection_region,
+                    ),
                 ),
         }
     }
@@ -713,7 +749,7 @@ impl FlashCtrl<'_> {
             .unwrap();
 
         memory_protection_region_lock_write_enable_register
-            .modify(REGION_CFG_REGWEN::REGION::REGION_LOCKED);
+            .modify(REGION_CFG_REGWEN::REGION_0::REGION_LOCKED);
     }
 
     /// Configure and lock a data memory protection region
@@ -758,7 +794,7 @@ impl FlashCtrl<'_> {
             .get(info0_page_index.to_usize())
             .unwrap();
 
-        register.modify(INFO_REGWEN::REGION::PAGE_LOCKED);
+        register.modify(BANK0_INFO0_REGWEN::REGION_0::PAGE_LOCKED);
     }
 
     /// Configure and lock a info2 memory protection region
@@ -776,7 +812,7 @@ impl FlashCtrl<'_> {
             .get(info0_page_index.to_usize())
             .unwrap();
 
-        register.modify(INFO_REGWEN::REGION::PAGE_LOCKED);
+        register.modify(BANK1_INFO0_REGWEN::REGION_0::PAGE_LOCKED);
     }
 
     fn lock_info0_memory_protection_region(
@@ -828,7 +864,7 @@ impl FlashCtrl<'_> {
             .get(info1_page_index.to_usize())
             .unwrap();
 
-        register.modify(INFO_REGWEN::REGION::PAGE_LOCKED);
+        register.modify(BANK0_INFO1_REGWEN::REGION_0::PAGE_LOCKED);
     }
 
     fn lock_bank1_info1_memory_protection_region(&self, info1_page_index: Info1PageIndex) {
@@ -839,7 +875,7 @@ impl FlashCtrl<'_> {
             .get(info1_page_index.to_usize())
             .unwrap();
 
-        register.modify(INFO_REGWEN::REGION::PAGE_LOCKED);
+        register.modify(BANK1_INFO1_REGWEN::REGION_0::PAGE_LOCKED);
     }
 
     fn lock_info1_memory_protection_region(
@@ -891,7 +927,7 @@ impl FlashCtrl<'_> {
             .get(info2_page_index.to_usize())
             .unwrap();
 
-        register.modify(INFO_REGWEN::REGION::PAGE_LOCKED);
+        register.modify(BANK0_INFO2_REGWEN::REGION_0::PAGE_LOCKED);
     }
 
     fn lock_bank1_info2_memory_protection_region(&self, info2_page_index: Info2PageIndex) {
@@ -902,7 +938,7 @@ impl FlashCtrl<'_> {
             .get(info2_page_index.to_usize())
             .unwrap();
 
-        register.modify(INFO_REGWEN::REGION::PAGE_LOCKED);
+        register.modify(BANK1_INFO2_REGWEN::REGION_0::PAGE_LOCKED);
     }
 
     fn lock_info2_memory_protection_region(
@@ -1079,8 +1115,10 @@ impl FlashCtrl<'_> {
         partition_type: PartitionType,
     ) -> FieldValue<u32, CONTROL::Register> {
         match partition_type {
-            PartitionType::Data => CONTROL::PARTITION_SEL::DATA,
-            PartitionType::Info => CONTROL::PARTITION_SEL::INFO,
+            // CLEAR === DATA
+            PartitionType::Data => CONTROL::PARTITION_SEL::CLEAR,
+            // SET === INFO
+            PartitionType::Info => CONTROL::PARTITION_SEL::SET,
         }
     }
 
@@ -1099,9 +1137,9 @@ impl FlashCtrl<'_> {
         info_partition_type: InfoPartitionType,
     ) -> FieldValue<u32, CONTROL::Register> {
         match info_partition_type {
-            InfoPartitionType::Type0 => CONTROL::INFO_SEL::TYPE0,
-            InfoPartitionType::Type1 => CONTROL::INFO_SEL::TYPE1,
-            InfoPartitionType::Type2 => CONTROL::INFO_SEL::TYPE2,
+            InfoPartitionType::Type0 => CONTROL::INFO_SEL.val(0),
+            InfoPartitionType::Type1 => CONTROL::INFO_SEL.val(1),
+            InfoPartitionType::Type2 => CONTROL::INFO_SEL.val(2),
         }
     }
 
@@ -1112,7 +1150,7 @@ impl FlashCtrl<'_> {
     /// The read word
     fn read_word(&self) -> usize {
         // usize == u32 on Earlgrey
-        self.registers.rd_fifo.get() as usize
+        self.registers.rd_fifo[0].get() as usize
     }
 
     /// Read a chunk from the read FIFO
@@ -1159,7 +1197,7 @@ impl FlashCtrl<'_> {
     ///
     /// + `word`: the word to be written
     fn write_word(&self, word: usize) {
-        self.registers.prog_fifo.set(word as u32);
+        self.registers.prog_fifo[0].set(word as u32);
     }
 
     /// Write the given chunk to the program FIFO
@@ -1488,13 +1526,10 @@ impl FlashCtrl<'_> {
     ///
     /// # Return value
     ///
-    /// [PageChunkIterator] representing the current stored page chunk iterator
-    ///
-    /// # Panic
-    ///
-    /// This method panics if there is no page chunk stored
-    fn take_page_chunk_iterator(&self) -> PageChunkIterator<'static> {
-        self.page_chunk_iterator.take().unwrap()
+    /// [Option<PageChunkIterator>] representing the current stored page chunk iterator
+    /// or `None` if none is present.
+    fn take_page_chunk_iterator(&self) -> Option<PageChunkIterator<'static>> {
+        self.page_chunk_iterator.take()
     }
 
     /// Store the given page chunk iterator
@@ -1506,23 +1541,20 @@ impl FlashCtrl<'_> {
         self.page_chunk_iterator.set(page_chunk_iterator);
     }
 
-    /// Helper function to apply a closure on the stored page chunk iterator
-    ///
+    /// Helper function to apply a closure on the stored page chunk iterator.
+    /// No-op if there is no page chunk iterator stored.
     ///
     /// # Parameters
     ///
     /// + `closure`: the closure to be applied on the stored page chunk iterator
-    ///
-    /// # Panic
-    ///
-    /// This method panics if there is no page chunk stored
     fn operate_on_page_chunk_iterator<F>(&self, closure: F)
     where
         F: FnOnce(&mut PageChunkIterator<'static>),
     {
-        let mut page_chunk_iterator = self.take_page_chunk_iterator();
-        closure(&mut page_chunk_iterator);
-        self.set_page_chunk_iterator(page_chunk_iterator);
+        if let Some(mut page_chunk_iterator) = self.take_page_chunk_iterator() {
+            closure(&mut page_chunk_iterator);
+            self.set_page_chunk_iterator(page_chunk_iterator);
+        };
     }
 
     /// Create a new info page position
@@ -1861,7 +1893,6 @@ impl FlashCtrl<'_> {
 
     /// Handler for operation done interrupt
     pub(crate) fn handle_operation_done(&self) {
-        self.clear_operation_done_interrupt();
         self.clear_operation_done_status();
         self.stop_flash_operation();
 
@@ -1873,20 +1904,19 @@ impl FlashCtrl<'_> {
             match finished_operation {
                 FlashOperationType::Read => {
                     self.flush_read_buffer();
-                    // This may never panic because before an operation starts, the user of the
-                    // driver has to provide a reference to a page from which the iterator is
-                    // created and stored.
-                    let page_chunk_iterator = self.take_page_chunk_iterator();
-                    let raw_page = page_chunk_iterator.to_raw_page();
-                    self.read_complete(raw_page, Err(error));
+                    if let Some(page_chunk_iterator) = self.take_page_chunk_iterator() {
+                        let raw_page = page_chunk_iterator.to_raw_page();
+                        self.read_complete(raw_page, Err(error));
+                    };
                 }
                 FlashOperationType::Write => {
                     // This may never panic because before an operation starts, the user of the
                     // driver has to provide a reference to a page from which the iterator is
                     // created and stored.
-                    let page_chunk_iterator = self.take_page_chunk_iterator();
-                    let raw_page = page_chunk_iterator.to_raw_page();
-                    self.write_complete(raw_page, Err(error));
+                    if let Some(page_chunk_iterator) = self.take_page_chunk_iterator() {
+                        let raw_page = page_chunk_iterator.to_raw_page();
+                        self.write_complete(raw_page, Err(error));
+                    }
                 }
                 FlashOperationType::Erase => self.erase_complete(Err(error)),
             }
@@ -1897,33 +1927,31 @@ impl FlashCtrl<'_> {
         match finished_operation {
             FlashOperationType::Read => {
                 self.read_data();
-                // This may never panic because before an operation starts, the user of the
-                // driver has to provide a reference to a page from which the iterator is
-                // created and stored.
-                let page_chunk_iterator = self.take_page_chunk_iterator();
-                let empty_status = page_chunk_iterator.empty();
+                if let Some(page_chunk_iterator) = self.take_page_chunk_iterator() {
+                    let empty_status = page_chunk_iterator.empty();
 
-                if PageChunkIteratorEmpty::Empty == empty_status {
-                    let raw_page = page_chunk_iterator.to_raw_page();
-                    self.read_complete(raw_page, Ok(()));
-                } else {
-                    self.set_page_chunk_iterator(page_chunk_iterator);
-                    self.start_next_read();
+                    if PageChunkIteratorEmpty::Empty == empty_status {
+                        let raw_page = page_chunk_iterator.to_raw_page();
+                        self.read_complete(raw_page, Ok(()));
+                    } else {
+                        self.set_page_chunk_iterator(page_chunk_iterator);
+                        self.start_next_read();
+                    }
                 }
             }
             FlashOperationType::Write => {
                 // This may never panic because before an operation starts, the user of the
                 // driver has to provide a reference to a page from which the iterator is
                 // created and stored.
-                let page_chunk_iterator = self.take_page_chunk_iterator();
-                let empty_status = page_chunk_iterator.empty();
-
-                if PageChunkIteratorEmpty::Empty == empty_status {
-                    let raw_page = page_chunk_iterator.to_raw_page();
-                    self.write_complete(raw_page, Ok(()));
-                } else {
-                    self.page_chunk_iterator.set(page_chunk_iterator);
-                    self.write_data();
+                if let Some(page_chunk_iterator) = self.take_page_chunk_iterator() {
+                    let empty_status = page_chunk_iterator.empty();
+                    if PageChunkIteratorEmpty::Empty == empty_status {
+                        let raw_page = page_chunk_iterator.to_raw_page();
+                        self.write_complete(raw_page, Ok(()));
+                    } else {
+                        self.page_chunk_iterator.set(page_chunk_iterator);
+                        self.write_data();
+                    }
                 }
             }
             FlashOperationType::Erase => self.erase_complete(Ok(())),
@@ -1934,6 +1962,36 @@ impl FlashCtrl<'_> {
     #[cfg(feature = "test_flash_ctrl")]
     pub(super) fn get_registers(&self) -> &StaticRef<FlashCtrlRegisters> {
         &self.registers
+    }
+
+    pub fn handle_interrupt(&self, interrupt: FlashCtrlInterrupt) {
+        let regs = &self.registers;
+        match interrupt {
+            FlashCtrlInterrupt::ProgEmpty => {
+                regs.intr_state.modify(INTR::PROG_EMPTY::SET);
+                // TODO: handle this
+            }
+            FlashCtrlInterrupt::ProgLvl => {
+                regs.intr_state.modify(INTR::PROG_LVL::SET);
+                // TODO: handle this
+            }
+            FlashCtrlInterrupt::RdFull => {
+                regs.intr_state.modify(INTR::RD_FULL::SET);
+                // TODO: handle this
+            }
+            FlashCtrlInterrupt::RdLvl => {
+                regs.intr_state.modify(INTR::RD_LVL::SET);
+                // TODO: handle this
+            }
+            FlashCtrlInterrupt::OpDone => {
+                self.clear_operation_done_interrupt();
+                self.handle_operation_done();
+            }
+            FlashCtrlInterrupt::CorrErr => {
+                regs.intr_state.modify(INTR::CORR_ERR::SET);
+                // TODO: handle this
+            }
+        }
     }
 }
 

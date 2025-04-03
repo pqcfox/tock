@@ -45,6 +45,12 @@ pub struct RvTimer<'a> {
     mtimer: MachineTimer<'a>,
 }
 
+#[derive(Clone, Copy)]
+pub enum RvTimerInterrupt {
+    /// Interrupt status for timer
+    ExpiredHart0Timer0,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum SetClkResult {
     SetPrecise,
@@ -130,12 +136,16 @@ impl RvTimer<'_> {
         self.enable();
     }
 
-    pub fn service_interrupt(&self) {
-        self.isr_disable();
-        self.registers.intr_state0[0].write(INTR_STATE0::IS_0::SET);
-        self.alarm_client.map(|client| {
-            client.alarm();
-        });
+    pub fn handle_interrupt(&self, interrupt: RvTimerInterrupt) {
+        match interrupt {
+            RvTimerInterrupt::ExpiredHart0Timer0 => {
+                self.isr_disable();
+                self.registers.intr_state0[0].write(INTR_STATE0::IS_0::SET);
+                self.alarm_client.map(|client| {
+                    client.alarm();
+                });
+            }
+        }
     }
 
     #[cfg(feature = "test_rv_timer")]

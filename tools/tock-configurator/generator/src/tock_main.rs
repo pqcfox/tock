@@ -270,7 +270,7 @@ impl<C: Chip + 'static> TockMain<C> {
                 const NAME: &'static str = "qemu";
                 const CPU_FREQ: u32 = 24_000_000;
                 const PERIPHERAL_FREQ: u32 = 6_000_000;
-                const AON_TIMER_FREQ: u32 = 250_000;
+                const AON_TIMER_FREQ: u64 = 250_000;
                 const UART_BAUDRATE: u32 = 115200;
             }
 
@@ -279,7 +279,7 @@ impl<C: Chip + 'static> TockMain<C> {
                 const NAME: &'static str = "fpga";
                 const CPU_FREQ: u32 = 24_000_000;
                 const PERIPHERAL_FREQ: u32 = 6_000_000;
-                const AON_TIMER_FREQ: u32 = 250_000;
+                const AON_TIMER_FREQ: u64 = 250_000;
                 const UART_BAUDRATE: u32 = 115200;
             }
 
@@ -288,7 +288,7 @@ impl<C: Chip + 'static> TockMain<C> {
                 const NAME: &'static str = "silicon";
                 const CPU_FREQ: u32 = 100_000_000;
                 const PERIPHERAL_FREQ: u32 = 24_000_000;
-                const AON_TIMER_FREQ: u32 = 200_000;
+                const AON_TIMER_FREQ: u64 = 200_000;
                 const UART_BAUDRATE: u32 = 115200;
             }
 
@@ -299,7 +299,7 @@ impl<C: Chip + 'static> TockMain<C> {
                 // Clock frequencies as of https://github.com/lowRISC/opentitan/pull/19368
                 const CPU_FREQ: u32 = 500_000;
                 const PERIPHERAL_FREQ: u32 = 125_000;
-                const AON_TIMER_FREQ: u32 = 125_000;
+                const AON_TIMER_FREQ: u64 = 125_000;
                 const UART_BAUDRATE: u32 = 7200;
             }
 
@@ -466,12 +466,16 @@ impl<C: Chip + 'static> TockMain<C> {
                 }
                 #[cfg(not(feature = "test_flash_ctrl"))]
                 {
-                    // SAFETY: &_stext represents a valid flash address in the host address space.
-                    let starting_address =
-                        earlgrey::flash_ctrl::FlashAddress::new_from_host_address(unsafe { core::ptr::from_ref(&_stext) }).unwrap();
-                    // SAFETY: &_etext represents a valid flash address in the host address space.
-                    let ending_address =
-                        earlgrey::flash_ctrl::FlashAddress::new_from_host_address(unsafe { core::ptr::from_ref(&_etext) }).unwrap();
+                    #[allow(clippy::undocumented_unsafe_blocks)]
+                    let starting_address = unsafe {
+                        earlgrey::flash_ctrl::FlashAddress::new_from_host_address(&_stext as *const u8)
+                            .unwrap()
+                    };
+                    #[allow(clippy::undocumented_unsafe_blocks)]
+                    let ending_address = unsafe {
+                        earlgrey::flash_ctrl::FlashAddress::new_from_host_address(&_etext as *const u8)
+                            .unwrap()
+                    };
 
                     // Setup flash memory protection for the kernel
                     // PANIC: the unwrap panics only if Flash(_stext) < FlashAddress(_etext), which occurs

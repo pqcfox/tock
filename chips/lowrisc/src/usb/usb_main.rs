@@ -24,7 +24,8 @@ use super::usb_address::UsbAddress;
 use super::utils;
 
 use crate::registers::usbdev_regs::{
-    UsbdevRegisters, AVBUFFER, CONFIGIN, INTR, IN_SENT, PHY_CONFIG, USBCTRL, USBSTAT,
+    UsbdevRegisters, AVOUTBUFFER, AVSETUPBUFFER, CONFIGIN, INTR, IN_SENT, PHY_CONFIG, USBCTRL,
+    USBSTAT,
 };
 
 use kernel::hil::usb::{
@@ -132,17 +133,33 @@ impl<'a> Usb<'a> {
         self.get_endpoint(endpoint_index).set_buffer_out(buffer_out);
     }
 
-    /// Fills the available buffer FIFO.
+    /// Fills the available buffer FIFOs for OUT and SETUP transactions, alternating between them
+    /// to prevent deadlock.
     ///
     /// The USB controller has a FIFO for available buffers. Available buffers are used to store
     /// data received in OUT/SETUP transactions. This method fills the FIFO with available buffers.
     fn fill_available_buffer_fifo(&self) {
-        while !self.registers.usbstat.is_set(USBSTAT::AV_FULL) {
-            let buffer_index = self.available_buffer_list.next_and_occupy();
-            // CAST: u32 == usize
-            self.registers
-                .avbuffer
-                .modify(AVBUFFER::BUFFER.val(buffer_index.to_usize() as u32));
+        let out_fifo_full = || self.registers.usbstat.is_set(USBSTAT::AV_OUT_FULL);
+        let setup_fifo_full = || self.registers.usbstat.is_set(USBSTAT::AV_SETUP_FULL);
+        let mut either = true;
+        while either {
+            either = false;
+            if !out_fifo_full() {
+                let buffer_index = self.available_buffer_list.next_and_occupy();
+                // CAST: u32 == usize
+                self.registers
+                    .avoutbuffer
+                    .modify(AVOUTBUFFER::BUFFER.val(buffer_index.to_usize() as u32));
+                either = true;
+            }
+            if !setup_fifo_full() {
+                let buffer_index = self.available_buffer_list.next_and_occupy();
+                // CAST: u32 == usize
+                self.registers
+                    .avsetupbuffer
+                    .modify(AVSETUPBUFFER::BUFFER.val(buffer_index.to_usize() as u32));
+                either = true;
+            }
         }
     }
 
@@ -156,7 +173,8 @@ impl<'a> Usb<'a> {
                 + INTR::LINK_RESET::SET
                 + INTR::LINK_SUSPEND::SET
                 + INTR::LINK_RESUME::SET
-                + INTR::AV_EMPTY::SET
+                + INTR::AV_OUT_EMPTY::SET
+                + INTR::AV_SETUP_EMPTY::SET
                 + INTR::RX_FULL::SET
                 + INTR::AV_OVERFLOW::SET
                 + INTR::LINK_IN_ERR::SET
@@ -178,7 +196,8 @@ impl<'a> Usb<'a> {
                 + INTR::LINK_RESET::CLEAR
                 + INTR::LINK_SUSPEND::CLEAR
                 + INTR::LINK_RESUME::CLEAR
-                + INTR::AV_EMPTY::CLEAR
+                + INTR::AV_OUT_EMPTY::CLEAR
+                + INTR::AV_SETUP_EMPTY::CLEAR
                 + INTR::RX_FULL::CLEAR
                 + INTR::AV_OVERFLOW::CLEAR
                 + INTR::LINK_IN_ERR::CLEAR
@@ -1569,7 +1588,7 @@ impl<'a> Usb<'a> {
             UsbInterrupt::LinkReset => self.handle_link_reset_interrupt(),
             UsbInterrupt::LinkSuspended => self.handle_link_suspended_interrupt(),
             UsbInterrupt::LinkResume => self.handle_link_resume_interrupt(),
-            UsbInterrupt::AvEmpty => unimplemented!(),
+            UsbInterrupt::AvOutEmpty => unimplemented!(),
             UsbInterrupt::RxFull => unimplemented!(),
             UsbInterrupt::AvOverflow => unimplemented!(),
             UsbInterrupt::LinkInErr => self.handle_link_in_err_interrupt(),
@@ -1579,6 +1598,7 @@ impl<'a> Usb<'a> {
             UsbInterrupt::Frame => self.handle_frame_interrupt(),
             UsbInterrupt::Powered => self.handle_powered_interrupt(),
             UsbInterrupt::LinkOutErr => self.handle_link_out_err_interrupt(),
+            UsbInterrupt::AvSetupEmpty => unimplemented!(),
         }
     }
 }

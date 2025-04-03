@@ -85,6 +85,32 @@ pub struct Hmac<'a> {
     busy: Cell<bool>,
 }
 
+#[derive(Clone, Copy)]
+pub enum HmacInterrupt {
+    /// HMAC/SHA-2 has completed.
+    HmacDone,
+    /// The message FIFO is empty.
+    ///
+    /// This interrupt is raised only if the message FIFO is actually writable
+    /// by software, i.e., if all of the following conditions are met:
+    ///
+    /// i) The HMAC block is not running in HMAC mode and performing the second
+    /// round of computing the final hash of the outer key as well as the result
+    /// of the first round using the inner key.
+    /// ii) Software has not yet written the Process or Stop command to finish
+    /// the hashing operation.
+    ///
+    /// For the interrupt to be raised, the message FIFO must also have been
+    /// full previously.
+    ///
+    /// Otherwise, the hardware empties the FIFO faster than software can fill
+    /// it and there is no point in interrupting the software to inform it about
+    /// the message FIFO being empty.
+    FifoEmpty,
+    /// HMAC error has occurred. ERR_CODE register shows which error occurred.
+    HmacErr,
+}
+
 impl Hmac<'_> {
     pub fn new(base: StaticRef<HmacRegisters>) -> Self {
         Hmac {
@@ -153,105 +179,108 @@ impl Hmac<'_> {
         })
     }
 
-    pub fn handle_interrupt(&self) {
+    pub fn handle_interrupt(&self, interrupt: HmacInterrupt) {
         let regs = self.registers;
-        let intrs = regs.intr_state.extract();
         regs.intr_enable.modify(
             INTR_ENABLE::HMAC_DONE::CLEAR
                 + INTR_ENABLE::FIFO_EMPTY::CLEAR
                 + INTR_ENABLE::HMAC_ERR::CLEAR,
         );
         self.busy.set(false);
-        if intrs.is_set(INTR_STATE::HMAC_DONE) {
-            self.client.map(|client| {
-                let digest = self.digest.take().unwrap();
+        match interrupt {
+            HmacInterrupt::HmacDone => {
+                self.client.map(|client| {
+                    let digest = self.digest.take().unwrap();
 
-                regs.intr_state.modify(INTR_STATE::HMAC_DONE::SET);
+                    regs.intr_state.modify(INTR_STATE::HMAC_DONE::SET);
 
-                if self.verify.get() {
-                    let mut equal = true;
+                    if self.verify.get() {
+                        let mut equal = true;
 
-                    for i in 0..8 {
-                        let d = regs.digest[i].get().to_ne_bytes();
+                        for i in 0..8 {
+                            let d = regs.digest[i].get().to_ne_bytes();
 
-                        let idx = i * 4;
+                            let idx = i * 4;
 
-                        if digest[idx] != d[0]
-                            || digest[idx + 1] != d[1]
-                            || digest[idx + 2] != d[2]
-                            || digest[idx + 3] != d[3]
-                        {
-                            equal = false;
+                            if digest[idx] != d[0]
+                                || digest[idx + 1] != d[1]
+                                || digest[idx + 2] != d[2]
+                                || digest[idx + 3] != d[3]
+                            {
+                                equal = false;
+                            }
+                        }
+
+                        if self.cancelled.get() {
+                            self.clear_data();
+                            self.cancelled.set(false);
+                            client.verification_done(Err(ErrorCode::CANCEL), digest);
+                        } else {
+                            self.clear_data();
+                            self.cancelled.set(false);
+                            client.verification_done(Ok(equal), digest);
+                        }
+                    } else {
+                        for i in 0..8 {
+                            let d = regs.digest[i].get().to_ne_bytes();
+
+                            let idx = i * 4;
+
+                            digest[idx] = d[0];
+                            digest[idx + 1] = d[1];
+                            digest[idx + 2] = d[2];
+                            digest[idx + 3] = d[3];
+                        }
+                        if self.cancelled.get() {
+                            self.clear_data();
+                            self.cancelled.set(false);
+                            client.hash_done(Err(ErrorCode::CANCEL), digest);
+                        } else {
+                            self.clear_data();
+                            self.cancelled.set(false);
+                            client.hash_done(Ok(()), digest);
                         }
                     }
-
-                    if self.cancelled.get() {
-                        self.clear_data();
-                        self.cancelled.set(false);
-                        client.verification_done(Err(ErrorCode::CANCEL), digest);
-                    } else {
-                        self.clear_data();
-                        self.cancelled.set(false);
-                        client.verification_done(Ok(equal), digest);
-                    }
-                } else {
-                    for i in 0..8 {
-                        let d = regs.digest[i].get().to_ne_bytes();
-
-                        let idx = i * 4;
-
-                        digest[idx] = d[0];
-                        digest[idx + 1] = d[1];
-                        digest[idx + 2] = d[2];
-                        digest[idx + 3] = d[3];
-                    }
-                    if self.cancelled.get() {
-                        self.clear_data();
-                        self.cancelled.set(false);
-                        client.hash_done(Err(ErrorCode::CANCEL), digest);
-                    } else {
-                        self.clear_data();
-                        self.cancelled.set(false);
-                        client.hash_done(Ok(()), digest);
-                    }
-                }
-            });
-        } else if intrs.is_set(INTR_STATE::FIFO_EMPTY) {
-            // Clear the FIFO empty interrupt
-            regs.intr_state.modify(INTR_STATE::FIFO_EMPTY::SET);
-            let rval = if self.cancelled.get() {
-                self.cancelled.set(false);
-                Err(ErrorCode::CANCEL)
-            } else {
-                Ok(())
-            };
-            if !self.data_progress() {
-                // False means we are done
-                self.client.map(move |client| {
-                    self.data.take().map(|buf| match buf {
-                        SubSliceMutImmut::Mutable(b) => client.add_mut_data_done(rval, b),
-                        SubSliceMutImmut::Immutable(b) => client.add_data_done(rval, b),
-                    })
                 });
-                // Make sure we don't get any more FIFO empty interrupts
-                regs.intr_enable.modify(INTR_ENABLE::FIFO_EMPTY::CLEAR);
-            } else {
-                // Processing more data
-                // Enable interrupts
-                regs.intr_enable.modify(INTR_ENABLE::FIFO_EMPTY::SET);
             }
-        } else if intrs.is_set(INTR_STATE::HMAC_ERR) {
-            regs.intr_state.modify(INTR_STATE::HMAC_ERR::SET);
-
-            self.client.map(|client| {
-                let errval = if self.cancelled.get() {
+            HmacInterrupt::FifoEmpty => {
+                // Clear the FIFO empty interrupt
+                regs.intr_state.modify(INTR_STATE::FIFO_EMPTY::SET);
+                let rval = if self.cancelled.get() {
                     self.cancelled.set(false);
-                    ErrorCode::CANCEL
+                    Err(ErrorCode::CANCEL)
                 } else {
-                    ErrorCode::FAIL
+                    Ok(())
                 };
-                client.hash_done(Err(errval), self.digest.take().unwrap());
-            });
+                if !self.data_progress() {
+                    // False means we are done
+                    self.client.map(move |client| {
+                        self.data.take().map(|buf| match buf {
+                            SubSliceMutImmut::Mutable(b) => client.add_mut_data_done(rval, b),
+                            SubSliceMutImmut::Immutable(b) => client.add_data_done(rval, b),
+                        })
+                    });
+                    // Make sure we don't get any more FIFO empty interrupts
+                    regs.intr_enable.modify(INTR_ENABLE::FIFO_EMPTY::CLEAR);
+                } else {
+                    // Processing more data
+                    // Enable interrupts
+                    regs.intr_enable.modify(INTR_ENABLE::FIFO_EMPTY::SET);
+                }
+            }
+            HmacInterrupt::HmacErr => {
+                regs.intr_state.modify(INTR_STATE::HMAC_ERR::SET);
+
+                self.client.map(|client| {
+                    let errval = if self.cancelled.get() {
+                        self.cancelled.set(false);
+                        ErrorCode::CANCEL
+                    } else {
+                        ErrorCode::FAIL
+                    };
+                    client.hash_done(Err(errval), self.digest.take().unwrap());
+                });
+            }
         }
     }
 }

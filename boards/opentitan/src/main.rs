@@ -77,8 +77,6 @@ use rv32i::csr;
 pub mod io;
 mod otbn;
 pub mod pinmux_layout;
-#[cfg(feature = "ffi")]
-pub mod polyfill;
 #[cfg(test)]
 mod tests;
 
@@ -99,7 +97,7 @@ impl EarlGreyConfig for ChipConfig {
     // Clock frequencies as of https://github.com/lowRISC/opentitan/pull/19479
     const CPU_FREQ: u32 = 24_000_000;
     const PERIPHERAL_FREQ: u32 = 6_000_000;
-    const AON_TIMER_FREQ: u32 = 250_000;
+    const AON_TIMER_FREQ: u64 = 250_000;
     const UART_BAUDRATE: u32 = 115200;
 }
 
@@ -110,7 +108,7 @@ impl EarlGreyConfig for ChipConfig {
     // Clock frequencies as of https://github.com/lowRISC/opentitan/pull/19479
     const CPU_FREQ: u32 = 24_000_000;
     const PERIPHERAL_FREQ: u32 = 6_000_000;
-    const AON_TIMER_FREQ: u32 = 250_000;
+    const AON_TIMER_FREQ: u64 = 250_000;
     const UART_BAUDRATE: u32 = 115200;
 }
 
@@ -119,7 +117,7 @@ impl EarlGreyConfig for ChipConfig {
     const NAME: &'static str = "silicon";
     const CPU_FREQ: u32 = 100_000_000;
     const PERIPHERAL_FREQ: u32 = 24_000_000;
-    const AON_TIMER_FREQ: u32 = 200_000;
+    const AON_TIMER_FREQ: u64 = 200_000;
     const UART_BAUDRATE: u32 = 115200;
 }
 
@@ -130,7 +128,7 @@ impl EarlGreyConfig for ChipConfig {
     // Clock frequencies as of https://github.com/lowRISC/opentitan/pull/19368
     const CPU_FREQ: u32 = 500_000;
     const PERIPHERAL_FREQ: u32 = 125_000;
-    const AON_TIMER_FREQ: u32 = 125_000;
+    const AON_TIMER_FREQ: u64 = 125_000;
     const UART_BAUDRATE: u32 = 7200;
 }
 
@@ -582,7 +580,7 @@ fn get_flash_memory_protection_configuration() -> flash_ctrl::MemoryProtectionCo
 
         base_memory_protection_config
             .enable_and_configure_data_region(
-                flash_ctrl::DataMemoryProtectionRegionIndex::Index0,
+                flash_ctrl::DataMemoryProtectionRegionIndex::Index2,
                 memory_protection_page0_base,
                 MEMORY_PROTECTION_PAGE0_SIZE,
             )
@@ -604,10 +602,10 @@ fn get_flash_memory_protection_configuration() -> flash_ctrl::MemoryProtectionCo
     {
         // SAFETY: &_stext represents a valid flash address in the host address space.
         let starting_address =
-            flash_ctrl::FlashAddress::new_from_host_address(unsafe { from_ref(&_stext) }).unwrap();
+            unsafe { flash_ctrl::FlashAddress::new_from_host_address(from_ref(&_stext)).unwrap() };
         // SAFETY: &_etext represents a valid flash address in the host address space.
         let ending_address =
-            flash_ctrl::FlashAddress::new_from_host_address(unsafe { from_ref(&_etext) }).unwrap();
+            unsafe { flash_ctrl::FlashAddress::new_from_host_address(from_ref(&_etext)).unwrap() };
 
         // Setup flash memory protection for the kernel
         // PANIC: the unwrap panics only if Flash(_stext) < FlashAddress(_etext), which occurs
@@ -1234,8 +1232,8 @@ unsafe fn setup() -> (
     // Flash
     #[cfg(not(feature = "test_flash_ctrl"))]
     let flash_ctrl_read_buf = static_init!(
-        [u8; lowrisc::flash_ctrl::PAGE_SIZE],
-        [0; lowrisc::flash_ctrl::PAGE_SIZE]
+        [u8; earlgrey::flash_ctrl::EARLGREY_PAGE_SIZE.get()],
+        [0; earlgrey::flash_ctrl::EARLGREY_PAGE_SIZE.get()],
     );
 
     #[cfg(not(feature = "test_flash_ctrl"))]
@@ -1265,10 +1263,11 @@ unsafe fn setup() -> (
         // TicKV
         let tickv = components::tickv::TicKVComponent::new(
             sip_hash,
-            mux_flash,                                     // Flash controller
-            lowrisc::flash_ctrl::FLASH_PAGES_PER_BANK - 1, // Region offset (End of Bank0/Use Bank1)
+            mux_flash,                                           // Flash controller
+            earlgrey::flash_ctrl::DATA_PAGES_PER_BANK.get() - 1, // Region offset (End of Bank0/Use Bank1)
             // Region Size
-            lowrisc::flash_ctrl::FLASH_PAGES_PER_BANK * lowrisc::flash_ctrl::PAGE_SIZE,
+            earlgrey::flash_ctrl::DATA_PAGES_PER_BANK.get()
+                * earlgrey::flash_ctrl::EARLGREY_PAGE_SIZE.get(),
             flash_ctrl_read_buf, // Buffer used internally in TicKV
             page_buffer,         // Buffer used with the flash controller
         )

@@ -25,7 +25,7 @@ pub trait EarlGreyConfig {
     const PERIPHERAL_FREQ: u32;
 
     /// The clock of the AON Timer
-    const AON_TIMER_FREQ: u32;
+    const AON_TIMER_FREQ: u64;
 
     /// The baud rate for UART. This allows for a version of the chip that can
     /// support a faster baud rate to use it to help with debugging.

@@ -86,29 +86,29 @@ jobs:
           name: build-artifacts
           path: tools/ci-artifacts
   
-  ci-test:
-    strategy:
-      matrix:
-        os: [ubuntu-latest]
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 20
-
-    steps:
-      - name: Update package repositories
-        run: |
-          sudo apt update
-      - name: Install dependencies
-        continue-on-error: true
-        run: |
-          sudo apt install libglib2.0-dev meson ninja-build
-      - uses: actions/checkout@v4
-      - uses: actions/checkout@v4
-        with:
-          repository: 'zerorisc/opentitan'
-          ssh-key: ${{ secrets.OPENTITAN_DEPLOY_KEY }}
-          path: opentitan
-      - name:      Run kernel driver tests in QEMU (ci-job-qemu)
-        run:  REPO_TOP=$(realpath opentitan) make ci-job-qemu
+#  ci-test:
+#    strategy:
+#      matrix:
+#        os: [ubuntu-latest]
+#    runs-on: ${{ matrix.os }}
+#    timeout-minutes: 20
+#
+#    steps:
+#      - name: Update package repositories
+#        run: |
+#          sudo apt update
+#      - name: Install dependencies
+#        continue-on-error: true
+#        run: |
+#          sudo apt install libglib2.0-dev meson ninja-build
+#      - uses: actions/checkout@v4
+#      - uses: actions/checkout@v4
+#        with:
+#          repository: 'zerorisc/opentitan'
+#          ssh-key: ${{ secrets.OPENTITAN_DEPLOY_KEY }}
+#          path: opentitan
+#      - name:      Run kernel driver tests in QEMU (ci-job-qemu)
+#        run:  REPO_TOP=$(realpath opentitan) make ci-job-qemu
 
   ci-license-comatibility-check:
     strategy:

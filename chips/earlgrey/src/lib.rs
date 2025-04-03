@@ -11,11 +11,13 @@
 // and requires a deeper recursion limit than the default to fully expand.
 #![recursion_limit = "256"]
 
+#[cfg(feature = "ffi")]
+pub use earlgrey_registers as registers;
+
 pub mod chip_config;
 pub mod pinmux_config;
 
-mod interrupts;
-
+pub mod adc_ctrl;
 pub mod aes;
 pub mod alert_handler;
 pub mod aon_timer;
@@ -23,20 +25,28 @@ pub mod attestation;
 pub mod chip;
 pub mod clkmgr;
 pub mod csrng;
+pub mod edn;
+pub mod entropy_src;
 pub mod epmp;
 pub mod flash_ctrl;
 pub mod gpio;
 pub mod hmac;
 pub mod i2c;
+pub mod interrupts;
+pub mod keymgr;
+pub mod kmac;
 pub mod otbn;
 pub mod otp;
 pub mod pattgen;
 pub mod pinmux;
 pub mod plic;
 pub mod pwrmgr;
+#[cfg(not(feature = "ffi"))]
 pub mod registers;
 pub mod rstmgr;
 pub mod rv_core_ibex;
+pub mod sensor_ctrl;
+pub mod spi_device;
 pub mod spi_host;
 pub mod sram_ret;
 pub mod uart;
