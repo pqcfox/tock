@@ -24,9 +24,12 @@ pub struct Port<'a> {
     pins: [GpioPin<'a, PadConfig>; 32],
 }
 
-impl From<PinmuxPeripheralIn> for PinmuxOutsel {
-    fn from(pin: PinmuxPeripheralIn) -> Self {
-        match pin {
+// Wrapper type to get around the orphan rule.
+pub struct PinmuxPeripheralInWrapper(PinmuxPeripheralIn);
+
+impl From<PinmuxPeripheralInWrapper> for PinmuxOutsel {
+    fn from(pin: PinmuxPeripheralInWrapper) -> Self {
+        match pin.0 {
             PinmuxPeripheralIn::GpioGpio0 => PinmuxOutsel::GpioGpio0,
             PinmuxPeripheralIn::GpioGpio1 => PinmuxOutsel::GpioGpio1,
             PinmuxPeripheralIn::GpioGpio2 => PinmuxOutsel::GpioGpio2,
@@ -75,7 +78,7 @@ pub fn gpio_pad_config<Layout: EarlGreyPinmuxConfig>(pin: PinmuxPeripheralIn) ->
             ) {
                 let out: PinmuxOutsel = Layout::OUTPUT[pad as usize];
                 // Checking for bi-directional I/O
-                if out == PinmuxOutsel::from(pin) {
+                if out == PinmuxOutsel::from(PinmuxPeripheralInWrapper(pin)) {
                     PadConfig::InOut(pad, pin, out)
                 } else {
                     PadConfig::Input(pad, pin)
