@@ -32,7 +32,9 @@ use core::ptr::{addr_of, from_ref};
 use earlgrey::alert_handler;
 use earlgrey::attestation::Attestation as EarlgreyAttestation;
 use earlgrey::chip::EarlGreyDefaultPeripherals;
-use earlgrey::chip::EarlgreyDriverConfig;
+use earlgrey::chip::EarlgreyPeripheralConfig;
+use earlgrey::chip::PeripheralConfig;
+use earlgrey::chip::DEFAULT_GPIO_CONFIG;
 use earlgrey::chip_config::EarlGreyConfig;
 use earlgrey::flash_ctrl;
 use earlgrey::pinmux_config::EarlGreyPinmuxConfig;
@@ -131,40 +133,49 @@ impl EarlGreyConfig for ChipConfig {
 }
 
 /// Default driver configuration for Earlgrey.
-const DRIVER_CONFIG: EarlgreyDriverConfig = EarlgreyDriverConfig {
-    sram_ret: cfg!(not(feature = "qemu")),
-    adc_ctrl: true,
-    aes: true,
-    csrng: true,
-    edn0: true,
-    edn1: true,
-    entropy_src: true,
-    hmac: true,
-    keymgr: true,
-    kmac: true,
-    clkmgr: true,
-    usb: true,
-    uart0: true,
-    uart1: false,
-    uart2: false,
-    uart3: false,
-    otbn: true,
-    otp: true,
-    gpio_port: true,
-    i2c0: true,
-    i2c1: true,
-    i2c2: true,
-    spi_host0: true,
-    spi_host1: false,
-    spi_device: true,
-    flash_ctrl: true,
-    watchdog: true,
-    sensor_ctrl: true,
-    sysreset: cfg!(not(feature = "qemu")),
-    timer: true,
-    alert_handler: true,
-    pattgen: true,
-    rst_mgmt: true,
+const DRIVER_CONFIG: EarlgreyPeripheralConfig = EarlgreyPeripheralConfig {
+    sram_ret: if cfg!(feature = "qemu") {
+        PeripheralConfig::Disabled
+    } else {
+        PeripheralConfig::Enabled
+    },
+    adc_ctrl: PeripheralConfig::Enabled,
+    aes: PeripheralConfig::Enabled,
+    csrng: PeripheralConfig::Enabled,
+    edn0: PeripheralConfig::Enabled,
+    edn1: PeripheralConfig::Enabled,
+    entropy_src: PeripheralConfig::Enabled,
+    hmac: PeripheralConfig::Enabled,
+    keymgr: PeripheralConfig::Enabled,
+    kmac: PeripheralConfig::Enabled,
+    clkmgr: PeripheralConfig::Enabled,
+    usb: PeripheralConfig::Enabled,
+    uart0: PeripheralConfig::Enabled,
+    uart1: PeripheralConfig::Enabled,
+    uart2: PeripheralConfig::Enabled,
+    uart3: PeripheralConfig::Enabled,
+    otbn: PeripheralConfig::Enabled,
+    otp: PeripheralConfig::Enabled,
+    gpio_port: DEFAULT_GPIO_CONFIG,
+    i2c0: PeripheralConfig::Enabled,
+    i2c1: PeripheralConfig::Enabled,
+    i2c2: PeripheralConfig::Enabled,
+    spi_host0: PeripheralConfig::Enabled,
+    spi_host1: PeripheralConfig::Enabled,
+    spi_device: PeripheralConfig::Enabled,
+    flash_ctrl: PeripheralConfig::Enabled,
+    rng: PeripheralConfig::Enabled,
+    watchdog: PeripheralConfig::Enabled,
+    sensor_ctrl: PeripheralConfig::Enabled,
+    sysreset: if cfg!(feature = "qemu") {
+        PeripheralConfig::Disabled
+    } else {
+        PeripheralConfig::Enabled
+    },
+    timer: PeripheralConfig::Enabled,
+    alert_handler: PeripheralConfig::Enabled,
+    pattgen: PeripheralConfig::Enabled,
+    rst_mgmt: PeripheralConfig::Enabled,
 };
 
 // Whether to check for a proper ePMP handover configuration prior to ePMP
@@ -1175,6 +1186,7 @@ unsafe fn setup() -> (
         .finalize(components::process_printer_text_component_static!());
     PROCESS_PRINTER = Some(process_printer);
 
+    // PANIC: USB is present in `DRIVER_CONFIG`.
     let usb_peripheral = peripherals.usb.as_ref().unwrap();
 
     // USB support is currently broken in the OpenTitan hardware
@@ -1409,7 +1421,7 @@ unsafe fn setup() -> (
         ))
     );
 
-    // PANIC: ALERT_HANDLER is included in `DRIVER_CONFIG`.
+    // PANIC: AlertHandler is included in `DRIVER_CONFIG`.
     let alert_handler_peripheral = peripherals.alert_handler.as_ref().unwrap();
     alert_handler_peripheral.set_client(alert_handler_capsule);
 
@@ -1889,7 +1901,9 @@ unsafe fn test_alerthandler(
     );
     virtual_alarm_tests.setup();
 
+    // PANIC: AlertHandler is present in `DRIVER_CONFIG`.
     let alert_handler_peripheral = peripherals.alert_handler.as_ref().unwrap();
+    // PANIC: UART0 is present in `DRIVER_CONFIG`.
     let uart0_peripheral = peripherals.uart0.as_ref().unwrap();
     let alert_handler_tests = static_init!(
         alert_handler::tests::Tests<VirtualMuxAlarm<'static, RvTimer>>,
@@ -1922,6 +1936,7 @@ unsafe fn test_aon_timer(
     );
     virtual_alarm_tests.setup();
 
+    // PANIC: watchdog is present in `DRIVER_CONFIG`.
     let watchdog_peripheral = peripherals.watchdog.as_ref().unwrap();
     let aon_timer_tests = static_init!(
         aon_timer::tests::Tests<VirtualMuxAlarm<'static, RvTimer>>,

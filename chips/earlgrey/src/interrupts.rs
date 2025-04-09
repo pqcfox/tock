@@ -7,7 +7,8 @@
 use crate::alert_handler::AlertClass;
 use crate::chip::EarlGrey;
 use crate::chip::EarlGreyDefaultPeripherals;
-use crate::chip::EarlgreyDriverConfig;
+use crate::chip::EarlgreyPeripheralConfig;
+use crate::chip::PeripheralConfig;
 use crate::chip_config::EarlGreyConfig;
 use crate::flash_ctrl::FlashCtrlInterrupt;
 use crate::pinmux_config::EarlGreyPinmuxConfig;
@@ -130,15 +131,17 @@ macro_rules! interrupts {
         > EarlGrey<'a, MPU_REGIONS, I, CFG, PINMUX, PMP>
         {
             /// Enables interrupts for peripherals according to the driver
-            /// configuration.h
-            pub fn enable_plic_interrupts(&self, driver_config: EarlgreyDriverConfig) {
+            /// configuration.
+            pub fn enable_plic_interrupts(&self, peripheral_config: EarlgreyPeripheralConfig) {
                 // Disable all interrupts to start
                 self.plic.disable_all();
 
                 // Enable only the interrupts handled by the peripherals
                 // included in the configuration.
-                $(if driver_config.$peripheral {
-                    self.plic.enable(PlicIrqId::$plic_name as u32);
+                $(match peripheral_config.$peripheral {
+                    PeripheralConfig::Enabled | PeripheralConfig::InterruptsOnly =>
+                        self.plic.enable(PlicIrqId::$plic_name as u32),
+                    PeripheralConfig::Disabled => {},
                 })*
             }
         }

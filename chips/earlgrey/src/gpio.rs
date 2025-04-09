@@ -17,11 +17,14 @@ use crate::registers::top_earlgrey::{
     MuxedPads, PinmuxInsel, PinmuxOutsel, PinmuxPeripheralIn, PINMUX_MIO_PERIPH_INSEL_IDX_OFFSET,
 };
 
+/// Number of GPIO pins on Earlgrey.
+pub const GPIO_PINS: usize = 32;
+
 pub const GPIO_BASE: StaticRef<GpioRegisters> =
     unsafe { StaticRef::new(GPIO_BASE_ADDR as *const GpioRegisters) };
 
 pub struct Port<'a> {
-    pins: [GpioPin<'a, PadConfig>; 32],
+    pins: [GpioPin<'a, PadConfig>; GPIO_PINS],
 }
 
 // Wrapper type to get around the orphan rule.

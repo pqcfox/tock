@@ -86,6 +86,7 @@ impl Plic {
         if index >= PLIC_IRQ_NUM as u32 {
             panic!("Invalid IRQ: {}", index);
         };
+        // CAST: |usize| == |u32| on RV32I
         let offset = (index / 32) as usize;
         let mask = 1 << (index % 32);
 

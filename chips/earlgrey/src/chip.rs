@@ -86,55 +86,79 @@ pub struct EarlGreyDefaultPeripherals<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyP
     _pinmux: PhantomData<PINMUX>,
 }
 
+pub enum PeripheralConfig {
+    /// Enable peripheral-specific driver and interrupts.
+    Enabled,
+    /// Enable interrupts, but disable peripheral-specific driver. Useful when
+    /// nonstandard drivers that rely on the peripheral interrupt, such as
+    /// OpenTitan cryptolib APIs.
+    InterruptsOnly,
+    /// Disable peripheral-specific driver and interrupts.
+    Disabled,
+}
+
+/// Peripheral configuration for GPIO, which enables interrupts on a per-pin
+/// basis, but enabling the driver is a global decision.
+pub struct GpioPeripheralConfig {
+    pub driver_enabled: bool,
+    pub interrupts_enabled: [bool; crate::gpio::GPIO_PINS],
+}
+
+/// Default GPIO peripheral configuration
+pub const DEFAULT_GPIO_CONFIG: GpioPeripheralConfig = GpioPeripheralConfig {
+    driver_enabled: true,
+    interrupts_enabled: [true; crate::gpio::GPIO_PINS],
+};
+
 /// Type that defines which peripheral drivers should be included in the kernel
 /// configuration.
-pub struct EarlgreyDriverConfig {
-    pub sram_ret: bool,
-    pub adc_ctrl: bool,
-    pub aes: bool,
-    pub csrng: bool,
-    pub edn0: bool,
-    pub edn1: bool,
-    pub entropy_src: bool,
-    pub hmac: bool,
-    pub keymgr: bool,
-    pub kmac: bool,
-    pub clkmgr: bool,
-    pub usb: bool,
-    pub uart0: bool,
-    pub uart1: bool,
-    pub uart2: bool,
-    pub uart3: bool,
-    pub otbn: bool,
-    pub otp: bool,
-    pub gpio_port: bool,
-    pub i2c0: bool,
-    pub i2c1: bool,
-    pub i2c2: bool,
-    pub spi_host0: bool,
-    pub spi_host1: bool,
-    pub spi_device: bool,
-    pub flash_ctrl: bool,
-    pub watchdog: bool,
-    pub sensor_ctrl: bool,
-    pub sysreset: bool,
-    pub timer: bool,
-    pub alert_handler: bool,
-    pub pattgen: bool,
-    pub rst_mgmt: bool,
+pub struct EarlgreyPeripheralConfig {
+    pub sram_ret: PeripheralConfig,
+    pub adc_ctrl: PeripheralConfig,
+    pub aes: PeripheralConfig,
+    pub csrng: PeripheralConfig,
+    pub edn0: PeripheralConfig,
+    pub edn1: PeripheralConfig,
+    pub entropy_src: PeripheralConfig,
+    pub hmac: PeripheralConfig,
+    pub keymgr: PeripheralConfig,
+    pub kmac: PeripheralConfig,
+    pub clkmgr: PeripheralConfig,
+    pub usb: PeripheralConfig,
+    pub uart0: PeripheralConfig,
+    pub uart1: PeripheralConfig,
+    pub uart2: PeripheralConfig,
+    pub uart3: PeripheralConfig,
+    pub otbn: PeripheralConfig,
+    pub otp: PeripheralConfig,
+    pub gpio_port: GpioPeripheralConfig,
+    pub i2c0: PeripheralConfig,
+    pub i2c1: PeripheralConfig,
+    pub i2c2: PeripheralConfig,
+    pub spi_host0: PeripheralConfig,
+    pub spi_host1: PeripheralConfig,
+    pub spi_device: PeripheralConfig,
+    pub flash_ctrl: PeripheralConfig,
+    pub rng: PeripheralConfig,
+    pub watchdog: PeripheralConfig,
+    pub sensor_ctrl: PeripheralConfig,
+    pub sysreset: PeripheralConfig,
+    pub timer: PeripheralConfig,
+    pub alert_handler: PeripheralConfig,
+    pub pattgen: PeripheralConfig,
+    pub rst_mgmt: PeripheralConfig,
 }
 
 // Macro that:
-// - If the `EarlgreyDriverConfig` says to include the driver, initializes the
+// - If the `EarlgreyPeripheralConfig` says to include the driver, initializes the
 //   driver according to `$init`.
-// - If the `EarlgreyDriverConfig` says _not_ to include the driver, sets the
+// - If the `EarlgreyPeripheralConfig` says _not_ to include the driver, sets the
 //   peripheral to `None`.
 macro_rules! conditional_init {
-    {$driver_config:expr, $peripheral:ident, $init:expr} => {
-        if $driver_config.$peripheral {
-            Some($init)
-        } else {
-            None
+    {$peripheral_config:expr, $peripheral:ident, $init:expr} => {
+        match $peripheral_config.$peripheral {
+            PeripheralConfig::Enabled => Some($init),
+            _ => None,
         }
     }
 }
@@ -145,145 +169,149 @@ impl<CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig>
     #[allow(static_mut_refs)]
     pub unsafe fn new(
         flash_memory_protection_configuration: crate::flash_ctrl::MemoryProtectionConfiguration,
-        driver_config: EarlgreyDriverConfig,
+        peripheral_config: EarlgreyPeripheralConfig,
     ) -> Self {
         AON_TIMER.set_clk_freq(CFG::AON_TIMER_FREQ);
         Self {
-            sram_ret: conditional_init!(&driver_config, sram_ret, crate::sram_ret::SramCtrl::new()),
+            sram_ret: conditional_init!(
+                &peripheral_config,
+                sram_ret,
+                crate::sram_ret::SramCtrl::new()
+            ),
             adc_ctrl: conditional_init!(
-                &driver_config,
+                &peripheral_config,
                 adc_ctrl,
                 lowrisc::adc_ctrl::AdcCtrl::new(crate::adc_ctrl::ADC_CTRL_BASE)
             ),
             aes: conditional_init!(
-                &driver_config,
+                &peripheral_config,
                 aes,
                 lowrisc::aes::Aes::new(crate::aes::AES_BASE)
             ),
             csrng: conditional_init!(
-                &driver_config,
+                &peripheral_config,
                 csrng,
                 lowrisc::csrng::CsRng::new(crate::csrng::CSRNG_BASE)
             ),
             edn0: conditional_init!(
-                &driver_config,
+                &peripheral_config,
                 edn0,
                 lowrisc::edn::Edn::new(crate::edn::EDN0_BASE)
             ),
             edn1: conditional_init!(
-                &driver_config,
+                &peripheral_config,
                 edn1,
                 lowrisc::edn::Edn::new(crate::edn::EDN1_BASE)
             ),
             entropy_src: conditional_init!(
-                &driver_config,
+                &peripheral_config,
                 entropy_src,
                 lowrisc::entropy_src::EntropySrc::new(crate::entropy_src::ENTROPY_SRC_BASE,)
             ),
             hmac: conditional_init!(
-                &driver_config,
+                &peripheral_config,
                 hmac,
                 lowrisc::hmac::Hmac::new(crate::hmac::HMAC0_BASE)
             ),
             keymgr: conditional_init!(
-                &driver_config,
+                &peripheral_config,
                 keymgr,
                 lowrisc::keymgr::Keymgr::new(crate::keymgr::KEYMGR_BASE)
             ),
             kmac: conditional_init!(
-                &driver_config,
+                &peripheral_config,
                 kmac,
                 lowrisc::kmac::Kmac::new(crate::kmac::KMAC_BASE)
             ),
-            clkmgr: conditional_init!(&driver_config, clkmgr, crate::clkmgr::Clkmgr::new()),
+            clkmgr: conditional_init!(&peripheral_config, clkmgr, crate::clkmgr::Clkmgr::new()),
             usb: conditional_init!(
-                &driver_config,
+                &peripheral_config,
                 usb,
                 lowrisc::usb::Usb::new(crate::usbdev::USB0_BASE)
             ),
             uart0: conditional_init!(
-                &driver_config,
+                &peripheral_config,
                 uart0,
                 lowrisc::uart::Uart::new(crate::uart::UART0_BASE, CFG::PERIPHERAL_FREQ)
             ),
             uart1: conditional_init!(
-                &driver_config,
+                &peripheral_config,
                 uart1,
                 lowrisc::uart::Uart::new(crate::uart::UART1_BASE, CFG::PERIPHERAL_FREQ)
             ),
             uart2: conditional_init!(
-                &driver_config,
+                &peripheral_config,
                 uart2,
                 lowrisc::uart::Uart::new(crate::uart::UART2_BASE, CFG::PERIPHERAL_FREQ)
             ),
             uart3: conditional_init!(
-                &driver_config,
+                &peripheral_config,
                 uart3,
                 lowrisc::uart::Uart::new(crate::uart::UART3_BASE, CFG::PERIPHERAL_FREQ)
             ),
             otbn: conditional_init!(
-                &driver_config,
+                &peripheral_config,
                 otbn,
                 lowrisc::otbn::Otbn::new(crate::otbn::OTBN_BASE)
             ),
             otp: conditional_init!(
-                &driver_config,
+                &peripheral_config,
                 otp,
                 lowrisc::otp::Otp::new(crate::otp::OTP_BASE)
             ),
-            gpio_port: conditional_init!(
-                &driver_config,
-                gpio_port,
-                crate::gpio::Port::new::<PINMUX>()
-            ),
+            gpio_port: if peripheral_config.gpio_port.driver_enabled {
+                Some(crate::gpio::Port::new::<PINMUX>())
+            } else {
+                None
+            },
             i2c0: conditional_init!(
-                &driver_config,
+                &peripheral_config,
                 i2c0,
                 lowrisc::i2c::I2c::new(crate::i2c::I2C0_BASE, (1 / CFG::CPU_FREQ) * 1000 * 1000)
             ),
             i2c1: conditional_init!(
-                &driver_config,
+                &peripheral_config,
                 i2c1,
                 lowrisc::i2c::I2c::new(crate::i2c::I2C1_BASE, (1 / CFG::CPU_FREQ) * 1000 * 1000)
             ),
             i2c2: conditional_init!(
-                &driver_config,
+                &peripheral_config,
                 i2c2,
                 lowrisc::i2c::I2c::new(crate::i2c::I2C2_BASE, (1 / CFG::CPU_FREQ) * 1000 * 1000)
             ),
             spi_host0: conditional_init!(
-                &driver_config,
+                &peripheral_config,
                 spi_host0,
                 lowrisc::spi_host::SpiHost::new(crate::spi_host::SPIHOST0_BASE, CFG::CPU_FREQ,)
             ),
             spi_host1: conditional_init!(
-                &driver_config,
+                &peripheral_config,
                 spi_host1,
                 lowrisc::spi_host::SpiHost::new(crate::spi_host::SPIHOST1_BASE, CFG::CPU_FREQ,)
             ),
             spi_device: conditional_init!(
-                &driver_config,
+                &peripheral_config,
                 spi_device,
                 lowrisc::spi_device::SpiDevice::new(crate::spi_device::SPIDEVICE_BASE)
             ),
             flash_ctrl: conditional_init!(
-                &driver_config,
+                &peripheral_config,
                 flash_ctrl,
                 crate::flash_ctrl::FlashCtrl::new(flash_memory_protection_configuration)
             ),
-            watchdog: conditional_init!(&driver_config, watchdog, &*addr_of!(AON_TIMER)),
+            watchdog: conditional_init!(&peripheral_config, watchdog, &*addr_of!(AON_TIMER)),
             sensor_ctrl: conditional_init!(
-                &driver_config,
+                &peripheral_config,
                 sensor_ctrl,
                 crate::sensor_ctrl::SensorCtrl::new()
             ),
             sysreset: conditional_init!(
-                &driver_config,
+                &peripheral_config,
                 sysreset,
                 lowrisc::sysrst_ctrl::SysRstCtrl::new(SYSRST_CTRL_AON_BASE_ADDR)
             ),
             timer: conditional_init!(
-                &driver_config,
+                &peripheral_config,
                 timer,
                 RvTimer::new(
                     unsafe {
@@ -295,13 +323,17 @@ impl<CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig>
                     CFG::PERIPHERAL_FREQ,
                 )
             ),
-            alert_handler: conditional_init!(&driver_config, alert_handler, AlertHandler::new()),
+            alert_handler: conditional_init!(
+                &peripheral_config,
+                alert_handler,
+                AlertHandler::new()
+            ),
             pattgen: conditional_init!(
-                &driver_config,
+                &peripheral_config,
                 pattgen,
                 lowrisc::pattgen::PattGen::new(crate::pattgen::PATTGEN_BASE)
             ),
-            rst_mgmt: conditional_init!(&driver_config, rst_mgmt, RstMgr::new()),
+            rst_mgmt: conditional_init!(&peripheral_config, rst_mgmt, RstMgr::new()),
             _cfg: PhantomData,
             _pinmux: PhantomData,
         }
