@@ -73,10 +73,10 @@ pub struct SRCKeyInterruptConfig {
 /// struct that holds the Allowed Output Pin State feauture's configuration
 /// ::default() returns configuration that disables this feature
 ///
-/// These fields configure which pins are allowed to be overriden, not which
-/// are actually overriden. Each signal can be allowed to be overriden to low
+/// These fields configure which pins are allowed to be overridden, not which
+/// are actually overridden. Each signal can be allowed to be overridden to low
 /// level if the associated field ending with '_0' is set and each signal can
-/// be allowed to be overriden to high level if the associated field ending wiht
+/// be allowed to be overridden to high level if the associated field ending with
 /// '_1' is set.
 #[derive(Debug, PartialEq, Eq, Default)]
 pub struct SRCAllowedPinConfig {
@@ -340,7 +340,7 @@ pub trait OpenTitanSysRstr {
     /// * `SRCAllowedPinConfig` how the circuit is configured to behave (see `SRCAllowedPinConfig` documentation )
     fn get_allowed_override_pin_state_confiugration(&self) -> SRCAllowedPinConfig;
 
-    /// override one of the output pins to a certain state or disable the overriding. This will work only if the pin was configured to be allowed to be overriden.
+    /// override one of the output pins to a certain state or disable the overriding. This will work only if the pin was configured to be allowed to be overridden.
     /// # Parameters
     /// * `pin`: which output pin to override
     /// * `state: Some(logic_level)`: override pin to logic_level,
