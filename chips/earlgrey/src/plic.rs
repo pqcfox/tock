@@ -81,28 +81,28 @@ impl Plic {
             .write(THRESHOLD0::THRESHOLD0.val(1));
     }
 
-    /// Enable specific interrupt.
-    pub fn enable(&self, index: u32) {
-        if index >= PLIC_IRQ_NUM as u32 {
-            panic!("Invalid IRQ: {}", index);
-        };
-        // CAST: |usize| == |u32| on RV32I
-        let offset = (index / 32) as usize;
-        let mask = 1 << (index % 32);
-
-        self.registers.ie0[offset].set(self.registers.ie0[offset].get() | mask);
-
-        // Set the max priority for this interrupt.
-        //
-        // CAST: |usize| == |u32| on RV32I
-        self.set_priority(index as usize, 3);
-
-        // Accept this interrupt (interrupt priority set above is < than CPU
-        // threshold)
-        self.registers
-            .threshold0
-            .write(THRESHOLD0::THRESHOLD0.val(1));
-    }
+    //    /// Enable specific interrupt.
+    //    pub fn enable(&self, index: u32) {
+    //        if index >= PLIC_IRQ_NUM as u32 {
+    //            panic!("Invalid IRQ: {}", index);
+    //        };
+    //        // CAST: |usize| == |u32| on RV32I
+    //        let offset = (index / 32) as usize;
+    //        let mask = 1 << (index % 32);
+    //
+    //        self.registers.ie0[offset].set(self.registers.ie0[offset].get() | mask);
+    //
+    //        // Set the max priority for this interrupt.
+    //        //
+    //        // CAST: |usize| == |u32| on RV32I
+    //        self.set_priority(index as usize, 3);
+    //
+    //        // Accept this interrupt (interrupt priority set above is < than CPU
+    //        // threshold)
+    //        self.registers
+    //            .threshold0
+    //            .write(THRESHOLD0::THRESHOLD0.val(1));
+    //    }
 
     /// Disable specific interrupt.
     pub fn disable(&self, index: u32) {
