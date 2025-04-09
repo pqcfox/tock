@@ -10,7 +10,7 @@
 #![cfg_attr(not(doc), no_main)]
 #![deny(missing_docs)]
 
-use core::ptr::addr_of_mut;
+use core::ptr::{addr_of, addr_of_mut};
 
 use kernel::component::Component;
 use kernel::debug;
@@ -103,7 +103,7 @@ pub unsafe fn main() {
     // RAW 802.15.4
     //--------------------------------------------------------------------------
 
-    let device_id = nrf52840::ficr::FICR_INSTANCE.id();
+    let device_id = (*addr_of!(nrf52840::ficr::FICR_INSTANCE)).id();
 
     let eui64 = components::eui64::Eui64Component::new(u64::from_le_bytes(device_id))
         .finalize(components::eui64_component_static!());
@@ -124,15 +124,15 @@ pub unsafe fn main() {
     const SCREEN_I2C_SDA_PIN: Pin = Pin::P1_10;
     const SCREEN_I2C_SCL_PIN: Pin = Pin::P1_11;
 
-    let i2c_bus = components::i2c::I2CMuxComponent::new(&nrf52840_peripherals.nrf52.twi0, None)
+    let i2c_bus = components::i2c::I2CMuxComponent::new(&nrf52840_peripherals.nrf52.twi1, None)
         .finalize(components::i2c_mux_component_static!(nrf52840::i2c::TWI));
-    nrf52840_peripherals.nrf52.twi0.configure(
+    nrf52840_peripherals.nrf52.twi1.configure(
         nrf52840::pinmux::Pinmux::new(SCREEN_I2C_SCL_PIN as u32),
         nrf52840::pinmux::Pinmux::new(SCREEN_I2C_SDA_PIN as u32),
     );
     nrf52840_peripherals
         .nrf52
-        .twi0
+        .twi1
         .set_speed(nrf52840::i2c::Speed::K400);
 
     // I2C address is b011110X, and on this board D/C̅ is GND.

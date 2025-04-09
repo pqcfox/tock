@@ -14,7 +14,7 @@ pub struct TestRunner<'a> {
     pub is_test_failed: bool,
 }
 
-impl<'a> Write for TestRunner<'a> {
+impl Write for TestRunner<'_> {
     fn write_str(&mut self, string: &str) -> core::fmt::Result {
         self.printer.map(|funct| funct(string));
         Ok(())

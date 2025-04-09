@@ -4,8 +4,6 @@
 
 # Makefile for building the tock kernel for the OpenTitan platform
 
-TARGET=riscv32imc-unknown-none-elf
-PLATFORM=earlgrey-cw310
 FLASHID=--dev-id="0403:6010"
 RISC_PREFIX ?= riscv64-linux-gnu
 QEMU ?= ../../../tools/qemu/build/qemu-system-riscv32
@@ -28,6 +26,20 @@ ifneq ($(BOARD_CONFIGURATION),)
 else
 	FPGA_FLAGS += --no-default-features
 endif
+
+.PHONY: check
+check:
+	$(Q)$(CARGO) check $(VERBOSE_FLAGS) $(CARGO_FLAGS)
+
+.PHONY: $(TARGET_PATH)/release/$(PLATFORM)
+$(TARGET_PATH)/release/$(PLATFORM):
+	$(Q)$(CARGO) build $(VERBOSE_FLAGS) $(CARGO_FLAGS) --release
+	$(Q)$(SIZE) $(SIZE_FLAGS) $@
+
+.PHONY: $(TARGET_PATH)/debug/$(PLATFORM)
+$(TARGET_PATH)/debug/$(PLATFORM):
+	$(Q)$(CARGO) build $(VERBOSE_FLAGS) $(CARGO_FLAGS)
+	$(Q)$(SIZE) $(SIZE_FLAGS) $@
 
 # Build test crates with the `panic = "abort"` strategy. Tests use `unwind` by
 # default which causes incompatability with `core` built via `-Zbuild-std`.
@@ -105,7 +117,8 @@ verilator: $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/$(PLATFORM).elf
 	$(RISC_PREFIX)-objcopy $^ $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/$(PLATFORM)_verilator.elf
 ifneq ($(APP),)
 		$(info [CW-130: Verilator]: Linking App)
-		$(RISC_PREFIX)-objcopy --update-section .apps=$(APP) $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/$(PLATFORM)_verilator.elf $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/$(PLATFORM)_verilator.elf
+		$(RISC_PREFIX)-objcopy --set-section-flags .apps=LOAD,ALLOC $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/$(PLATFORM)_verilator.elf $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/$(PLATFORM)_verilator.elf
+		$(RISC_PREFIX)-objcopy --update-section .apps=$(APP) $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/$(PLATFORM)_verilator.elf
 endif
 	$(info [CW-130: Verilator]: Starting)
 	$(RISC_PREFIX)-objcopy --output-target=binary $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/$(PLATFORM)_verilator.elf $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/$(PLATFORM)_verilator.bin
@@ -124,20 +137,14 @@ ifneq ($(OPENTITAN_TREE),)
 endif
 	mkdir -p $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/deps/
 	$(Q)cp test_layout.ld $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/deps/layout.ld
-	$(Q)cp ../../kernel_layout.ld $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/
+	$(Q)cp ../../build_scripts/tock_kernel_layout.ld $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/
 # Not all the tests whose feature flags are listed here will
 # necessarily be run; some are hard-coded to ignore the default "qemu"
 # feature because QEMU cannot emulate them.
 	$(Q)RUSTFLAGS="$(RUSTC_FLAGS_TOCK)" TOCK_ROOT_DIRECTORY=${TOCK_ROOT_DIRECTORY} QEMU_ENTRY_POINT=${QEMU_ENTRY_POINT} TARGET=${TARGET} $(CARGO) test $(CARGO_FLAGS_TOCK) $(NO_RUN) --bin $(PLATFORM) --release --features=test_sram_ret,test_sysrst_ctrl,test_aon_timer,test_alerthandler,test_resetmanager,test_otp,test_pattgen,test_rv_timer,test_clkmgr
 
 test-hardware: ot-check
-	mkdir -p $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/deps/
-	$(Q)cp test_layout.ld $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/deps/layout.ld
-	$(Q)cp ../../kernel_layout.ld $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/
-	$(Q)RUSTFLAGS="$(RUSTC_FLAGS_TOCK)" OBJCOPY=$(RISC_PREFIX)-objcopy TOCK_ROOT_DIRECTORY=${TOCK_ROOT_DIRECTORY} TARGET=${TARGET} $(CARGO) test $(CARGO_FLAGS_TOCK) $(NO_RUN) --bin $(PLATFORM) --release --features=hardware_tests
+	$(Q)OBJCOPY=$(RISC_PREFIX)-objcopy TOCK_ROOT_DIRECTORY=${TOCK_ROOT_DIRECTORY} TARGET=${TARGET} LINKER_SCRIPT_OVERRIDE=test_layout.ld $(CARGO) test $(CARGO_FLAGS) $(NO_RUN) --bin $(PLATFORM) --release --features=hardware_tests
 
 test-verilator: ot-check
-	mkdir -p $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/deps/
-	$(Q)cp test_layout.ld $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/deps/layout.ld
-	$(Q)cp ../../kernel_layout.ld $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/
-	$(Q)RUSTFLAGS="$(RUSTC_FLAGS_TOCK)" VERILATOR="yes" OBJCOPY=$(RISC_PREFIX)-objcopy TOCK_ROOT_DIRECTORY=${TOCK_ROOT_DIRECTORY} TARGET=${TARGET} $(CARGO) test $(CARGO_FLAGS_TOCK) $(NO_RUN) --bin $(PLATFORM) --release --features=hardware_tests,sim_verilator
+	$(Q)VERILATOR="yes" OBJCOPY=$(RISC_PREFIX)-objcopy TOCK_ROOT_DIRECTORY=${TOCK_ROOT_DIRECTORY} TARGET=${TARGET} LINKER_SCRIPT_OVERRIDE=test_layout.ld $(CARGO) test $(CARGO_FLAGS) $(NO_RUN) --bin $(PLATFORM) --release --features=hardware_tests,sim_verilator

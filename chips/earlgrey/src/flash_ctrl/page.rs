@@ -88,6 +88,7 @@ impl<'a> DataFlashCtrlPage<'a> {
     /// # Return value
     ///
     /// The underlying [RawFlashCtrlPage]
+    #[allow(clippy::wrong_self_convention)]
     pub(super) fn to_raw_page(self) -> &'a mut RawFlashCtrlPage {
         self.raw_page
     }
@@ -154,6 +155,7 @@ impl<'a> InfoFlashCtrlPage<'a> {
     /// # Return value
     ///
     /// The underlying [RawFlashCtrlPage]
+    #[allow(clippy::wrong_self_convention)]
     pub(super) fn to_raw_page(self) -> &'a mut RawFlashCtrlPage {
         self.raw_page
     }
@@ -230,6 +232,7 @@ impl<'a> FlashCtrlPage<'a> {
     /// # Return value
     ///
     /// The underlying [RawFlashCtrlPage]
+    #[allow(clippy::wrong_self_convention)]
     pub(super) fn to_raw_page(self) -> &'a mut RawFlashCtrlPage {
         match self {
             FlashCtrlPage::DataPage(data_page) => data_page.to_raw_page(),

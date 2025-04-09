@@ -10,9 +10,12 @@ edition.workspace = true
 license = "Apache-2.0 OR MIT"
 
 [dependencies]
+capsules-core = { path = "../../capsules/core", optional = true }
 rv32i = { path = "../../arch/rv32i" }
 kernel = { path = "../../kernel" }
-capsules-core = { path = "../../capsules/core", optional = true }
+
+[lints]
+workspace = true
 
 [features]
 # Enable when linking with OpenTitan FFI dependencies

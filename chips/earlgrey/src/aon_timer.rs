@@ -14,4 +14,4 @@ use crate::registers::top_earlgrey::AON_TIMER_AON_BASE_ADDR;
 pub const AON_TIMER_BASE: StaticRef<AonTimerRegisters> =
     unsafe { StaticRef::new(AON_TIMER_AON_BASE_ADDR as *const AonTimerRegisters) };
 
-pub static mut AON_TIMER: AonTimer<'static> = AonTimer::new(AON_TIMER_AON_BASE_ADDR);
+pub static mut AON_TIMER: AonTimer<'static> = AonTimer::new(AON_TIMER_BASE);

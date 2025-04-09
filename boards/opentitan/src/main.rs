@@ -79,6 +79,9 @@ mod otbn;
 pub mod pinmux_layout;
 #[cfg(test)]
 mod tests;
+
+/// Chip configuration.
+///
 /// The `earlgrey` chip crate supports multiple targets with slightly different
 /// configurations, which are encoded through implementations of the
 /// `earlgrey::chip_config::EarlGreyConfig` trait. This type provides different
@@ -1128,7 +1131,7 @@ unsafe fn setup() -> (
     let spi_controller = components::spi::SpiSyscallComponent::new(
         board_kernel,
         mux_spi,
-        0,
+        lowrisc::spi_host::CS(0),
         capsules_core::spi_controller::DRIVER_NUM,
     )
     .finalize(components::spi_syscall_component_static!(
@@ -1666,15 +1669,15 @@ unsafe fn setup() -> (
     let earlgrey = static_init!(
         EarlGrey,
         EarlGrey {
-            gpio,
             led,
+            gpio,
             console,
             alarm,
             info_flash,
-            rng,
             lldb,
             i2c_master,
             spi_controller,
+            rng,
             aes,
             usb,
             #[cfg(feature = "ffi")]

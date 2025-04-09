@@ -61,10 +61,9 @@ pub enum AonTimerInterrupt {
 }
 
 impl<'a> AonTimer<'a> {
-    pub const fn new(register_base: usize) -> AonTimer<'a> {
+    pub const fn new(base: StaticRef<AonTimerRegisters>) -> AonTimer<'a> {
         AonTimer {
-            // SAFETY: We need a reference here to the register base.
-            registers: unsafe { StaticRef::new(register_base as *const AonTimerRegisters) },
+            registers: base,
             wakeup_notification: OptionalCell::empty(),
             bark_notification: OptionalCell::empty(),
             aon_clk_freq: OptionalCell::empty(),
@@ -485,7 +484,7 @@ pub mod tests {
 }
 
 #[cfg(feature = "test_aon_timer")]
-impl<'a> platform::watchdog::WatchDog for AonTimer<'a> {
+impl platform::watchdog::WatchDog for AonTimer<'_> {
     /// Blank implementation for tests to that the kernel interactions do not interfere with the tests.
     fn setup(&self) {}
 
@@ -497,7 +496,7 @@ impl<'a> platform::watchdog::WatchDog for AonTimer<'a> {
 }
 
 #[cfg(not(feature = "test_aon_timer"))]
-impl<'a> platform::watchdog::WatchDog for AonTimer<'a> {
+impl platform::watchdog::WatchDog for AonTimer<'_> {
     /// The always-on timer will run on a ~125KHz (Verilator) or ~250kHz clock.
     /// The timers themselves are 32b wide, giving a maximum timeout
     /// window of roughly ~6 hours. For the wakeup timer, the pre-scaler

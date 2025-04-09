@@ -146,7 +146,7 @@ fn parse_combodetector_configuration(
             key1: first_field.read(CDCompConf::condition_key1) != 0,
             key2: first_field.read(CDCompConf::condition_key2) != 0,
         },
-        condition_time_us: condition_time_us,
+        condition_time_us,
         action: SRCComboDetectorAction {
             rst_req: first_field.read(CDCompConf::action_rst_req) != 0,
             ec_rst: first_field.read(CDCompConf::action_ec_rst) != 0,
@@ -538,7 +538,7 @@ impl<'a, Driver: OpenTitanSysRstr> SystemReset<'a, Driver> {
         grant: Grant<(), UpcallCount<{ upcalls::COUNT }>, AllowRoCount<0>, AllowRwCount<0>>,
     ) -> Self {
         Self {
-            driver: driver,
+            driver,
             grants: grant,
             owning_process: OptionalCell::empty(),
         }
@@ -721,7 +721,7 @@ impl<'a, Driver: OpenTitanSysRstr> SystemReset<'a, Driver> {
     }
 }
 
-impl<'a, Driver: OpenTitanSysRstr> SyscallDriver for SystemReset<'a, Driver> {
+impl<Driver: OpenTitanSysRstr> SyscallDriver for SystemReset<'_, Driver> {
     fn command(
         &self,
         command_num: usize,
@@ -845,7 +845,7 @@ impl<'a, Driver: OpenTitanSysRstr> SyscallDriver for SystemReset<'a, Driver> {
     }
 }
 
-impl<'a, Driver: OpenTitanSysRstr> OpenTitanSysRstrClient for SystemReset<'a, Driver> {
+impl<Driver: OpenTitanSysRstr> OpenTitanSysRstrClient for SystemReset<'_, Driver> {
     fn combo_detected(
         &self,
         input_pin_state: kernel::hil::opentitan_sysrst::SRCInputPinStatus,

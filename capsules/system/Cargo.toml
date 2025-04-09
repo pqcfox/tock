@@ -12,3 +12,6 @@ license = "Apache-2.0 OR MIT"
 [dependencies]
 kernel = { path = "../../kernel" }
 tock-tbf = { path = "../../libraries/tock-tbf" }
+
+[lints]
+workspace = true

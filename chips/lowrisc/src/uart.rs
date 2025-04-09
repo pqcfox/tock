@@ -493,7 +493,7 @@ impl<'a> hil::uart::ReceiveAdvanced<'a> for Uart<'a> {
     }
 }
 
-impl<'a> DeferredCallClient for Uart<'a> {
+impl DeferredCallClient for Uart<'_> {
     fn handle_deferred_call(&self) {
         self.consume_rx();
     }
@@ -503,7 +503,7 @@ impl<'a> DeferredCallClient for Uart<'a> {
     }
 }
 
-impl<'a> TransmitSynch for Uart<'a> {
+impl TransmitSynch for Uart<'_> {
     fn transmit_sync(&self, bytes: &[u8]) {
         self.transmit_sync(bytes);
     }

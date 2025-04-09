@@ -40,6 +40,7 @@ pub mod retention_ram;
 pub mod rng;
 pub mod screen;
 pub mod sensors;
+pub mod servo;
 pub mod spi;
 pub mod symmetric_encryption;
 pub mod text_screen;

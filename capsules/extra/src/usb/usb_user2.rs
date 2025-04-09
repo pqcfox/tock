@@ -24,6 +24,7 @@ use core::cell::Cell;
 pub const DRIVER_NUM: usize = capsules_core::driver::NUM::UsbUser2 as usize;
 
 #[repr(usize)]
+#[derive(Clone, Copy)]
 enum UpcallId {
     Transmit = 0,
     Receive = 1,
@@ -40,6 +41,7 @@ impl UpcallId {
 const UPCALL_COUNT: u8 = 3;
 
 #[repr(usize)]
+#[derive(Clone, Copy)]
 enum ReadOnlyBufferId {
     Transmit = 0,
 }
@@ -54,6 +56,7 @@ impl ReadOnlyBufferId {
 const ALLOW_RO_COUNT: u8 = 1;
 
 #[repr(usize)]
+#[derive(Clone, Copy)]
 enum ReadWriteBufferId {
     Receive = 0,
 }

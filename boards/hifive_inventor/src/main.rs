@@ -127,7 +127,7 @@ unsafe fn start() -> (
     &'static e310_g003::chip::E310x<'static, E310G003DefaultPeripherals<'static>>,
 ) {
     // only machine mode
-    rv32i::configure_trap_handler(rv32i::PermissionMode::Machine);
+    rv32i::configure_trap_handler();
 
     let peripherals = static_init!(
         E310G003DefaultPeripherals,
@@ -280,15 +280,13 @@ unsafe fn start() -> (
         VirtualSchedulerTimer<VirtualMuxAlarm<'static, e310_g003::chip::E310xClint<'static>>>,
         VirtualSchedulerTimer::new(systick_virtual_alarm)
     );
-
     let hifive1 = HiFiveInventor {
-        console: console,
-        alarm: alarm,
-        lldb: lldb,
+        console,
+        lldb,
+        alarm,
         scheduler,
         scheduler_timer,
     };
-
     kernel::process::load_processes(
         board_kernel,
         chip,

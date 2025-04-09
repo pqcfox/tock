@@ -87,6 +87,8 @@ pub enum NUM {
     SoundPressure         = 0x60006,
     AirQuality            = 0x60007,
     Pressure              = 0x60008,
+    Distance              = 0x60009,
+    Moisture              = 0x6000A,
 
     // Sensor ICs
     Tsl2561               = 0x70000,
@@ -113,10 +115,11 @@ pub enum NUM {
     KeyboardHid           = 0x90005,
     DateTime              = 0x90007,
     CycleCount            = 0x90008,
-    Pattgen               = 0x90009,
-    ResetManager          = 0x9000A,
-    OpenTitanAlertHandler = 0x9000B,
-    OpenTitanSysRst       = 0x9000C,
+    Servo                 = 0x90009,
+    Pattgen               = 0x9000A,
+    ResetManager          = 0x9000B,
+    OpenTitanAlertHandler = 0x9000C,
+    OpenTitanSysRst       = 0x9000D,
     OpenTitanAttestation  = 0x9000E,
 }
 }

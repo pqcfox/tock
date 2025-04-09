@@ -360,7 +360,7 @@ impl<'a> SysRstCtrl<'a> {
     }
 }
 
-impl<'a> OpenTitanSysRstr for SysRstCtrl<'a> {
+impl OpenTitanSysRstr for SysRstCtrl<'_> {
     fn get_input_state(&self) -> kernel::hil::opentitan_sysrst::SRCInputPinStatus {
         let pin_value = self.registers.pin_in_value.get();
         SRCInputPinStatus::new(pin_value)

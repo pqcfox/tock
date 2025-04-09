@@ -13,3 +13,6 @@ license = "Apache-2.0 OR MIT"
 kernel = { path = "../../kernel" }
 enum_primitive = { path = "../../libraries/enum_primitive" }
 tickv = { path = "../../libraries/tickv" }
+
+[lints]
+workspace = true

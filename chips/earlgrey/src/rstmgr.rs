@@ -85,9 +85,9 @@ impl TryFrom<u32> for RstMgrReason {
 }
 
 /// convert MCU specific `ResetManagerReason` into universal `ResetReason`
-impl Into<Option<ResetReason>> for RstMgrReason {
-    fn into(self) -> Option<ResetReason> {
-        match self {
+impl From<RstMgrReason> for Option<ResetReason> {
+    fn from(value: RstMgrReason) -> Self {
+        match value {
             RstMgrReason::None => None,
             RstMgrReason::PoR => Some(ResetReason::PowerOnReset),
             RstMgrReason::LowPowerExit => Some(ResetReason::LowPowerExit),

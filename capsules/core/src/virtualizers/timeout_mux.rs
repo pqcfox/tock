@@ -13,8 +13,10 @@ use kernel::utilities::cells::OptionalCell;
 use kernel::ErrorCode;
 
 /// A lock that ensures multiple applications cannot incorrectly interleave
-/// calls to asynchronous APIs. The underlying implementation must not be
-/// interrupt-driven and instead expose an API to check the status.
+/// calls to asynchronous APIs.
+///
+/// The underlying implementation must not be interrupt-driven and instead
+/// expose an API to check the status.
 ///
 /// In order to operate without a heap and without requiring all submitted
 /// jobs to have a 'static lifetime, this type requires all submitted jobs

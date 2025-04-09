@@ -81,6 +81,7 @@ impl TryFrom<usize> for Command {
 
 /// IDs of all possible upcalls
 #[repr(usize)]
+#[derive(Clone, Copy)]
 enum UpcallId {
     PattGenDone,
     CapsuleUnlocked,

@@ -90,9 +90,10 @@ pub struct EarlGreyDefaultPeripherals<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyP
     _pinmux: PhantomData<PINMUX>,
 }
 
-impl<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig>
-    EarlGreyDefaultPeripherals<'a, CFG, PINMUX>
+impl<CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig>
+    EarlGreyDefaultPeripherals<'_, CFG, PINMUX>
 {
+    #[allow(static_mut_refs)]
     pub unsafe fn new(
         flash_memory_protection_configuration: crate::flash_ctrl::MemoryProtectionConfiguration,
     ) -> Self {
@@ -412,6 +413,7 @@ fn handle_exception(exception: mcause::Exception) {
     }
 }
 
+#[allow(static_mut_refs)]
 unsafe fn handle_interrupt(intr: mcause::Interrupt) {
     match intr {
         mcause::Interrupt::UserSoft
@@ -439,12 +441,12 @@ unsafe fn handle_interrupt(intr: mcause::Interrupt) {
             // Once claimed this interrupt won't fire until it's completed
             // NOTE: The interrupt is no longer pending in the PLIC
             loop {
-                let interrupt = PLIC.next_pending();
+                let interrupt = (*addr_of!(PLIC)).next_pending();
 
                 match interrupt {
                     Some(irq) => {
                         // Safe as interrupts are disabled
-                        PLIC.save_interrupt(irq);
+                        (*addr_of!(PLIC)).save_interrupt(irq);
                     }
                     None => {
                         // Enable generic interrupts
@@ -491,6 +493,7 @@ pub unsafe extern "C" fn start_trap_rust() {
 }
 
 /// Function that gets called if an interrupt occurs while an app was running.
+///
 /// mcause is passed in, and this function should correctly handle disabling the
 /// interrupt that fired so that it does not trigger again.
 #[export_name = "_disable_interrupt_trap_rust_from_app"]
@@ -506,28 +509,34 @@ pub unsafe extern "C" fn disable_interrupt_trap_handler(mcause_val: u32) {
 }
 
 pub unsafe fn configure_trap_handler() {
+    // The common _start_trap handler uses mscratch to determine
+    // whether we are executing kernel or process code. Set to `0` to
+    // indicate we're in the kernel right now.
+    CSR.mscratch.set(0);
+
     // The Ibex CPU does not support non-vectored trap entries.
-    CSR.mtvec
-        .write(mtvec::trap_addr.val(_start_trap_vectored as usize >> 2) + mtvec::mode::Vectored)
+    CSR.mtvec.write(
+        mtvec::trap_addr.val(_earlgrey_start_trap_vectored as usize >> 2) + mtvec::mode::Vectored,
+    );
 }
 
 // Mock implementation for crate tests that does not include the section
 // specifier, as the test will not use our linker script, and the host
 // compilation environment may not allow the section name.
-#[cfg(not(all(target_arch = "riscv32", target_os = "none")))]
-pub extern "C" fn _start_trap_vectored() {
+#[cfg(not(any(doc, all(target_arch = "riscv32", target_os = "none"))))]
+pub extern "C" fn _earlgrey_start_trap_vectored() {
     use core::hint::unreachable_unchecked;
     unsafe {
         unreachable_unchecked();
     }
 }
 
-#[cfg(all(target_arch = "riscv32", target_os = "none"))]
+#[cfg(any(doc, all(target_arch = "riscv32", target_os = "none")))]
 extern "C" {
-    pub fn _start_trap_vectored();
+    pub fn _earlgrey_start_trap_vectored();
 }
 
-#[cfg(all(target_arch = "riscv32", target_os = "none"))]
+#[cfg(any(doc, all(target_arch = "riscv32", target_os = "none")))]
 // According to the Ibex user manual:
 // [NMI] has interrupt ID 31, i.e., it has the highest priority of all
 // interrupts and the core jumps to the trap-handler base address (in
@@ -539,39 +548,40 @@ core::arch::global_asm!(
     "
             .section .riscv.trap_vectored, \"ax\"
             .globl _start_trap_vectored
-          _start_trap_vectored:
+          _earlgrey_start_trap_vectored:
 
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-            j _start_trap
-        "
+            j {start_trap}
+            j {start_trap}
+            j {start_trap}
+            j {start_trap}
+            j {start_trap}
+            j {start_trap}
+            j {start_trap}
+            j {start_trap}
+            j {start_trap}
+            j {start_trap}
+            j {start_trap}
+            j {start_trap}
+            j {start_trap}
+            j {start_trap}
+            j {start_trap}
+            j {start_trap}
+            j {start_trap}
+            j {start_trap}
+            j {start_trap}
+            j {start_trap}
+            j {start_trap}
+            j {start_trap}
+            j {start_trap}
+            j {start_trap}
+            j {start_trap}
+            j {start_trap}
+            j {start_trap}
+            j {start_trap}
+            j {start_trap}
+            j {start_trap}
+            j {start_trap}
+            j {start_trap}
+    ",
+    start_trap = sym rv32i::_start_trap,
 );

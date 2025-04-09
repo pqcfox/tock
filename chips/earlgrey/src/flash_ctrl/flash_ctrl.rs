@@ -83,9 +83,9 @@ enum ReadWriteFlashOperationType {
     Write,
 }
 
-impl Into<FieldValue<u32, CONTROL::Register>> for ReadWriteFlashOperationType {
-    fn into(self) -> FieldValue<u32, CONTROL::Register> {
-        match self {
+impl From<ReadWriteFlashOperationType> for FieldValue<u32, CONTROL::Register> {
+    fn from(value: ReadWriteFlashOperationType) -> Self {
+        match value {
             ReadWriteFlashOperationType::Read => CONTROL::OP::READ,
             ReadWriteFlashOperationType::Write => CONTROL::OP::PROG,
         }
@@ -103,9 +103,9 @@ enum FlashOperationType {
     Erase,
 }
 
-impl Into<FieldValue<u32, CONTROL::Register>> for FlashOperationType {
-    fn into(self) -> FieldValue<u32, CONTROL::Register> {
-        match self {
+impl From<FlashOperationType> for FieldValue<u32, CONTROL::Register> {
+    fn from(value: FlashOperationType) -> Self {
+        match value {
             FlashOperationType::Read => CONTROL::OP::READ,
             FlashOperationType::Write => CONTROL::OP::PROG,
             FlashOperationType::Erase => CONTROL::OP::ERASE,

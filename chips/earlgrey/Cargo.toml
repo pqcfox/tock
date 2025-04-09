@@ -14,6 +14,9 @@ lowrisc = { path = "../lowrisc" }
 rv32i = { path = "../../arch/rv32i" }
 kernel = { path = "../../kernel" }
 
+[lints]
+workspace = true
+
 [features]
 # Enable when linking with OpenTitan FFI dependencies
 ffi = []

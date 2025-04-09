@@ -236,10 +236,7 @@ impl<'a> PageChunkIterator<'a> {
     /// starting flash address
     /// + None: the iterator is empty
     pub(super) fn next_immutable(&mut self) -> Option<ImmutablePageChunkIteratorItem<'a>> {
-        let chunk = match self.chunk_list.get(self.current_chunk_index) {
-            Some(chunk) => chunk,
-            None => return None,
-        };
+        let chunk = self.chunk_list.get(self.current_chunk_index)?;
 
         // SAFETY: The compiler complains that the returned lifetime of chunk is the lifetime of
         // self instead of 'a. However, since the extracted Chunk is from a chunk list having the
@@ -271,10 +268,7 @@ impl<'a> PageChunkIterator<'a> {
     /// + Some(mutable_page_chunk_iterator_item): the next mutable chunk
     /// + None: the iterator is empty
     pub(super) fn next_mutable(&mut self) -> Option<&'a mut Chunk> {
-        let chunk = match self.chunk_list.get_mut(self.current_chunk_index) {
-            Some(chunk) => chunk,
-            None => return None,
-        };
+        let chunk = self.chunk_list.get_mut(self.current_chunk_index)?;
 
         // SAFETY: The compiler complains that the returned lifetime of chunk is the lifetime of
         // self instead of 'a. However, since the extracted Chunk is from a chunk list having the
@@ -306,6 +300,7 @@ impl<'a> PageChunkIterator<'a> {
     /// # Return value
     ///
     /// The corresponding [RawFlashCtrlPage] for this iterator.
+    #[allow(clippy::wrong_self_convention)]
     pub(super) fn to_raw_page(self) -> &'a mut RawFlashCtrlPage {
         // SAFETY: Since RawFlashCtrlPage is marked as repr(C), transmuting between
         // [Chunk; CHUNKS_PER_PAGE] and RawFlashCtrlPage is safe
