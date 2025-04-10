@@ -12,8 +12,13 @@ use crate::config::{Capsule, Configuration};
 use crate::{
     AesCapsule, AlarmDriver, AlertHandlerCapsule, AsymmetricCryptoCapsule, AttestationCapsule,
     Console, HmacCapsule, I2CMasterDriver, InfoFlash, KvDriver, Led, Lldb, MuxAlarm, MuxUart,
-    OneshotDigestCapsule, PattgenCapsule, ResetManagerCapsule, RngCapsule, SpiCapsule,
-    SystemResetControllerCapsule, TemperatureCapsule, UsbCapsule, GPIO, IPC,
+    OneshotCshake128Capsule, OneshotCshake256Capsule, OneshotHmacSha256Capsule,
+    OneshotHmacSha384Capsule, OneshotHmacSha512Capsule, OneshotKmac128Capsule,
+    OneshotKmac256Capsule, OneshotSha256Capsule, OneshotSha384Capsule, OneshotSha3_224Capsule,
+    OneshotSha3_256Capsule, OneshotSha3_384Capsule, OneshotSha3_512Capsule, OneshotSha512Capsule,
+    OneshotShake128Capsule, OneshotShake256Capsule, PattgenCapsule, ResetManagerCapsule,
+    RngCapsule, SpiCapsule, SystemResetControllerCapsule, TemperatureCapsule, UsbCapsule, GPIO,
+    IPC,
 };
 use crate::{Chip, DefaultPeripherals, Platform, Scheduler};
 
@@ -141,11 +146,80 @@ impl<C: Chip> Context<C> {
                         p384.clone(),
                     ) as Rc<dyn crate::Capsule>);
                 }
-                Capsule::OneshotDigest { oneshot_digest } => {
+                Capsule::OneshotSha256 { oneshot_sha256 } => {
                     capsules
-                        .push(OneshotDigestCapsule::get(oneshot_digest.clone())
+                        .push(OneshotSha256Capsule::get(oneshot_sha256.clone())
                             as Rc<dyn crate::Capsule>);
                 }
+                Capsule::OneshotSha384 { oneshot_sha384 } => {
+                    capsules
+                        .push(OneshotSha384Capsule::get(oneshot_sha384.clone())
+                            as Rc<dyn crate::Capsule>);
+                }
+                Capsule::OneshotSha512 { oneshot_sha512 } => {
+                    capsules
+                        .push(OneshotSha512Capsule::get(oneshot_sha512.clone())
+                            as Rc<dyn crate::Capsule>);
+                }
+                Capsule::OneshotSha3_224 { oneshot_sha3_224 } => {
+                    capsules.push(OneshotSha3_224Capsule::get(oneshot_sha3_224.clone())
+                        as Rc<dyn crate::Capsule>);
+                }
+                Capsule::OneshotSha3_256 { oneshot_sha3_256 } => {
+                    capsules.push(OneshotSha3_256Capsule::get(oneshot_sha3_256.clone())
+                        as Rc<dyn crate::Capsule>);
+                }
+                Capsule::OneshotSha3_384 { oneshot_sha3_384 } => {
+                    capsules.push(OneshotSha3_384Capsule::get(oneshot_sha3_384.clone())
+                        as Rc<dyn crate::Capsule>);
+                }
+                Capsule::OneshotSha3_512 { oneshot_sha3_512 } => {
+                    capsules.push(OneshotSha3_512Capsule::get(oneshot_sha3_512.clone())
+                        as Rc<dyn crate::Capsule>);
+                }
+                Capsule::OneshotShake128 { oneshot_shake128 } => {
+                    capsules.push(OneshotShake128Capsule::get(oneshot_shake128.clone())
+                        as Rc<dyn crate::Capsule>);
+                }
+                Capsule::OneshotShake256 { oneshot_shake256 } => {
+                    capsules.push(OneshotShake256Capsule::get(oneshot_shake256.clone())
+                        as Rc<dyn crate::Capsule>);
+                }
+                Capsule::OneshotCshake128 { oneshot_cshake128 } => {
+                    capsules.push(OneshotCshake128Capsule::get(oneshot_cshake128.clone())
+                        as Rc<dyn crate::Capsule>);
+                }
+                Capsule::OneshotCshake256 { oneshot_cshake256 } => {
+                    capsules.push(OneshotCshake256Capsule::get(oneshot_cshake256.clone())
+                        as Rc<dyn crate::Capsule>);
+                }
+                Capsule::OneshotHmacSha256 {
+                    oneshot_hmac_sha256,
+                } => {
+                    capsules.push(OneshotHmacSha256Capsule::get(oneshot_hmac_sha256.clone())
+                        as Rc<dyn crate::Capsule>);
+                }
+                Capsule::OneshotHmacSha384 {
+                    oneshot_hmac_sha384,
+                } => {
+                    capsules.push(OneshotHmacSha384Capsule::get(oneshot_hmac_sha384.clone())
+                        as Rc<dyn crate::Capsule>);
+                }
+                Capsule::OneshotHmacSha512 {
+                    oneshot_hmac_sha512,
+                } => {
+                    capsules.push(OneshotHmacSha512Capsule::get(oneshot_hmac_sha512.clone())
+                        as Rc<dyn crate::Capsule>);
+                }
+                Capsule::OneshotKmac128 { oneshot_kmac128 } => {
+                    capsules.push(OneshotKmac128Capsule::get(oneshot_kmac128.clone())
+                        as Rc<dyn crate::Capsule>);
+                }
+                Capsule::OneshotKmac256 { oneshot_kmac256 } => {
+                    capsules.push(OneshotKmac256Capsule::get(oneshot_kmac256.clone())
+                        as Rc<dyn crate::Capsule>);
+                }
+
                 _ => unreachable!("Capsule context branch not set."),
             };
         }

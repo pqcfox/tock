@@ -8,8 +8,9 @@
 use super::{
     aes::Aes, alert_handler::AlertHandler, ble::BleAdvertisement, gpio::Gpio, pattgen::Pattgen,
     reset_manager::ResetManager, system_reset_controller::SystemResetController, timer::Timer,
-    uart::Uart, usb::Usb, AsymmetricCrypto, Attestation, Flash, Hmac, I2c, OneshotDigest, Rng, Spi,
-    Temperature,
+    uart::Uart, usb::Usb, AsymmetricCrypto, Attestation, Cshake128, Cshake256, Flash, Hmac,
+    HmacSha256, HmacSha384, HmacSha512, I2c, Kmac128, Kmac256, Rng, Sha256, Sha384, Sha3_224,
+    Sha3_256, Sha3_384, Sha3_512, Sha512, Shake128, Shake256, Spi, Temperature,
 };
 use crate::Component;
 use std::rc::Rc;
@@ -53,10 +54,31 @@ pub trait DefaultPeripherals: Component {
     type Usb: Usb + for<'de> serde::Deserialize<'de> + serde::Serialize + 'static;
     type ResetManager: ResetManager + for<'de> serde::Deserialize<'de> + serde::Serialize + 'static;
     type Attestation: Attestation + for<'de> serde::Deserialize<'de> + serde::Serialize + 'static;
-    type OneshotDigest: OneshotDigest
+    type OneshotSha256: Sha256 + for<'de> serde::Deserialize<'de> + serde::Serialize + 'static;
+    type OneshotSha384: Sha384 + for<'de> serde::Deserialize<'de> + serde::Serialize + 'static;
+    type OneshotSha512: Sha512 + for<'de> serde::Deserialize<'de> + serde::Serialize + 'static;
+    type OneshotSha3_224: Sha3_224 + for<'de> serde::Deserialize<'de> + serde::Serialize + 'static;
+    type OneshotSha3_256: Sha3_256 + for<'de> serde::Deserialize<'de> + serde::Serialize + 'static;
+    type OneshotSha3_384: Sha3_384 + for<'de> serde::Deserialize<'de> + serde::Serialize + 'static;
+    type OneshotSha3_512: Sha3_512 + for<'de> serde::Deserialize<'de> + serde::Serialize + 'static;
+    type OneshotShake128: Shake128 + for<'de> serde::Deserialize<'de> + serde::Serialize + 'static;
+    type OneshotShake256: Shake256 + for<'de> serde::Deserialize<'de> + serde::Serialize + 'static;
+    type OneshotCshake128: Cshake128 + for<'de> serde::Deserialize<'de> + serde::Serialize + 'static;
+    type OneshotCshake256: Cshake256 + for<'de> serde::Deserialize<'de> + serde::Serialize + 'static;
+    type OneshotHmacSha256: HmacSha256
         + for<'de> serde::Deserialize<'de>
         + serde::Serialize
         + 'static;
+    type OneshotHmacSha384: HmacSha384
+        + for<'de> serde::Deserialize<'de>
+        + serde::Serialize
+        + 'static;
+    type OneshotHmacSha512: HmacSha512
+        + for<'de> serde::Deserialize<'de>
+        + serde::Serialize
+        + 'static;
+    type OneshotKmac128: Kmac128 + for<'de> serde::Deserialize<'de> + serde::Serialize + 'static;
+    type OneshotKmac256: Kmac256 + for<'de> serde::Deserialize<'de> + serde::Serialize + 'static;
     type P256: AsymmetricCrypto + for<'de> serde::Deserialize<'de> + serde::Serialize + 'static;
     type P384: AsymmetricCrypto + for<'de> serde::Deserialize<'de> + serde::Serialize + 'static;
 
@@ -146,7 +168,59 @@ pub trait DefaultPeripherals: Component {
         Err(crate::Error::NoSupport)
     }
 
-    fn oneshot_digest(&self) -> Result<&[Rc<Self::OneshotDigest>], crate::Error> {
+    fn oneshot_sha256(&self) -> Result<&[Rc<Self::OneshotSha256>], crate::Error> {
+        Err(crate::Error::NoSupport)
+    }
+
+    fn oneshot_sha384(&self) -> Result<&[Rc<Self::OneshotSha384>], crate::Error> {
+        Err(crate::Error::NoSupport)
+    }
+
+    fn oneshot_sha512(&self) -> Result<&[Rc<Self::OneshotSha512>], crate::Error> {
+        Err(crate::Error::NoSupport)
+    }
+
+    fn oneshot_sha3_224(&self) -> Result<&[Rc<Self::OneshotSha3_224>], crate::Error> {
+        Err(crate::Error::NoSupport)
+    }
+
+    fn oneshot_sha3_256(&self) -> Result<&[Rc<Self::OneshotSha3_256>], crate::Error> {
+        Err(crate::Error::NoSupport)
+    }
+
+    fn oneshot_sha3_384(&self) -> Result<&[Rc<Self::OneshotSha3_384>], crate::Error> {
+        Err(crate::Error::NoSupport)
+    }
+
+    fn oneshot_sha3_512(&self) -> Result<&[Rc<Self::OneshotSha3_512>], crate::Error> {
+        Err(crate::Error::NoSupport)
+    }
+
+    fn oneshot_shake128(&self) -> Result<&[Rc<Self::OneshotShake128>], crate::Error> {
+        Err(crate::Error::NoSupport)
+    }
+    fn oneshot_shake256(&self) -> Result<&[Rc<Self::OneshotShake256>], crate::Error> {
+        Err(crate::Error::NoSupport)
+    }
+    fn oneshot_cshake128(&self) -> Result<&[Rc<Self::OneshotCshake128>], crate::Error> {
+        Err(crate::Error::NoSupport)
+    }
+    fn oneshot_cshake256(&self) -> Result<&[Rc<Self::OneshotCshake256>], crate::Error> {
+        Err(crate::Error::NoSupport)
+    }
+    fn oneshot_hmac_sha256(&self) -> Result<&[Rc<Self::OneshotHmacSha256>], crate::Error> {
+        Err(crate::Error::NoSupport)
+    }
+    fn oneshot_hmac_sha384(&self) -> Result<&[Rc<Self::OneshotHmacSha384>], crate::Error> {
+        Err(crate::Error::NoSupport)
+    }
+    fn oneshot_hmac_sha512(&self) -> Result<&[Rc<Self::OneshotHmacSha512>], crate::Error> {
+        Err(crate::Error::NoSupport)
+    }
+    fn oneshot_kmac128(&self) -> Result<&[Rc<Self::OneshotKmac128>], crate::Error> {
+        Err(crate::Error::NoSupport)
+    }
+    fn oneshot_kmac256(&self) -> Result<&[Rc<Self::OneshotKmac256>], crate::Error> {
         Err(crate::Error::NoSupport)
     }
 

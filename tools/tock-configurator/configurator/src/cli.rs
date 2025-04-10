@@ -347,13 +347,133 @@ fn process_capsule_config<C: parse::Chip>(
             update_temp
         ),
         "usb" => capsule_no_fields!(capsule_config, data, usb, Usb, USB, update_usb),
-        "oneshot_digest" => capsule_no_fields!(
+        "oneshot_sha256" => capsule_no_fields!(
             capsule_config,
             data,
-            oneshot_digest,
-            ONESHOT_DIGEST,
-            ONESHOT_DIGEST,
-            update_oneshot_digest
+            oneshot_sha256,
+            ONESHOT_SHA256,
+            ONESHOT_SHA256,
+            update_oneshot_sha256
+        ),
+        "oneshot_sha384" => capsule_no_fields!(
+            capsule_config,
+            data,
+            oneshot_sha384,
+            ONESHOT_SHA384,
+            ONESHOT_SHA384,
+            update_oneshot_sha384
+        ),
+        "oneshot_sha512" => capsule_no_fields!(
+            capsule_config,
+            data,
+            oneshot_sha512,
+            ONESHOT_SHA512,
+            ONESHOT_SHA512,
+            update_oneshot_sha512
+        ),
+        "oneshot_sha3_224" => capsule_no_fields!(
+            capsule_config,
+            data,
+            oneshot_sha3_224,
+            ONESHOT_SHA3_224,
+            ONESHOT_SHA3_224,
+            update_oneshot_sha3_224
+        ),
+        "oneshot_sha3_256" => capsule_no_fields!(
+            capsule_config,
+            data,
+            oneshot_sha3_256,
+            ONESHOT_SHA3_256,
+            ONESHOT_SHA3_256,
+            update_oneshot_sha3_256
+        ),
+        "oneshot_sha3_384" => capsule_no_fields!(
+            capsule_config,
+            data,
+            oneshot_sha3_384,
+            ONESHOT_SHA3_384,
+            ONESHOT_SHA3_384,
+            update_oneshot_sha3_384
+        ),
+        "oneshot_sha3_512" => capsule_no_fields!(
+            capsule_config,
+            data,
+            oneshot_sha3_512,
+            ONESHOT_SHA3_512,
+            ONESHOT_SHA3_512,
+            update_oneshot_sha3_512
+        ),
+        "oneshot_shake128" => capsule_no_fields!(
+            capsule_config,
+            data,
+            oneshot_shake128,
+            ONESHOT_SHAKE128,
+            ONESHOT_SHAKE128,
+            update_oneshot_shake128
+        ),
+        "oneshot_shake256" => capsule_no_fields!(
+            capsule_config,
+            data,
+            oneshot_shake256,
+            ONESHOT_SHAKE256,
+            ONESHOT_SHAKE256,
+            update_oneshot_shake256
+        ),
+        "oneshot_cshake128" => capsule_no_fields!(
+            capsule_config,
+            data,
+            oneshot_cshake128,
+            ONESHOT_CSHAKE128,
+            ONESHOT_CSHAKE128,
+            update_oneshot_cshake128
+        ),
+        "oneshot_cshake256" => capsule_no_fields!(
+            capsule_config,
+            data,
+            oneshot_cshake256,
+            ONESHOT_CSHAKE256,
+            ONESHOT_CSHAKE256,
+            update_oneshot_cshake256
+        ),
+        "oneshot_hmac_sha256" => capsule_no_fields!(
+            capsule_config,
+            data,
+            oneshot_hmac_sha256,
+            ONESHOT_HMAC_SHA256,
+            ONESHOT_HMAC_SHA256,
+            update_oneshot_hmac_sha256
+        ),
+        "oneshot_hmac_sha384" => capsule_no_fields!(
+            capsule_config,
+            data,
+            oneshot_hmac_sha384,
+            ONESHOT_HMAC_SHA384,
+            ONESHOT_HMAC_SHA384,
+            update_oneshot_hmac_sha384
+        ),
+        "oneshot_hmac_sha512" => capsule_no_fields!(
+            capsule_config,
+            data,
+            oneshot_hmac_sha512,
+            ONESHOT_HMAC_SHA512,
+            ONESHOT_HMAC_SHA512,
+            update_oneshot_hmac_sha512
+        ),
+        "oneshot_kmac128" => capsule_no_fields!(
+            capsule_config,
+            data,
+            oneshot_kmac128,
+            ONESHOT_KMAC128,
+            ONESHOT_KMAC128,
+            update_oneshot_kmac128
+        ),
+        "oneshot_kmac256" => capsule_no_fields!(
+            capsule_config,
+            data,
+            oneshot_kmac256,
+            ONESHOT_KMAC256,
+            ONESHOT_KMAC256,
+            update_oneshot_kmac256
         ),
         "p256" => capsule_no_fields!(capsule_config, data, p256, P256, P256, update_p256),
         "p384" => capsule_no_fields!(capsule_config, data, p384, P384, P384, update_p384),
@@ -716,7 +836,22 @@ mod tests {
     test_capsule_no_fields! {test_spi, "spi", "SPI", "spi", "{}"}
     test_capsule_no_fields! {test_system_reset_controller, "system_reset_controller", "SYSTEM_RESET_CONTROLLER", "system_reset_controller", "{}"}
     test_capsule_no_fields! {test_usb, "usb", "USB", "usb", "{}"}
-    test_capsule_no_fields! {test_oneshot_digest, "oneshot_digest", "ONESHOT_DIGEST", "oneshot_digest", "{}"}
+    test_capsule_no_fields! {test_oneshot_sha256, "oneshot_sha256", "ONESHOT_SHA256", "oneshot_sha256", "{}"}
+    test_capsule_no_fields! {test_oneshot_sha384, "oneshot_sha384", "ONESHOT_SHA384", "oneshot_sha384", "{}"}
+    test_capsule_no_fields! {test_oneshot_sha512, "oneshot_sha512", "ONESHOT_SHA512", "oneshot_sha512", "{}"}
+    test_capsule_no_fields! {test_oneshot_sha3_224, "oneshot_sha3_224", "ONESHOT_SHA3_224", "oneshot_sha3_224", "{}"}
+    test_capsule_no_fields! {test_oneshot_sha3_256, "oneshot_sha3_256", "ONESHOT_SHA3_256", "oneshot_sha3_256", "{}"}
+    test_capsule_no_fields! {test_oneshot_sha3_384, "oneshot_sha3_384", "ONESHOT_SHA3_384", "oneshot_sha3_384", "{}"}
+    test_capsule_no_fields! {test_oneshot_sha3_512, "oneshot_sha3_512", "ONESHOT_SHA3_512", "oneshot_sha3_512", "{}"}
+    test_capsule_no_fields! {test_oneshot_shake128, "oneshot_shake128", "ONESHOT_SHAKE128", "oneshot_shake128", "{}"}
+    test_capsule_no_fields! {test_oneshot_shake256, "oneshot_shake256", "ONESHOT_SHAKE256", "oneshot_shake256", "{}"}
+    test_capsule_no_fields! {test_oneshot_cshake128, "oneshot_cshake128", "ONESHOT_CSHAKE128", "oneshot_cshake128", "{}"}
+    test_capsule_no_fields! {test_oneshot_cshake256, "oneshot_cshake256", "ONESHOT_CSHAKE256", "oneshot_cshake256", "{}"}
+    test_capsule_no_fields! {test_oneshot_hmac_sha256, "oneshot_hmac_sha256", "ONESHOT_HMAC_SHA256", "oneshot_hmac_sha256", "{}"}
+    test_capsule_no_fields! {test_oneshot_hmac_sha384, "oneshot_hmac_sha384", "ONESHOT_HMAC_SHA384", "oneshot_hmac_sha384", "{}"}
+    test_capsule_no_fields! {test_oneshot_hmac_sha512, "oneshot_hmac_sha512", "ONESHOT_HMAC_SHA512", "oneshot_hmac_sha512", "{}"}
+    test_capsule_no_fields! {test_oneshot_kmac128, "oneshot_kmac128", "ONESHOT_KMAC128", "oneshot_kmac128", "{}"}
+    test_capsule_no_fields! {test_oneshot_kmac256, "oneshot_kmac256", "ONESHOT_KMAC256", "oneshot_kmac256", "{}"}
     test_capsule_no_fields! {test_p256, "p256", "P256", "p256", r#"{
         "mux": {
           "timeout_mux": {

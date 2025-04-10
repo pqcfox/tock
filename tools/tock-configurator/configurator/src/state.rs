@@ -433,16 +433,211 @@ pub(crate) fn on_capsule_submit<C: Chip + 'static + serde::ser::Serialize>(
             };
             push_layer::<_, C>(siv, crate::capsule::ipc::config::<C>(previous_state))
         }
-        config::Index::ONESHOT_DIGEST => {
+        config::Index::ONESHOT_SHA256 => {
             let previous_state = match data.platform.capsule(submit) {
-                Some(config::Capsule::OneshotDigest { oneshot_digest }) => {
-                    Some(oneshot_digest.clone())
+                Some(config::Capsule::OneshotSha256 { oneshot_sha256 }) => {
+                    Some(oneshot_sha256.clone())
                 }
                 _ => None,
             };
             push_layer::<_, C>(
                 siv,
-                crate::capsule::oneshot_digest::config::<C>(chip, previous_state),
+                crate::capsule::oneshot_digest::oneshot_sha256::config::<C>(chip, previous_state),
+            )
+        }
+        config::Index::ONESHOT_SHA384 => {
+            let previous_state = match data.platform.capsule(submit) {
+                Some(config::Capsule::OneshotSha384 { oneshot_sha384 }) => {
+                    Some(oneshot_sha384.clone())
+                }
+                _ => None,
+            };
+            push_layer::<_, C>(
+                siv,
+                crate::capsule::oneshot_digest::oneshot_sha384::config::<C>(chip, previous_state),
+            )
+        }
+        config::Index::ONESHOT_SHA512 => {
+            let previous_state = match data.platform.capsule(submit) {
+                Some(config::Capsule::OneshotSha512 { oneshot_sha512 }) => {
+                    Some(oneshot_sha512.clone())
+                }
+                _ => None,
+            };
+            push_layer::<_, C>(
+                siv,
+                crate::capsule::oneshot_digest::oneshot_sha512::config::<C>(chip, previous_state),
+            )
+        }
+        config::Index::ONESHOT_SHA3_224 => {
+            let previous_state = match data.platform.capsule(submit) {
+                Some(config::Capsule::OneshotSha3_224 { oneshot_sha3_224 }) => {
+                    Some(oneshot_sha3_224.clone())
+                }
+                _ => None,
+            };
+            push_layer::<_, C>(
+                siv,
+                crate::capsule::oneshot_digest::oneshot_sha3_224::config::<C>(chip, previous_state),
+            )
+        }
+        config::Index::ONESHOT_SHA3_256 => {
+            let previous_state = match data.platform.capsule(submit) {
+                Some(config::Capsule::OneshotSha3_256 { oneshot_sha3_256 }) => {
+                    Some(oneshot_sha3_256.clone())
+                }
+                _ => None,
+            };
+            push_layer::<_, C>(
+                siv,
+                crate::capsule::oneshot_digest::oneshot_sha3_256::config::<C>(chip, previous_state),
+            )
+        }
+        config::Index::ONESHOT_SHA3_384 => {
+            let previous_state = match data.platform.capsule(submit) {
+                Some(config::Capsule::OneshotSha3_384 { oneshot_sha3_384 }) => {
+                    Some(oneshot_sha3_384.clone())
+                }
+                _ => None,
+            };
+            push_layer::<_, C>(
+                siv,
+                crate::capsule::oneshot_digest::oneshot_sha3_384::config::<C>(chip, previous_state),
+            )
+        }
+        config::Index::ONESHOT_SHA3_512 => {
+            let previous_state = match data.platform.capsule(submit) {
+                Some(config::Capsule::OneshotSha3_512 { oneshot_sha3_512 }) => {
+                    Some(oneshot_sha3_512.clone())
+                }
+                _ => None,
+            };
+            push_layer::<_, C>(
+                siv,
+                crate::capsule::oneshot_digest::oneshot_sha3_512::config::<C>(chip, previous_state),
+            )
+        }
+        config::Index::ONESHOT_SHAKE128 => {
+            let previous_state = match data.platform.capsule(submit) {
+                Some(config::Capsule::OneshotShake128 { oneshot_shake128 }) => {
+                    Some(oneshot_shake128.clone())
+                }
+                _ => None,
+            };
+            push_layer::<_, C>(
+                siv,
+                crate::capsule::oneshot_digest::oneshot_shake128::config::<C>(chip, previous_state),
+            )
+        }
+        config::Index::ONESHOT_SHAKE256 => {
+            let previous_state = match data.platform.capsule(submit) {
+                Some(config::Capsule::OneshotShake256 { oneshot_shake256 }) => {
+                    Some(oneshot_shake256.clone())
+                }
+                _ => None,
+            };
+            push_layer::<_, C>(
+                siv,
+                crate::capsule::oneshot_digest::oneshot_shake256::config::<C>(chip, previous_state),
+            )
+        }
+        config::Index::ONESHOT_CSHAKE128 => {
+            let previous_state = match data.platform.capsule(submit) {
+                Some(config::Capsule::OneshotCshake128 { oneshot_cshake128 }) => {
+                    Some(oneshot_cshake128.clone())
+                }
+                _ => None,
+            };
+            push_layer::<_, C>(
+                siv,
+                crate::capsule::oneshot_digest::oneshot_cshake128::config::<C>(
+                    chip,
+                    previous_state,
+                ),
+            )
+        }
+        config::Index::ONESHOT_CSHAKE256 => {
+            let previous_state = match data.platform.capsule(submit) {
+                Some(config::Capsule::OneshotCshake256 { oneshot_cshake256 }) => {
+                    Some(oneshot_cshake256.clone())
+                }
+                _ => None,
+            };
+            push_layer::<_, C>(
+                siv,
+                crate::capsule::oneshot_digest::oneshot_cshake256::config::<C>(
+                    chip,
+                    previous_state,
+                ),
+            )
+        }
+        config::Index::ONESHOT_HMAC_SHA256 => {
+            let previous_state = match data.platform.capsule(submit) {
+                Some(config::Capsule::OneshotHmacSha256 {
+                    oneshot_hmac_sha256,
+                }) => Some(oneshot_hmac_sha256.clone()),
+                _ => None,
+            };
+            push_layer::<_, C>(
+                siv,
+                crate::capsule::oneshot_digest::oneshot_hmac_sha256::config::<C>(
+                    chip,
+                    previous_state,
+                ),
+            )
+        }
+        config::Index::ONESHOT_HMAC_SHA384 => {
+            let previous_state = match data.platform.capsule(submit) {
+                Some(config::Capsule::OneshotHmacSha384 {
+                    oneshot_hmac_sha384,
+                }) => Some(oneshot_hmac_sha384.clone()),
+                _ => None,
+            };
+            push_layer::<_, C>(
+                siv,
+                crate::capsule::oneshot_digest::oneshot_hmac_sha384::config::<C>(
+                    chip,
+                    previous_state,
+                ),
+            )
+        }
+        config::Index::ONESHOT_HMAC_SHA512 => {
+            let previous_state = match data.platform.capsule(submit) {
+                Some(config::Capsule::OneshotHmacSha512 {
+                    oneshot_hmac_sha512,
+                }) => Some(oneshot_hmac_sha512.clone()),
+                _ => None,
+            };
+            push_layer::<_, C>(
+                siv,
+                crate::capsule::oneshot_digest::oneshot_hmac_sha512::config::<C>(
+                    chip,
+                    previous_state,
+                ),
+            )
+        }
+        config::Index::ONESHOT_KMAC128 => {
+            let previous_state = match data.platform.capsule(submit) {
+                Some(config::Capsule::OneshotKmac128 { oneshot_kmac128 }) => {
+                    Some(oneshot_kmac128.clone())
+                }
+                _ => None,
+            };
+            push_layer::<_, C>(
+                siv,
+                crate::capsule::oneshot_digest::oneshot_kmac128::config::<C>(chip, previous_state),
+            )
+        }
+        config::Index::ONESHOT_KMAC256 => {
+            let previous_state = match data.platform.capsule(submit) {
+                Some(config::Capsule::OneshotKmac256 { oneshot_kmac256 }) => {
+                    Some(oneshot_kmac256.clone())
+                }
+                _ => None,
+            };
+            push_layer::<_, C>(
+                siv,
+                crate::capsule::oneshot_digest::oneshot_kmac256::config::<C>(chip, previous_state),
             )
         }
         config::Index::P256 => {
