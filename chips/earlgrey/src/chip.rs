@@ -26,7 +26,6 @@ use crate::pwrmgr::PwrMgrInterrupt;
 use crate::registers::top_earlgrey::AlertId;
 use crate::registers::top_earlgrey::PlicIrqId;
 use crate::registers::top_earlgrey::RV_TIMER_BASE_ADDR;
-#[cfg(not(feature = "qemu"))]
 use crate::registers::top_earlgrey::SYSRST_CTRL_AON_BASE_ADDR;
 use crate::rstmgr::RstMgr;
 use crate::rv_core_ibex::{IBEX_EXTERNAL_NMI_MCAUSE, RV_CORE_IBEX};
@@ -42,7 +41,7 @@ pub struct EarlGrey<
 > {
     userspace_kernel_boundary: SysCall,
     pub mpu: PMPUserMPU<MPU_REGIONS, PMP>,
-    plic: &'a Plic,
+    pub(super) plic: &'a Plic,
     pwrmgr: crate::pwrmgr::PwrMgr,
     plic_interrupt_service: &'a I,
     _cfg: PhantomData<CFG>,
@@ -50,44 +49,118 @@ pub struct EarlGrey<
 }
 
 pub struct EarlGreyDefaultPeripherals<'a, CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig> {
-    #[cfg(not(feature = "qemu"))]
-    pub sram_ret: crate::sram_ret::SramCtrl,
-    pub adc_ctrl: crate::adc_ctrl::AdcCtrl<'a>,
-    pub aes: lowrisc::aes::Aes<'a>,
-    pub csrng: lowrisc::csrng::CsRng<'a>,
-    pub edn0: lowrisc::edn::Edn<'a>,
-    pub edn1: lowrisc::edn::Edn<'a>,
-    pub entropy_src: lowrisc::entropy_src::EntropySrc<'a>,
-    pub hmac: lowrisc::hmac::Hmac<'a>,
-    pub keymgr: lowrisc::keymgr::Keymgr<'a>,
-    pub kmac: lowrisc::kmac::Kmac<'a>,
-    pub clkmgr: crate::clkmgr::Clkmgr,
-    pub usb: lowrisc::usb::Usb<'a>,
-    pub uart0: lowrisc::uart::Uart<'a>,
-    pub uart1: lowrisc::uart::Uart<'a>,
-    pub uart2: lowrisc::uart::Uart<'a>,
-    pub uart3: lowrisc::uart::Uart<'a>,
-    pub otbn: lowrisc::otbn::Otbn<'a>,
-    pub otp: lowrisc::otp::Otp,
-    pub gpio_port: crate::gpio::Port<'a>,
-    pub i2c0: lowrisc::i2c::I2c<'a>,
-    pub i2c1: lowrisc::i2c::I2c<'a>,
-    pub i2c2: lowrisc::i2c::I2c<'a>,
-    pub spi_host0: lowrisc::spi_host::SpiHost<'a>,
-    pub spi_host1: lowrisc::spi_host::SpiHost<'a>,
-    pub spi_device: lowrisc::spi_device::SpiDevice<'a>,
-    pub flash_ctrl: crate::flash_ctrl::FlashCtrl<'a>,
-    pub rng: lowrisc::csrng::CsRng<'a>,
-    pub watchdog: &'a lowrisc::aon_timer::AonTimer<'static>,
-    pub sensor_ctrl: crate::sensor_ctrl::SensorCtrl<'a>,
-    #[cfg(not(feature = "qemu"))]
-    pub sysreset: lowrisc::sysrst_ctrl::SysRstCtrl<'a>,
-    pub timer: RvTimer<'static>,
-    pub alert_handler: AlertHandler,
-    pub pattgen: lowrisc::pattgen::PattGen<'a>,
-    pub rst_mgmt: RstMgr,
+    pub sram_ret: Option<crate::sram_ret::SramCtrl>,
+    pub adc_ctrl: Option<crate::adc_ctrl::AdcCtrl<'a>>,
+    pub aes: Option<lowrisc::aes::Aes<'a>>,
+    pub csrng: Option<lowrisc::csrng::CsRng<'a>>,
+    pub edn0: Option<lowrisc::edn::Edn<'a>>,
+    pub edn1: Option<lowrisc::edn::Edn<'a>>,
+    pub entropy_src: Option<lowrisc::entropy_src::EntropySrc<'a>>,
+    pub hmac: Option<lowrisc::hmac::Hmac<'a>>,
+    pub keymgr: Option<lowrisc::keymgr::Keymgr<'a>>,
+    pub kmac: Option<lowrisc::kmac::Kmac<'a>>,
+    pub clkmgr: Option<crate::clkmgr::Clkmgr>,
+    pub usb: Option<lowrisc::usb::Usb<'a>>,
+    pub uart0: Option<lowrisc::uart::Uart<'a>>,
+    pub uart1: Option<lowrisc::uart::Uart<'a>>,
+    pub uart2: Option<lowrisc::uart::Uart<'a>>,
+    pub uart3: Option<lowrisc::uart::Uart<'a>>,
+    pub otbn: Option<lowrisc::otbn::Otbn<'a>>,
+    pub otp: Option<lowrisc::otp::Otp>,
+    pub gpio_port: Option<crate::gpio::Port<'a>>,
+    pub i2c0: Option<lowrisc::i2c::I2c<'a>>,
+    pub i2c1: Option<lowrisc::i2c::I2c<'a>>,
+    pub i2c2: Option<lowrisc::i2c::I2c<'a>>,
+    pub spi_host0: Option<lowrisc::spi_host::SpiHost<'a>>,
+    pub spi_host1: Option<lowrisc::spi_host::SpiHost<'a>>,
+    pub spi_device: Option<lowrisc::spi_device::SpiDevice<'a>>,
+    pub flash_ctrl: Option<crate::flash_ctrl::FlashCtrl<'a>>,
+    pub watchdog: Option<&'a lowrisc::aon_timer::AonTimer<'static>>,
+    pub sensor_ctrl: Option<crate::sensor_ctrl::SensorCtrl<'a>>,
+    pub sysreset: Option<lowrisc::sysrst_ctrl::SysRstCtrl<'a>>,
+    pub timer: Option<RvTimer<'static>>,
+    pub alert_handler: Option<AlertHandler>,
+    pub pattgen: Option<lowrisc::pattgen::PattGen<'a>>,
+    pub rst_mgmt: Option<RstMgr>,
     _cfg: PhantomData<CFG>,
     _pinmux: PhantomData<PINMUX>,
+}
+
+pub enum PeripheralConfig {
+    /// Enable peripheral-specific driver and interrupts.
+    Enabled,
+    /// Enable interrupts, but disable peripheral-specific driver. Useful when
+    /// nonstandard drivers that rely on the peripheral interrupt, such as
+    /// OpenTitan cryptolib APIs.
+    InterruptsOnly,
+    /// Disable peripheral-specific driver and interrupts.
+    Disabled,
+}
+
+/// Peripheral configuration for GPIO, which enables interrupts on a per-pin
+/// basis, but enabling the driver is a global decision.
+pub struct GpioPeripheralConfig {
+    pub driver_enabled: bool,
+    pub interrupts_enabled: [bool; crate::gpio::GPIO_PINS],
+}
+
+/// Default GPIO peripheral configuration
+pub const DEFAULT_GPIO_CONFIG: GpioPeripheralConfig = GpioPeripheralConfig {
+    driver_enabled: true,
+    interrupts_enabled: [true; crate::gpio::GPIO_PINS],
+};
+
+/// Type that defines which peripheral drivers should be included in the kernel
+/// configuration.
+pub struct EarlgreyPeripheralConfig {
+    pub sram_ret: PeripheralConfig,
+    pub adc_ctrl: PeripheralConfig,
+    pub aes: PeripheralConfig,
+    pub csrng: PeripheralConfig,
+    pub edn0: PeripheralConfig,
+    pub edn1: PeripheralConfig,
+    pub entropy_src: PeripheralConfig,
+    pub hmac: PeripheralConfig,
+    pub keymgr: PeripheralConfig,
+    pub kmac: PeripheralConfig,
+    pub clkmgr: PeripheralConfig,
+    pub usb: PeripheralConfig,
+    pub uart0: PeripheralConfig,
+    pub uart1: PeripheralConfig,
+    pub uart2: PeripheralConfig,
+    pub uart3: PeripheralConfig,
+    pub otbn: PeripheralConfig,
+    pub otp: PeripheralConfig,
+    pub gpio_port: GpioPeripheralConfig,
+    pub i2c0: PeripheralConfig,
+    pub i2c1: PeripheralConfig,
+    pub i2c2: PeripheralConfig,
+    pub spi_host0: PeripheralConfig,
+    pub spi_host1: PeripheralConfig,
+    pub spi_device: PeripheralConfig,
+    pub flash_ctrl: PeripheralConfig,
+    pub rng: PeripheralConfig,
+    pub watchdog: PeripheralConfig,
+    pub sensor_ctrl: PeripheralConfig,
+    pub sysreset: PeripheralConfig,
+    pub timer: PeripheralConfig,
+    pub alert_handler: PeripheralConfig,
+    pub pattgen: PeripheralConfig,
+    pub rst_mgmt: PeripheralConfig,
+}
+
+// Macro that:
+// - If the `EarlgreyPeripheralConfig` says to include the driver, initializes the
+//   driver according to `$init`.
+// - If the `EarlgreyPeripheralConfig` says _not_ to include the driver, sets the
+//   peripheral to `None`.
+macro_rules! conditional_init {
+    {$peripheral_config:expr, $peripheral:ident, $init:expr} => {
+        match $peripheral_config.$peripheral {
+            PeripheralConfig::Enabled => Some($init),
+            _ => None,
+        }
+    }
 }
 
 impl<CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig>
@@ -96,72 +169,193 @@ impl<CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig>
     #[allow(static_mut_refs)]
     pub unsafe fn new(
         flash_memory_protection_configuration: crate::flash_ctrl::MemoryProtectionConfiguration,
+        peripheral_config: EarlgreyPeripheralConfig,
     ) -> Self {
         AON_TIMER.set_clk_freq(CFG::AON_TIMER_FREQ);
         Self {
-            #[cfg(not(feature = "qemu"))]
-            sram_ret: crate::sram_ret::SramCtrl::new(),
-            adc_ctrl: lowrisc::adc_ctrl::AdcCtrl::new(crate::adc_ctrl::ADC_CTRL_BASE),
-            aes: lowrisc::aes::Aes::new(crate::aes::AES_BASE),
-            csrng: lowrisc::csrng::CsRng::new(crate::csrng::CSRNG_BASE),
-            edn0: lowrisc::edn::Edn::new(crate::edn::EDN0_BASE),
-            edn1: lowrisc::edn::Edn::new(crate::edn::EDN1_BASE),
-            entropy_src: lowrisc::entropy_src::EntropySrc::new(
-                crate::entropy_src::ENTROPY_SRC_BASE,
+            sram_ret: conditional_init!(
+                &peripheral_config,
+                sram_ret,
+                crate::sram_ret::SramCtrl::new()
             ),
-            hmac: lowrisc::hmac::Hmac::new(crate::hmac::HMAC0_BASE),
-            keymgr: lowrisc::keymgr::Keymgr::new(crate::keymgr::KEYMGR_BASE),
-            kmac: lowrisc::kmac::Kmac::new(crate::kmac::KMAC_BASE),
-            clkmgr: crate::clkmgr::Clkmgr::new(),
-            usb: lowrisc::usb::Usb::new(crate::usbdev::USB0_BASE),
-            uart0: lowrisc::uart::Uart::new(crate::uart::UART0_BASE, CFG::PERIPHERAL_FREQ),
-            uart1: lowrisc::uart::Uart::new(crate::uart::UART1_BASE, CFG::PERIPHERAL_FREQ),
-            uart2: lowrisc::uart::Uart::new(crate::uart::UART2_BASE, CFG::PERIPHERAL_FREQ),
-            uart3: lowrisc::uart::Uart::new(crate::uart::UART3_BASE, CFG::PERIPHERAL_FREQ),
-            otbn: lowrisc::otbn::Otbn::new(crate::otbn::OTBN_BASE),
-            otp: lowrisc::otp::Otp::new(crate::otp::OTP_BASE),
-            gpio_port: crate::gpio::Port::new::<PINMUX>(),
-            i2c0: lowrisc::i2c::I2c::new(crate::i2c::I2C0_BASE, (1 / CFG::CPU_FREQ) * 1000 * 1000),
-            i2c1: lowrisc::i2c::I2c::new(crate::i2c::I2C1_BASE, (1 / CFG::CPU_FREQ) * 1000 * 1000),
-            i2c2: lowrisc::i2c::I2c::new(crate::i2c::I2C2_BASE, (1 / CFG::CPU_FREQ) * 1000 * 1000),
-            spi_host0: lowrisc::spi_host::SpiHost::new(
-                crate::spi_host::SPIHOST0_BASE,
-                CFG::CPU_FREQ,
+            adc_ctrl: conditional_init!(
+                &peripheral_config,
+                adc_ctrl,
+                lowrisc::adc_ctrl::AdcCtrl::new(crate::adc_ctrl::ADC_CTRL_BASE)
             ),
-            spi_host1: lowrisc::spi_host::SpiHost::new(
-                crate::spi_host::SPIHOST1_BASE,
-                CFG::CPU_FREQ,
+            aes: conditional_init!(
+                &peripheral_config,
+                aes,
+                lowrisc::aes::Aes::new(crate::aes::AES_BASE)
             ),
-            spi_device: lowrisc::spi_device::SpiDevice::new(crate::spi_device::SPIDEVICE_BASE),
-            flash_ctrl: crate::flash_ctrl::FlashCtrl::new(flash_memory_protection_configuration),
-            rng: lowrisc::csrng::CsRng::new(crate::csrng::CSRNG_BASE),
-            watchdog: &*addr_of!(AON_TIMER),
-            sensor_ctrl: crate::sensor_ctrl::SensorCtrl::new(),
-            #[cfg(not(feature = "qemu"))]
-            sysreset: lowrisc::sysrst_ctrl::SysRstCtrl::new(SYSRST_CTRL_AON_BASE_ADDR),
-            timer: RvTimer::new(
-                unsafe {
-                    StaticRef::new(
-                        RV_TIMER_BASE_ADDR
-                            as *const lowrisc::registers::rv_timer_regs::RvTimerRegisters,
-                    )
-                },
-                CFG::PERIPHERAL_FREQ,
+            csrng: conditional_init!(
+                &peripheral_config,
+                csrng,
+                lowrisc::csrng::CsRng::new(crate::csrng::CSRNG_BASE)
             ),
-            alert_handler: AlertHandler::new(),
-            pattgen: lowrisc::pattgen::PattGen::new(crate::pattgen::PATTGEN_BASE),
-            rst_mgmt: RstMgr::new(),
+            edn0: conditional_init!(
+                &peripheral_config,
+                edn0,
+                lowrisc::edn::Edn::new(crate::edn::EDN0_BASE)
+            ),
+            edn1: conditional_init!(
+                &peripheral_config,
+                edn1,
+                lowrisc::edn::Edn::new(crate::edn::EDN1_BASE)
+            ),
+            entropy_src: conditional_init!(
+                &peripheral_config,
+                entropy_src,
+                lowrisc::entropy_src::EntropySrc::new(crate::entropy_src::ENTROPY_SRC_BASE,)
+            ),
+            hmac: conditional_init!(
+                &peripheral_config,
+                hmac,
+                lowrisc::hmac::Hmac::new(crate::hmac::HMAC0_BASE)
+            ),
+            keymgr: conditional_init!(
+                &peripheral_config,
+                keymgr,
+                lowrisc::keymgr::Keymgr::new(crate::keymgr::KEYMGR_BASE)
+            ),
+            kmac: conditional_init!(
+                &peripheral_config,
+                kmac,
+                lowrisc::kmac::Kmac::new(crate::kmac::KMAC_BASE)
+            ),
+            clkmgr: conditional_init!(&peripheral_config, clkmgr, crate::clkmgr::Clkmgr::new()),
+            usb: conditional_init!(
+                &peripheral_config,
+                usb,
+                lowrisc::usb::Usb::new(crate::usbdev::USB0_BASE)
+            ),
+            uart0: conditional_init!(
+                &peripheral_config,
+                uart0,
+                lowrisc::uart::Uart::new(crate::uart::UART0_BASE, CFG::PERIPHERAL_FREQ)
+            ),
+            uart1: conditional_init!(
+                &peripheral_config,
+                uart1,
+                lowrisc::uart::Uart::new(crate::uart::UART1_BASE, CFG::PERIPHERAL_FREQ)
+            ),
+            uart2: conditional_init!(
+                &peripheral_config,
+                uart2,
+                lowrisc::uart::Uart::new(crate::uart::UART2_BASE, CFG::PERIPHERAL_FREQ)
+            ),
+            uart3: conditional_init!(
+                &peripheral_config,
+                uart3,
+                lowrisc::uart::Uart::new(crate::uart::UART3_BASE, CFG::PERIPHERAL_FREQ)
+            ),
+            otbn: conditional_init!(
+                &peripheral_config,
+                otbn,
+                lowrisc::otbn::Otbn::new(crate::otbn::OTBN_BASE)
+            ),
+            otp: conditional_init!(
+                &peripheral_config,
+                otp,
+                lowrisc::otp::Otp::new(crate::otp::OTP_BASE)
+            ),
+            gpio_port: if peripheral_config.gpio_port.driver_enabled {
+                Some(crate::gpio::Port::new::<PINMUX>())
+            } else {
+                None
+            },
+            i2c0: conditional_init!(
+                &peripheral_config,
+                i2c0,
+                lowrisc::i2c::I2c::new(crate::i2c::I2C0_BASE, (1 / CFG::CPU_FREQ) * 1000 * 1000)
+            ),
+            i2c1: conditional_init!(
+                &peripheral_config,
+                i2c1,
+                lowrisc::i2c::I2c::new(crate::i2c::I2C1_BASE, (1 / CFG::CPU_FREQ) * 1000 * 1000)
+            ),
+            i2c2: conditional_init!(
+                &peripheral_config,
+                i2c2,
+                lowrisc::i2c::I2c::new(crate::i2c::I2C2_BASE, (1 / CFG::CPU_FREQ) * 1000 * 1000)
+            ),
+            spi_host0: conditional_init!(
+                &peripheral_config,
+                spi_host0,
+                lowrisc::spi_host::SpiHost::new(crate::spi_host::SPIHOST0_BASE, CFG::CPU_FREQ,)
+            ),
+            spi_host1: conditional_init!(
+                &peripheral_config,
+                spi_host1,
+                lowrisc::spi_host::SpiHost::new(crate::spi_host::SPIHOST1_BASE, CFG::CPU_FREQ,)
+            ),
+            spi_device: conditional_init!(
+                &peripheral_config,
+                spi_device,
+                lowrisc::spi_device::SpiDevice::new(crate::spi_device::SPIDEVICE_BASE)
+            ),
+            flash_ctrl: conditional_init!(
+                &peripheral_config,
+                flash_ctrl,
+                crate::flash_ctrl::FlashCtrl::new(flash_memory_protection_configuration)
+            ),
+            watchdog: conditional_init!(&peripheral_config, watchdog, &*addr_of!(AON_TIMER)),
+            sensor_ctrl: conditional_init!(
+                &peripheral_config,
+                sensor_ctrl,
+                crate::sensor_ctrl::SensorCtrl::new()
+            ),
+            sysreset: conditional_init!(
+                &peripheral_config,
+                sysreset,
+                lowrisc::sysrst_ctrl::SysRstCtrl::new(SYSRST_CTRL_AON_BASE_ADDR)
+            ),
+            timer: conditional_init!(
+                &peripheral_config,
+                timer,
+                RvTimer::new(
+                    unsafe {
+                        StaticRef::new(
+                            RV_TIMER_BASE_ADDR
+                                as *const lowrisc::registers::rv_timer_regs::RvTimerRegisters,
+                        )
+                    },
+                    CFG::PERIPHERAL_FREQ,
+                )
+            ),
+            alert_handler: conditional_init!(
+                &peripheral_config,
+                alert_handler,
+                AlertHandler::new()
+            ),
+            pattgen: conditional_init!(
+                &peripheral_config,
+                pattgen,
+                lowrisc::pattgen::PattGen::new(crate::pattgen::PATTGEN_BASE)
+            ),
+            rst_mgmt: conditional_init!(&peripheral_config, rst_mgmt, RstMgr::new()),
             _cfg: PhantomData,
             _pinmux: PhantomData,
         }
     }
 
     pub fn init(&'static self) {
-        kernel::deferred_call::DeferredCallClient::register(&self.aes);
-        kernel::deferred_call::DeferredCallClient::register(&self.uart0);
-        kernel::deferred_call::DeferredCallClient::register(&self.uart1);
-        kernel::deferred_call::DeferredCallClient::register(&self.uart2);
-        kernel::deferred_call::DeferredCallClient::register(&self.uart3);
+        self.aes
+            .as_ref()
+            .map(|aes| kernel::deferred_call::DeferredCallClient::register(aes));
+        self.uart0
+            .as_ref()
+            .map(|uart0| kernel::deferred_call::DeferredCallClient::register(uart0));
+        self.uart1
+            .as_ref()
+            .map(|uart1| kernel::deferred_call::DeferredCallClient::register(uart1));
+        self.uart2
+            .as_ref()
+            .map(|uart2| kernel::deferred_call::DeferredCallClient::register(uart2));
+        self.uart3
+            .as_ref()
+            .map(|uart3| kernel::deferred_call::DeferredCallClient::register(uart3));
+
         // Recommended value by documentation
         const INTEGRITY_CHECK_PERIOD: u32 = 0x3_FFFF;
         // Recommended value by documentation
@@ -169,73 +363,82 @@ impl<CFG: EarlGreyConfig, PINMUX: EarlGreyPinmuxConfig>
         // Recommended value by documentation is at least 100_000.
         const CHECK_TIMEOUT: NonZeroU32 = create_non_zero_u32(100_000);
 
-        self.otp
-            .init(
+        self.otp.as_ref().map(|otp| {
+            otp.init(
                 INTEGRITY_CHECK_PERIOD,
                 CONSISTENCY_CHECK_PERIOD,
                 Some(CHECK_TIMEOUT),
             )
             .expect("Failed to initialize OTP");
+        });
     }
 
     #[inline]
     pub fn handle_alert_interrupt(&self, class: AlertClass) {
-        // retrieve alert state for this class and (try to) stop HW escalation
-        let class_state = self.alert_handler.class_state(class);
-        self.alert_handler.clear_esclation(class);
+        if let Some(alert_handler) = &self.alert_handler {
+            // retrieve alert state for this class and (try to) stop HW escalation
+            let class_state = alert_handler.class_state(class);
+            alert_handler.clear_esclation(class);
 
-        // HANDLE LOCAL ALERTS
-        // iterate multiple times through the local alerts, only handled once each alert (mark the alerts that have been handled in `handled_alerts` and don't reconsider them).
-        let mut handled_alerts = LocalAlertFlags::empty();
-        loop {
-            // check which local alerts are still set
-            let local_alerts = self.alert_handler.snapshot_local_alert_causes();
+            // HANDLE LOCAL ALERTS
+            // iterate multiple times through the local alerts, only handled once each alert (mark the alerts that have been handled in `handled_alerts` and don't reconsider them).
+            let mut handled_alerts = LocalAlertFlags::empty();
+            loop {
+                // check which local alerts are still set
+                let local_alerts = alert_handler.snapshot_local_alert_causes();
 
-            // iterate through all of the set local alerts that have not been handled since the start of the interrupt
-            let anything_new = handled_alerts.for_each_new(&local_alerts, |alert| {
-                // send each alert to `alert_handler`
-                let should_clear = self.alert_handler.handle_alert(alert, class_state);
-                if should_clear {
-                    self.alert_handler.clear_local_alert_cause(alert);
+                // iterate through all of the set local alerts that have not been handled since the start of the interrupt
+                let anything_new = handled_alerts.for_each_new(&local_alerts, |alert| {
+                    // send each alert to `alert_handler`
+                    let should_clear = alert_handler.handle_alert(alert, class_state);
+                    if should_clear {
+                        alert_handler.clear_local_alert_cause(alert);
+                    }
+                });
+
+                // if no new alerts have been raised consider that all of the alert have been handled
+                if !anything_new {
+                    break;
                 }
-            });
-
-            // if no new alerts have been raised consider that all of the alert have been handled
-            if !anything_new {
-                break;
             }
-        }
 
-        // HANDLE ALERTS FROM ALL PERIPHEREALS
-        // alerts could be triggered while inside the interrupt handler,
-        // alerts flags could remain set until the underlying issue is solved
-        let mut handled_alerts = AlertFlags::empty();
-        loop {
-            // snapshot alert flags
-            let alerts = self.alert_handler.snapshot_alert_causes();
-            // iterate over current alert flags that have not previously been handled (and marked as such in `handled_alerts`)
-            let anything_new =
-                handled_alerts.for_each_new(&alerts, |alert| self.handle_alert(alert));
+            // HANDLE ALERTS FROM ALL PERIPHEREALS
+            // alerts could be triggered while inside the interrupt handler,
+            // alerts flags could remain set until the underlying issue is solved
+            let mut handled_alerts = AlertFlags::empty();
+            loop {
+                // snapshot alert flags
+                let alerts = alert_handler.snapshot_alert_causes();
+                // iterate over current alert flags that have not previously been handled (and marked as such in `handled_alerts`)
+                let anything_new =
+                    handled_alerts.for_each_new(&alerts, |alert| self.handle_alert(alert));
 
-            // break the loop when no new alert flags have been raised
-            if !anything_new {
-                break;
+                // break the loop when no new alert flags have been raised
+                if !anything_new {
+                    break;
+                }
             }
-        }
 
-        // clear interrupt flag
-        self.alert_handler.clear_interrupt(class);
+            // clear interrupt flag
+            alert_handler.clear_interrupt(class);
+        }
     }
 
     fn handle_alert(&self, alert: AlertId) {
         let should_clear = match alert {
-            AlertId::Uart0FatalFault => self.uart0.handle_alert(),
+            // If UART is not present, no reason to hold onto the alert, so default to `true`.
+            AlertId::Uart0FatalFault => self
+                .uart0
+                .as_ref()
+                .map_or(true, |uart0| uart0.handle_alert()),
             _ => panic!("alert with no handle was triggered"),
         };
-        self.alert_handler.notify_userspace(alert);
-        if should_clear {
-            self.alert_handler.clear_alert_cause(alert);
-        }
+        self.alert_handler.as_ref().map(|alert_handler| {
+            alert_handler.notify_userspace(alert);
+            if should_clear {
+                alert_handler.clear_alert_cause(alert);
+            }
+        });
     }
 }
 
@@ -258,11 +461,6 @@ impl<
             _cfg: PhantomData,
             _pinmux: PhantomData,
         }
-    }
-
-    pub unsafe fn enable_plic_interrupts(&self) {
-        self.plic.disable_all();
-        self.plic.enable_all();
     }
 
     unsafe fn handle_plic_interrupts(&self) {

@@ -5,12 +5,16 @@
 //! Top-level interrupt handler for Earlgrey.
 
 use crate::alert_handler::AlertClass;
+use crate::chip::EarlGrey;
 use crate::chip::EarlGreyDefaultPeripherals;
+use crate::chip::EarlgreyPeripheralConfig;
+//use crate::chip::PeripheralConfig;
 use crate::chip_config::EarlGreyConfig;
 use crate::flash_ctrl::FlashCtrlInterrupt;
 use crate::pinmux_config::EarlGreyPinmuxConfig;
 use crate::registers::top_earlgrey::PlicIrqId;
 use crate::sensor_ctrl::SensorCtrlInterrupt;
+use core::fmt::Display;
 use kernel::platform::chip::InterruptService;
 use lowrisc::adc_ctrl::AdcCtrlInterrupt;
 use lowrisc::aon_timer::AonTimerInterrupt;
@@ -27,11 +31,11 @@ use lowrisc::otp::OtpCtrlInterrupt;
 use lowrisc::pattgen::PattgenInterrupt;
 use lowrisc::spi_device::SpiDeviceInterrupt;
 use lowrisc::spi_host::SpiHostInterrupt;
-#[cfg(not(feature = "qemu"))]
 use lowrisc::sysrst_ctrl::SysRstCtrlInterrupt;
 use lowrisc::timer::RvTimerInterrupt;
 use lowrisc::uart::UartInterrupt;
 use lowrisc::usb::UsbInterrupt;
+use rv32i::pmp::TORUserPMP;
 
 // Macro that:
 // - Generates the top-level interrupt handler based on individual handlers
@@ -92,18 +96,11 @@ macro_rules! interrupts {
                     PlicIrqId::GpioGpio30 => self.handle_gpio_interrupt(30),
                     PlicIrqId::GpioGpio31 => self.handle_gpio_interrupt(31),
 
-
-                    // TODO: This is temporary until we can remove the "qemu"
-                    // feature gate on `chip.sysreset` by optioning out the
-                    // unused peripherals.
-                    #[cfg(not(feature = "qemu"))]
-                    PlicIrqId::SysrstCtrlAonEventDetected => {
-                        self.sysreset.handle_interrupt(SysRstCtrlInterrupt::AonEventDetected)
-                    },
-                    #[cfg(feature = "qemu")]
-                    PlicIrqId::SysrstCtrlAonEventDetected => {},
-
-                    $(PlicIrqId::$plic_name => { self.$peripheral.handle_interrupt($local_name); },)*
+                    // The `map` should always produce a driver, because we do
+                    // not enable interrupts for any drivers that are not part
+                    // of the configuration (see `enable_plic_interrupts`
+                    // below).
+                    $(PlicIrqId::$plic_name => { self.$peripheral.as_ref().map(|driver| driver.handle_interrupt($local_name)); },)*
                 }
                 true
             }
@@ -120,7 +117,33 @@ macro_rules! interrupts {
                 // The `map` should always produce a driver, because we do not
                 // enable interrupts for any drivers that are not part of the
                 // configuration (see `enable_plic_interrupts` below).
-                self.gpio_port[pin].handle_interrupt(GpioInterrupt::Gpio);
+                self.gpio_port.as_ref().map(|pins| pins[pin].handle_interrupt(GpioInterrupt::Gpio));
+            }
+        }
+
+        impl<
+            'a,
+        const MPU_REGIONS: usize,
+        I: InterruptService + 'a,
+        CFG: EarlGreyConfig,
+        PINMUX: EarlGreyPinmuxConfig,
+        PMP: TORUserPMP<{ MPU_REGIONS }> + Display + 'static,
+        > EarlGrey<'a, MPU_REGIONS, I, CFG, PINMUX, PMP>
+        {
+            /// Enables interrupts for peripherals according to the driver
+            /// configuration.
+            pub fn enable_plic_interrupts(&self, _peripheral_config: EarlgreyPeripheralConfig) {
+                // Disable all interrupts to start
+                self.plic.disable_all();
+                self.plic.enable_all();
+
+                // Enable only the interrupts handled by the peripherals
+                // included in the configuration.
+                //$(match peripheral_config.$peripheral {
+                //    PeripheralConfig::Enabled | PeripheralConfig::InterruptsOnly =>
+                //        self.plic.enable(PlicIrqId::$plic_name as u32),
+                //    PeripheralConfig::Disabled => {},
+                //})*
             }
         }
     }
@@ -280,12 +303,8 @@ interrupts! [
     { usb, UsbdevLinkOutErr, UsbInterrupt::LinkOutErr },
     { usb, UsbdevAvSetupEmpty, UsbInterrupt::AvSetupEmpty },
 
-
-    // TODO: This is temporarily commented out until we can remove the "qemu"
-    // feature gate on `chip.sysreset` by optioning out the unused peripherals.
-    //
     // System Reset Controller interrupts
-    //{ sysreset, SysrstCtrlAonEventDetected, SysRstCtrlInterrupt::AonEventDetected },
+    { sysreset, SysrstCtrlAonEventDetected, SysRstCtrlInterrupt::AonEventDetected },
 
     // ADC Controller interrupts
     { adc_ctrl, AdcCtrlAonMatchPending, AdcCtrlInterrupt::MatchPending },
