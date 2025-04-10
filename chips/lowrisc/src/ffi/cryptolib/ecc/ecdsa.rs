@@ -21,10 +21,8 @@ use kernel::utilities::cells::{OptionalCell, TakeCell};
 use kernel::ErrorCode;
 use otbindgen::{
     integrity_unblinded_checksum, otcrypto_const_word32_buf_t as OtCryptoConstWord32Buf,
-    otcrypto_ecc_curve_t as OtCryptoEccCurve,
-    otcrypto_ecc_curve_type_kOtcryptoEccCurveTypeNistP256 as CURVE_TYPE_P256,
-    otcrypto_ecc_curve_type_kOtcryptoEccCurveTypeNistP384 as CURVE_TYPE_P384,
-    otcrypto_ecdsa_verify_async_finalize, otcrypto_ecdsa_verify_async_start,
+    otcrypto_ecdsa_p256_verify_async_finalize, otcrypto_ecdsa_p256_verify_async_start,
+    otcrypto_ecdsa_p384_verify_async_finalize, otcrypto_ecdsa_p384_verify_async_start,
     otcrypto_hash_digest_t as OtCryptoHashDigest,
     otcrypto_hash_mode_kOtcryptoHashModeSha256 as HASH_MODE_SHA256,
     otcrypto_hash_mode_kOtcryptoHashModeSha384 as HASH_MODE_SHA384,
@@ -45,7 +43,8 @@ macro_rules! ecdsa_driver {
         driver = $driver:ident,
         curve = $curve:ident,
         hil = $hil:ident,
-        curve_type = $curve_type:ident,
+        verify_start = $verify_start:ident,
+        verify_finalize = $verify_finalize:ident,
         key_mode = $key_mode:ident,
         verify_job = $verify_job:ident,
         otbn_operation = $otbn_operation:ident,
@@ -163,16 +162,10 @@ macro_rules! ecdsa_driver {
                     };
                     // Populate the checksum
                     public_key.checksum = integrity_unblinded_checksum(addr_of!(public_key));
-                    let elliptic_curve = OtCryptoEccCurve {
-                        curve_type: $curve_type,
-                        // NULL, because we use a named curve.
-                        domain_parameter: core::ptr::null(),
-                    };
-                    let status = otcrypto_ecdsa_verify_async_start(
+                    let status = $verify_start(
                         addr_of!(public_key),
                         message_digest,
                         signature,
-                        addr_of!(elliptic_curve),
                     );
                     status.check().map_err(|e| (e.to_tock_err()))
                 }
@@ -212,13 +205,7 @@ macro_rules! ecdsa_driver {
                                     data: self.signature.as_ptr(),
                                     len: self.signature.len(),
                                 };
-                                let elliptic_curve = OtCryptoEccCurve {
-                                    curve_type: $curve_type,
-                                    // NULL, because we use a named curve.
-                                    domain_parameter: core::ptr::null(),
-                                };
-                                otcrypto_ecdsa_verify_async_finalize(
-                                    addr_of!(elliptic_curve),
+                                $verify_finalize(
                                     signature,
                                     addr_of_mut!(verification_result),
                                 )
@@ -402,7 +389,8 @@ ecdsa_driver! {
     driver = OtCryptoEcdsaP256,
     curve = P256,
     hil = EcdsaP256,
-    curve_type = CURVE_TYPE_P256,
+    verify_start = otcrypto_ecdsa_p256_verify_async_start,
+    verify_finalize = otcrypto_ecdsa_p256_verify_async_finalize,
     key_mode = KEY_MODE_ECDSA_P256,
     verify_job = EcdsaVerifyP256Job,
     otbn_operation = EcdsaVerifyP256,
@@ -411,7 +399,8 @@ ecdsa_driver! {
     driver = OtCryptoEcdsaP384,
     curve = P384,
     hil = EcdsaP384,
-    curve_type = CURVE_TYPE_P384,
+    verify_start = otcrypto_ecdsa_p384_verify_async_start,
+    verify_finalize = otcrypto_ecdsa_p384_verify_async_finalize,
     key_mode = KEY_MODE_ECDSA_P384,
     verify_job = EcdsaVerifyP384Job,
     otbn_operation = EcdsaVerifyP384,
