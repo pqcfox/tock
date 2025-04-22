@@ -28,9 +28,7 @@ use crate::registers::top_earlgrey::PlicIrqId;
 use crate::registers::top_earlgrey::RV_TIMER_BASE_ADDR;
 use crate::registers::top_earlgrey::SYSRST_CTRL_AON_BASE_ADDR;
 use crate::rstmgr::RstMgr;
-use crate::rv_core_ibex::{
-    IBEX_EXTERNAL_NMI_MCAUSE, IBEX_LOAD_INTEGRITY_ERROR_NMI_MCAUSE, RV_CORE_IBEX,
-};
+use crate::rv_core_ibex::{IBEX_EXTERNAL_NMI_MCAUSE, RV_CORE_IBEX};
 use lowrisc::aon_timer::AonTimerInterrupt;
 
 pub struct EarlGrey<

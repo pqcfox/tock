@@ -481,11 +481,11 @@ core::arch::global_asm!(
             //
             // Note that we do NOT switch stacks upon receiving a non-maskable
             // interrupt (NMI), as we may want to support recoverable NMIs in
-            // the future, and without 
+            // the future, and without
             //
             //     (a) being able to atomically move the stack pointer to the
-            //         interrupt stack and set some flag in memory, OR 
-            //                                  
+            //         interrupt stack and set some flag in memory, OR
+            //
             //     (b) making the assumption that the kernel stack hasn't
             //         overflowed (so that the stack pointer alone can indicate
             //         whether we were just handling an interrupt)
@@ -504,13 +504,13 @@ core::arch::global_asm!(
             // or not we should switch back to the kernel stack. Here, we use
             // s1, since s0 is reserved for the frame pointer.
             li   s1, 0b0
-            
+
             // Now check if this was an interrupt, and if it was, then we
             // want to move the stack pointer to the interrupt stack before
             // progressing with the trap handler. If mcause is greater than
             // or equal to zero this was not an interrupt (i.e. the most
             // significant bit is 1).
-            bge  a0, zero, 300f 
+            bge  a0, zero, 300f
 
             // Next, check if this was specifically a non-maskable interrupt
             // (NMI). Since NMIs can only be detected by the value in the mcause
@@ -531,12 +531,12 @@ core::arch::global_asm!(
             // interpret this as an NMI and skip switching stacks for the reason
             // detailed above.
             jal ra, _check_mcause_for_nmi
-            bnez a0, 300f 
+            bnez a0, 300f
 
             // If we've reached this point, this was indeed an interrupt which
             // is *not* an NMI. We set the flag in s1 to indicate this.
-            li   s1, 0b1 
-            
+            li   s1, 0b1
+
             // Now, we need to save our current stack pointer value and move the
             // stack pointer to the interrupt stack.
             mv   t0, sp           // t0 = sp. Preserve the current value of
@@ -563,7 +563,7 @@ core::arch::global_asm!(
             // If we've reached this point, we just handled a non-NMI interrupt,
             // so return to the kernel stack.
             la   t0, {eintstack}  // t0 = first address after interrupt stack
-            lw   sp, -4*4(t0)     // sp = *(t0 - 4*4). Jump back to kernel stack. 
+            lw   sp, -4*4(t0)     // sp = *(t0 - 4*4). Jump back to kernel stack.
 
         400: // _start_kernel_trap_finish
 
