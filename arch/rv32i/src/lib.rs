@@ -554,9 +554,9 @@ core::arch::global_asm!(
             jal ra, _start_trap_rust_from_kernel
 
             // Now, on return, we want to recall using the flag in s1 if we
-            // had an interrupt to determine whether we need to move the stack
-            // pointer back from the interrupt stack to the kernel stack. If
-            // there wasn't an interrupt, we can skip to restoring registers
+            // had a non-NMI interrupt to determine whether we need to move the
+            // stack pointer back from the interrupt stack to the kernel stack.
+            // If there wasn't an interrupt, we can skip to restoring registers
             // from the stack.
             beqz s1, 400f
 
