@@ -18,3 +18,7 @@ riscv = { path = "../riscv" }
 
 [lints]
 workspace = true
+
+[features]
+# Separate the IRQ stack from the main kernel stack
+separate_irq_stack = []

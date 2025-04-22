@@ -45,14 +45,15 @@ SECTIONS
 {
    .stack (NOLOAD) :
     {
-        /* Kernel stack.
+        /* Interrupt (IRQ) stack.
          *
-         * Tock places the kernel stack at the bottom of SRAM so that the
+         * Tock places the interrupt stack at the bottom of SRAM so that the
          * kernel will trigger memory fault if it exceeds its stack depth,
-         * rather than silently overwriting valuable data.
+         * rather than silently overwriting valuable data or any frames in the
+         * kernel stack.
          */
         . = ALIGN(8);
-         _sstack = .;
+        _sintstack = .;
 
          /* For GNU LD, we can just advance the location pointer (".") here to
           * reserve space for the stack. That, however, doesn't seem to work
@@ -60,10 +61,27 @@ SECTIONS
           * correct size, but the next section (in our case .relocate) is not
           * moved down as well, instead it sits at the same address as .stack.
           * To work around this, we declare a dummy buffer and then insert it
-          * here in the .stack section. This sets the stack size correctly and
-          * places the .relocate section at the correct address. */
-         KEEP(*(.stack_buffer))
+          * here in the .intstack section. This sets the stack size correctly
+          * and places the .relocate section at the correct address. */
+        KEEP(*(.interrupt_stack_buffer))
          /*. = . + 0x1000;*/  /*This is the original method. */
+
+        . = ALIGN(8);
+        _eintstack = .;
+
+        /* Kernel stack.
+         *
+         * Tock places the kernel stack just above the kernel stack so that it
+         * can only overwrite the interrupt stack before the kernel will trigger
+         * memory fault, rather than silently overwriting valuable data.
+         */
+        . = ALIGN(8);
+         _sstack = .;
+
+         /* See the above block comment for `.interrupt_stack_buffer` for a
+            rationale of why this KEEP is needed in lieu of a simple advance of
+            the location pointer ("."). */
+         KEEP(*(.stack_buffer))
 
          . = ALIGN(8);
          _estack = .;

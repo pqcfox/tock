@@ -70,3 +70,6 @@ ffi = []
 # This is used to indicate that we should include tests that only pass on
 # hardware.
 hardware_tests = []
+
+# Separate the IRQ stack from the kernel stack.
+separate_irq_stack = ["earlgrey/separate_irq_stack"]

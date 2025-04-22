@@ -31,6 +31,9 @@ use crate::rstmgr::RstMgr;
 use crate::rv_core_ibex::{IBEX_EXTERNAL_NMI_MCAUSE, RV_CORE_IBEX};
 use lowrisc::aon_timer::AonTimerInterrupt;
 
+#[cfg(feature = "separate_irq_stack")]
+use crate::rv_core_ibex::IBEX_LOAD_INTEGRITY_ERROR_NMI_MCAUSE;
+
 pub struct EarlGrey<
     'a,
     const MPU_REGIONS: usize,
@@ -703,6 +706,15 @@ pub unsafe extern "C" fn disable_interrupt_trap_handler(mcause_val: u32) {
         _ => {
             panic!("unexpected non-interrupt\n");
         }
+    }
+}
+
+#[cfg(feature = "separate_irq_stack")]
+#[export_name = "_check_mcause_for_nmi"]
+pub unsafe extern "C" fn check_mcause_for_nmi(mcause_val: u32) -> bool {
+    match mcause_val as usize {
+        IBEX_EXTERNAL_NMI_MCAUSE | IBEX_LOAD_INTEGRITY_ERROR_NMI_MCAUSE => true,
+        _ => false,
     }
 }
 
