@@ -7,7 +7,9 @@
 
 use kernel::utilities::StaticRef;
 use lowrisc::registers::rv_core_ibex_regs::RvCoreIbexRegisters;
-pub use lowrisc::rv_core_ibex::{RvCoreIbex, IBEX_EXTERNAL_NMI_MCAUSE};
+pub use lowrisc::rv_core_ibex::{
+    RvCoreIbex, IBEX_EXTERNAL_NMI_MCAUSE, IBEX_LOAD_INTEGRITY_ERROR_NMI_MCAUSE,
+};
 
 use crate::registers::top_earlgrey::RV_CORE_IBEX_CFG_BASE_ADDR;
 

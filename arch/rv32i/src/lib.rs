@@ -23,8 +23,14 @@ pub mod syscall;
 pub use riscv::csr;
 
 extern "C" {
-    // Where the end of the stack region is (and hence where the stack should
-    // start), and the start of the stack region.
+    // Where the end of the interrupt stack region is (and hence where the
+    // interrupt stack should start), and the start of the interrupt stack
+    // region.
+    static _eintstack: usize;
+    static _sintstack: usize;
+
+    // Where the end of the kernel stack region is (and hence where the kernel
+    // stack should start), and the start of the kernel stack region.
     static _estack: usize;
     static _sstack: usize;
 
@@ -268,6 +274,7 @@ extern "C" {
     pub fn _start_trap();
 }
 
+#[cfg(not(feature = "separate_irq_stack"))]
 #[cfg(any(doc, all(target_arch = "riscv32", target_os = "none")))]
 core::arch::global_asm!(
     "
@@ -381,6 +388,215 @@ core::arch::global_asm!(
     ",
     estack = sym _estack,
     sstack = sym _sstack,
+);
+
+#[cfg(feature = "separate_irq_stack")]
+#[cfg(any(doc, all(target_arch = "riscv32", target_os = "none")))]
+core::arch::global_asm!(
+    "
+            .section .riscv.trap, \"ax\"
+            .globl _start_trap
+          _start_trap:
+            // This is the global trap handler. By default, Tock expects this
+            // trap handler to be registered at all times, and that all traps
+            // and interrupts occurring in all modes of execution (M-, S-, and
+            // U-mode) will cause this trap handler to be executed.
+            //
+            // For documentation of its behavior, and how process
+            // implementations can hook their own trap handler code, see the
+            // comment on the `extern C _start_trap` symbol above.
+
+            // Atomically swap s0 and mscratch:
+            csrrw s0, mscratch, s0        // s0 = mscratch; mscratch = s0
+
+            // If mscratch contained 0, invoke the kernel trap handler.
+            beq   s0, x0, 100f      // if s0==x0: goto 100
+
+            // Else, save the current value of s1 to `0*4(s0)`, load `1*4(s0)`
+            // into s1 and jump to it (invoking a custom trap handler).
+            sw    s1, 0*4(s0)       // *s0 = s1
+            lw    s1, 1*4(s0)       // s1 = *(s0+4)
+            jr    s1                // goto s1
+
+          100: // _start_kernel_trap
+
+            // The global trap handler has swapped s0 into mscratch. We can thus
+            // freely clobber s0 without losing any information.
+            //
+            // Since we want to use the stack to save kernel registers, we first
+            // need to make sure that the trap wasn't the result of a stack
+            // overflow beyond our bottom-most stack (the interrupt stack), in
+            // which case we can't use the current stack pointer. Use s0 as a
+            // scratch register:
+
+            // Load the address of the bottom of the stack (`_sintstack`) into
+            // our newly freed-up s0 register.
+            la s0, {sintstack}                     // s0 = _sintstack
+
+            // Compare the kernel stack pointer to the bottom of the bottom-most
+            // stack, i.e. the interrupt stack. If the stack pointer is above
+            // the bottom of the stack, then continue handling the fault as
+            // normal.
+            bgtu sp, s0, 200f                   // branch if sp > s0
+
+            // If we get here, then we did encounter a stack overflow beyond the
+            // end of *any* valid stack. We are going to panic at this point,
+            // but for that to work we need some valid stack to run the panic
+            // code. We do this by just starting over with the kernel stack and
+            // placing the stack pointer at the top of the original stack.
+            la sp, {estack}                     // sp = _estack
+
+        200: // _start_kernel_trap_continue
+
+            // Restore s0. We reset mscratch to 0 (kernel trap handler mode)
+            csrrw s0, mscratch, zero    // s0 = mscratch; mscratch = 0
+
+            // Make room for the caller saved registers we need to restore after
+            // running any trap handler code.
+            addi sp, sp, -20*4
+
+            // Save all of the caller saved registers, as well as s1 so we can
+            // persist whether or not we switched to the interrupt stack across
+            // function calls.
+            sw   ra, 0*4(sp)
+            sw   t0, 1*4(sp)
+            sw   t1, 2*4(sp)
+            sw   t2, 3*4(sp)
+            sw   t3, 4*4(sp)
+            sw   t4, 5*4(sp)
+            sw   t5, 6*4(sp)
+            sw   t6, 7*4(sp)
+            sw   a0, 8*4(sp)
+            sw   a1, 9*4(sp)
+            sw   a2, 10*4(sp)
+            sw   a3, 11*4(sp)
+            sw   a4, 12*4(sp)
+            sw   a5, 13*4(sp)
+            sw   a6, 14*4(sp)
+            sw   a7, 15*4(sp)
+            sw   s1, 16*4(sp)
+
+            // Load mcause into t0, so we can check if we got a (maskable)
+            // interrupt and switch to the interrupt stack if necessary.
+            //
+            // Note that we do NOT switch stacks upon receiving a non-maskable
+            // interrupt (NMI), as we may want to support recoverable NMIs in
+            // the future, and without 
+            //
+            //     (a) being able to atomically move the stack pointer to the
+            //         interrupt stack and set some flag in memory, OR 
+            //                                  
+            //     (b) making the assumption that the kernel stack hasn't
+            //         overflowed (so that the stack pointer alone can indicate
+            //         whether we were just handling an interrupt)
+            //
+            // we cannot know for certain whether the NMI happened in between
+            // (1) the trap handler setting a flag to indicate that the
+            // interrupt stack is being used and (2) the trap handler moving
+            // the stack pointer over to the trap handler, meaning that we
+            // don't have a way of knowing where to put the stack pointer
+            // after the trap handler for the NMI completes.
+            csrr a0, mcause
+
+            // We want to keep a bit in a callee-saved register indicating
+            // whether or not we're handling a (non-NMI) interrupt, so that
+            // after calling _start_trap_rust_from_kernel, we can know whether
+            // or not we should switch back to the kernel stack. Here, we use
+            // s1, since s0 is reserved for the frame pointer.
+            li   s1, 0b0
+            
+            // Now check if this was an interrupt, and if it was, then we
+            // want to move the stack pointer to the interrupt stack before
+            // progressing with the trap handler. If mcause is greater than
+            // or equal to zero this was not an interrupt (i.e. the most
+            // significant bit is 1).
+            bge  a0, zero, 300f 
+
+            // Next, check if this was specifically a non-maskable interrupt
+            // (NMI). Since NMIs can only be detected by the value in the mcause
+            // CSR, and these values are chip specific, we expect any chip
+            // enabling the `separate_irq_stack` IRQ to define a global symbol
+            // _check_mcause_for_nmi at a function which checks the mcause
+            // register for an NMI.
+            //
+            // Note that this is only strictly necessary if recovering from NMIs
+            // is required; if this check is omitted or _check_mcause_for_nmi
+            // is implemented to just return zero, then NMIs will overwrite the
+            // interrupt stack, but this is a moot point if NMIs are strictly
+            // unrecoverable anyway.
+            //
+            // We pass the value in mcause to _check_mcause_for_nmi as an
+            // argument, and expect back a boolean. If we receive back a
+            // non-zero return value (i.e. how Rust represents `true`), we
+            // interpret this as an NMI and skip switching stacks for the reason
+            // detailed above.
+            jal ra, _check_mcause_for_nmi
+            bnez a0, 300f 
+
+            // If we've reached this point, this was indeed an interrupt which
+            // is *not* an NMI. We set the flag in s1 to indicate this.
+            li   s1, 0b1 
+            
+            // Now, we need to save our current stack pointer value and move the
+            // stack pointer to the interrupt stack.
+            mv   t0, sp           // t0 = sp. Preserve the current value of
+                                  // the stack pointer.
+            la   sp, {eintstack}  // sp = first address in interrupt stack
+            addi sp, sp, -4*4     // sp = sp - 4*4. Make room on the stack.
+            sw   t0, 0*4(sp)      // *sp = t0. Save the kernel stack pointer
+                                  // to the kernel stack pointer scratch field.
+
+        300: // _start_kernel_trap_call
+
+            // Jump to board-specific trap handler code. Likely this was an
+            // interrupt and we want to disable a particular interrupt, but each
+            // board/chip can customize this as needed.
+            jal ra, _start_trap_rust_from_kernel
+
+            // Now, on return, we want to recall using the flag in s1 if we
+            // had an interrupt to determine whether we need to move the stack
+            // pointer back from the interrupt stack to the kernel stack. If
+            // there wasn't an interrupt, we can skip to restoring registers
+            // from the stack.
+            beqz s1, 400f
+
+            // If we've reached this point, we just handled a non-NMI interrupt,
+            // so return to the kernel stack.
+            la   t0, {eintstack}  // t0 = first address after interrupt stack
+            lw   sp, -4*4(t0)     // sp = *(t0 - 4*4). Jump back to kernel stack. 
+
+        400: // _start_kernel_trap_finish
+
+            // Restore the registers from the stack.
+            lw   ra, 0*4(sp)
+            lw   t0, 1*4(sp)
+            lw   t1, 2*4(sp)
+            lw   t2, 3*4(sp)
+            lw   t3, 4*4(sp)
+            lw   t4, 5*4(sp)
+            lw   t5, 6*4(sp)
+            lw   t6, 7*4(sp)
+            lw   a0, 8*4(sp)
+            lw   a1, 9*4(sp)
+            lw   a2, 10*4(sp)
+            lw   a3, 11*4(sp)
+            lw   a4, 12*4(sp)
+            lw   a5, 13*4(sp)
+            lw   a6, 14*4(sp)
+            lw   a7, 15*4(sp)
+            lw   s1, 16*4(sp)
+
+            // Reset the stack pointer.
+            addi sp, sp, 20*4
+
+            // mret returns from the trap handler. The PC is set to what is in
+            // mepc and execution proceeds from there. Since we did not modify
+            // mepc we will return to where the exception occurred.
+            mret
+    ",
+    sintstack = sym _sintstack,
+    eintstack = sym _eintstack,
+    estack = sym _estack,
 );
 
 /// RISC-V semihosting needs three exact instructions in uncompressed form.

@@ -73,5 +73,8 @@ ffi = []
 # hardware.
 hardware_tests = []
 
+# Separate the IRQ stack from the kernel stack.
+separate_irq_stack = ["earlgrey/separate_irq_stack"]
+
 [lints]
 workspace = true
