@@ -31,6 +31,9 @@ use crate::rstmgr::RstMgr;
 use crate::rv_core_ibex::{IBEX_EXTERNAL_NMI_MCAUSE, RV_CORE_IBEX};
 use lowrisc::aon_timer::AonTimerInterrupt;
 
+#[cfg(feature = "separate_irq_stack")]
+use crate::rv_core_ibex::IBEX_LOAD_INTEGRITY_ERROR_NMI_MCAUSE;
+
 pub struct EarlGrey<
     'a,
     const MPU_REGIONS: usize,
