@@ -466,6 +466,8 @@ impl<C: Chip + 'static> TockMain<C> {
                 }
                 #[cfg(not(feature = "test_flash_ctrl"))]
                 {
+                    // Opt out of linters here because comments in this context
+                    // are not forwarded to the board definition.
                     #[allow(clippy::undocumented_unsafe_blocks)]
                     let starting_address = unsafe {
                         earlgrey::flash_ctrl::FlashAddress::new_from_host_address(&_stext as *const u8)

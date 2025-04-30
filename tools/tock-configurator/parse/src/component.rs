@@ -82,12 +82,34 @@ impl<T: Sized + 'static> AsAny for T {
     }
 }
 
+/// Trait for objects that manage peripheral configurations.
+pub trait ConfigPeripherals: std::fmt::Debug {
+    /// Invoked by a meta-driver to indicate it corresponds to a particular
+    /// real driver that should be included in the board definition. The
+    /// extra argument `param` is peripheral-specific.
+    fn require(&mut self, peripheral: usize, param: usize);
+    /// Invoked by a meta-driver to indicate its corresponding real driver
+    /// requires interrupts enabled for a particular HWIP, but not necessarily
+    /// its own peripheral driver.  The extra argument `param` is
+    /// peripheral-specific.
+    fn require_interrupts(&mut self, peripheral: usize, param: usize);
+    /// Whether the peripheral configuration indicates that a flash virtualizer
+    /// should be used.
+    fn should_virtualize_flash(&self) -> bool;
+    /// Whether the peripheral configuration indicates that an info flash
+    /// virtualizer should be used.
+    fn should_virtualize_info_flash(&self) -> bool;
+    /// Whether the peripheral configuration indicates that a timer virtualizer
+    /// should be used.
+    fn should_virtualize_timer(&self) -> bool;
+}
+
 /// A trait for objects that define variables from a function in the platform's main.
 ///
 /// Besides the [`Ident`] implementation, the *component* can optionally provide the type of the
 /// variable, the code expression that returns a new instance, and the dependencies for the
 /// initialization.
-pub trait Component: Ident + AsComponent + AsAny {
+pub trait Component: Ident + AsAny + AsComponent {
     /// Return the code for the type of the component if needed, else, return `None`.
     fn ty(&self) -> Result<proc_macro2::TokenStream, crate::Error> {
         Err(crate::Error::CodeNotProvided)
@@ -128,6 +150,15 @@ pub trait Component: Ident + AsComponent + AsAny {
     /// similar to `Capsule`.
     fn before_usage(&self) -> Option<proc_macro2::TokenStream> {
         None
+    }
+
+    /// Invoked to indicate `self` has an additional dependent, and should
+    /// record this fact. Used during board generation to track which peripherals
+    /// need drivers/interrupts and which virtualizers are necessary.
+    fn trace_dependencies(&self, peripherals: &mut dyn ConfigPeripherals) {
+        if let Some(v) = self.dependencies() {
+            v.iter().for_each(|d| d.trace_dependencies(peripherals));
+        }
     }
 }
 

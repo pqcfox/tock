@@ -15,7 +15,7 @@ impl RvTimer {
 
 impl parse::Ident for RvTimer {
     fn ident(&self) -> Result<String, parse::Error> {
-        Ok(String::from("peripherals.timer"))
+        Ok(String::from("peripherals.timer.as_ref().unwrap()"))
     }
 }
 

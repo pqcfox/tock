@@ -2,6 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // Copyright Tock Contributors 2022.
 
+use crate::peripherals::EarlgreyPeripheralConfig;
+use std::cell::RefCell;
+use std::rc::Rc;
+
 pub struct FlashPage;
 
 impl parse::Ident for FlashPage {
@@ -22,18 +26,21 @@ impl parse::flash::Page for FlashPage {
     }
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Debug, PartialEq)]
-pub struct FlashCtrl {}
+#[derive(serde::Serialize, serde::Deserialize, Debug, Default, PartialEq, Clone)]
+pub struct FlashCtrl {
+    #[serde(skip)]
+    peripherals: Rc<RefCell<EarlgreyPeripheralConfig>>,
+}
 
 impl FlashCtrl {
-    pub(crate) fn new() -> Self {
-        Self {}
+    pub(crate) fn new(peripherals: Rc<RefCell<EarlgreyPeripheralConfig>>) -> Self {
+        Self { peripherals }
     }
 }
 
 impl parse::Ident for FlashCtrl {
     fn ident(&self) -> Result<String, parse::Error> {
-        Ok(String::from("peripherals.flash_ctrl"))
+        Ok(String::from("peripherals.flash_ctrl.as_ref().unwrap()"))
     }
 }
 

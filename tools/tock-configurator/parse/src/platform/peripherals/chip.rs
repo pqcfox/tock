@@ -13,6 +13,7 @@ use super::{
     Sha3_256, Sha3_384, Sha3_512, Sha512, Shake128, Shake256, Spi, Temperature,
 };
 use crate::Component;
+use std::cell::RefCell;
 use std::rc::Rc;
 
 #[derive(Debug, PartialEq, Clone, Copy, serde::Serialize, serde::Deserialize)]
@@ -258,4 +259,8 @@ pub trait Chip: Component {
 
     /// Return a pointer to the chip's watchdog.
     fn watchdog(&self) -> Result<Rc<Self::Watchdog>, crate::Error>;
+
+    /// Returns a reference to the chip-specific peripheral / configuration
+    /// data.
+    fn peripheral_config(&self) -> Rc<RefCell<dyn crate::component::ConfigPeripherals>>;
 }

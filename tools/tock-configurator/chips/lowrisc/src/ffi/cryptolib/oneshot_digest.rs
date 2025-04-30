@@ -2,11 +2,14 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // Copyright Tock Contributors 2022.
 
+use crate::peripherals::{Peripheral, NO_PARAM};
+
 macro_rules! oneshot_digest_driver {
     {
         driver = $driver:ident,
         driver_ident = $driver_ident:expr,
         hil = $hil:ident,
+        needs_peripheral = $needs_peripheral:ident,
     } => {
         #[derive(serde::Serialize, serde::Deserialize, Debug, PartialEq)]
         pub struct $driver {}
@@ -35,6 +38,13 @@ macro_rules! oneshot_digest_driver {
 
                 Ok(quote::quote!(#ty))
             }
+
+            fn trace_dependencies(&self, peripherals: &mut dyn parse::component::ConfigPeripherals) {
+                peripherals.require_interrupts(
+                    Peripheral::$needs_peripheral as usize,
+                    NO_PARAM
+                )
+            }
         }
 
         impl std::fmt::Display for $driver {
@@ -50,79 +60,95 @@ oneshot_digest_driver! {
     driver = OtCryptoOneshotSha256,
     driver_ident = "otcrypto_oneshot_sha256",
     hil = Sha256,
+    needs_peripheral = Hmac,
 }
 oneshot_digest_driver! {
     driver = OtCryptoOneshotSha384,
     driver_ident = "otcrypto_oneshot_sha384",
     hil = Sha384,
+    needs_peripheral = Hmac,
 }
 oneshot_digest_driver! {
     driver = OtCryptoOneshotSha512,
     driver_ident = "otcrypto_oneshot_sha512",
     hil = Sha512,
+    needs_peripheral = Hmac,
 }
 oneshot_digest_driver! {
     driver = OtCryptoOneshotSha3_224,
     driver_ident = "otcrypto_oneshot_sha3_224",
     hil = Sha3_224,
+    needs_peripheral = Kmac,
 }
 oneshot_digest_driver! {
     driver = OtCryptoOneshotSha3_256,
     driver_ident = "otcrypto_oneshot_sha3_256",
     hil = Sha3_256,
+    needs_peripheral = Kmac,
 }
 oneshot_digest_driver! {
     driver = OtCryptoOneshotSha3_384,
     driver_ident = "otcrypto_oneshot_sha3_384",
     hil = Sha3_384,
+    needs_peripheral = Kmac,
 }
 oneshot_digest_driver! {
     driver = OtCryptoOneshotSha3_512,
     driver_ident = "otcrypto_oneshot_sha3_512",
     hil = Sha3_512,
+    needs_peripheral = Kmac,
 }
 oneshot_digest_driver! {
     driver = OtCryptoOneshotShake128,
     driver_ident = "otcrypto_oneshot_shake128",
     hil = Shake128,
+    needs_peripheral = Kmac,
 }
 oneshot_digest_driver! {
     driver = OtCryptoOneshotShake256,
     driver_ident = "otcrypto_oneshot_shake256",
     hil = Shake256,
+    needs_peripheral = Kmac,
 }
 oneshot_digest_driver! {
     driver = OtCryptoOneshotCshake128,
     driver_ident = "otcrypto_oneshot_cshake128",
     hil = Cshake128,
+    needs_peripheral = Kmac,
 }
 oneshot_digest_driver! {
     driver = OtCryptoOneshotCshake256,
     driver_ident = "otcrypto_oneshot_cshake256",
     hil = Cshake256,
+    needs_peripheral = Kmac,
 }
 oneshot_digest_driver! {
     driver = OtCryptoOneshotHmacSha256,
     driver_ident = "otcrypto_oneshot_hmac_sha256",
     hil = HmacSha256,
+    needs_peripheral = Hmac,
 }
 oneshot_digest_driver! {
     driver = OtCryptoOneshotHmacSha384,
     driver_ident = "otcrypto_oneshot_hmac_sha384",
     hil = HmacSha384,
+    needs_peripheral = Hmac,
 }
 oneshot_digest_driver! {
     driver = OtCryptoOneshotHmacSha512,
     driver_ident = "otcrypto_oneshot_hmac_sha512",
     hil = HmacSha512,
+    needs_peripheral = Hmac,
 }
 oneshot_digest_driver! {
     driver = OtCryptoOneshotKmac128,
     driver_ident = "otcrypto_oneshot_kmac128",
     hil = Kmac128,
+    needs_peripheral = Kmac,
 }
 oneshot_digest_driver! {
     driver = OtCryptoOneshotKmac256,
     driver_ident = "otcrypto_oneshot_kmac256",
     hil = Kmac256,
+    needs_peripheral = Kmac,
 }

@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // Copyright Tock Contributors 2022.
 
+use crate::peripherals::{Peripheral, NO_PARAM};
+
 #[derive(serde::Serialize, serde::Deserialize, Debug, PartialEq)]
 pub struct I2c {}
 
@@ -13,13 +15,17 @@ impl I2c {
 
 impl parse::Ident for I2c {
     fn ident(&self) -> Result<String, parse::Error> {
-        Ok(String::from("peripherals.i2c0"))
+        Ok(String::from("peripherals.i2c0.as_ref().unwrap()"))
     }
 }
 
 impl parse::Component for I2c {
     fn ty(&self) -> Result<proc_macro2::TokenStream, parse::Error> {
         Ok(quote::quote!(lowrisc::i2c::I2c<'static>))
+    }
+
+    fn trace_dependencies(&self, peripherals: &mut dyn parse::component::ConfigPeripherals) {
+        peripherals.require(Peripheral::I2c0 as usize, NO_PARAM);
     }
 }
 
