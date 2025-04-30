@@ -69,7 +69,7 @@ impl<U: Uart + 'static> crate::Component for MuxUart<U> {
         Ok(quote! {
             {
                 #uart_before
-                components::console::UartMuxComponent::new(&#uart_ident, #baud_rate)
+                components::console::UartMuxComponent::new(#uart_ident, #baud_rate)
                 .finalize(components::uart_mux_component_static!())
             }
         })

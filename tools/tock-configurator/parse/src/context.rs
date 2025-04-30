@@ -9,6 +9,7 @@ use std::error::Error;
 use std::rc::Rc;
 
 use crate::config::{Capsule, Configuration};
+use crate::Component;
 use crate::{
     AesCapsule, AlarmDriver, AlertHandlerCapsule, AsymmetricCryptoCapsule, AttestationCapsule,
     Console, HmacCapsule, I2CMasterDriver, InfoFlash, KvDriver, Led, Lldb, MuxAlarm, MuxUart,
@@ -37,200 +38,269 @@ pub struct Context<C: Chip> {
 impl<C: Chip> Context<C> {
     pub fn from_config(
         chip: C,
-        config: Configuration<C::Peripherals>,
+        config: Configuration<<C as Chip>::Peripherals>,
     ) -> Result<Self, Box<dyn Error>> {
         let mut visited = Vec::new();
         let mut capsules = Vec::new();
+        let temp = chip.peripheral_config();
+        let mut peripheral_config = temp.borrow_mut();
 
-        // Iterate over the capsules and insert them into the current platform's capsule list.
+        // Iterate over the capsules and insert them into the current platform's
+        // capsule list.
+        //
+        // Also, run the tracer to determine which drivers and virtualizers to
+        // include and interrupts to enable.
         for capsule_config in config.capsules() {
             match capsule_config {
                 Capsule::Console { uart, baud_rate } => {
                     let mux_uart = MuxUart::insert_get(Rc::clone(uart), *baud_rate, &mut visited);
-                    capsules.push(Console::get(mux_uart) as Rc<dyn crate::Capsule>)
+                    let console = Console::get(mux_uart);
+                    console.trace_dependencies(&mut *peripheral_config);
+                    capsules.push(console as Rc<dyn crate::Capsule>)
                 }
                 Capsule::Alarm { timer } => {
                     let mux_alarm = MuxAlarm::insert_get(Rc::clone(timer), &mut visited);
-                    capsules.push(AlarmDriver::get(mux_alarm) as Rc<dyn crate::Capsule>)
+                    let alarm_driver = AlarmDriver::get(mux_alarm);
+                    alarm_driver.trace_dependencies(&mut *peripheral_config);
+                    capsules.push(alarm_driver as Rc<dyn crate::Capsule>)
                 }
-                Capsule::Temperature { temp } => capsules
-                    .push(TemperatureCapsule::get(Rc::clone(temp)) as Rc<dyn crate::Capsule>),
+                Capsule::Temperature { temp } => {
+                    let temperature = TemperatureCapsule::get(Rc::clone(temp));
+                    temperature.trace_dependencies(&mut *peripheral_config);
+                    capsules.push(temperature as Rc<dyn crate::Capsule>)
+                }
                 Capsule::Rng { rng } => {
-                    capsules.push(RngCapsule::get(Rc::clone(rng)) as Rc<dyn crate::Capsule>)
+                    let rng = RngCapsule::get(Rc::clone(rng));
+                    rng.trace_dependencies(&mut *peripheral_config);
+                    capsules.push(rng as Rc<dyn crate::Capsule>)
                 }
                 Capsule::Spi { spi } => {
-                    capsules.push(SpiCapsule::get(Rc::clone(spi)) as Rc<dyn crate::Capsule>)
+                    let spi = SpiCapsule::get(Rc::clone(spi));
+                    spi.trace_dependencies(&mut *peripheral_config);
+                    capsules.push(spi as Rc<dyn crate::Capsule>)
                 }
                 Capsule::I2c { i2c } => {
-                    capsules.push(I2CMasterDriver::get(Rc::clone(i2c)) as Rc<dyn crate::Capsule>)
+                    let i2c = I2CMasterDriver::get(Rc::clone(i2c));
+                    i2c.trace_dependencies(&mut *peripheral_config);
+                    capsules.push(i2c as Rc<dyn crate::Capsule>)
                 }
-                Capsule::Gpio { pins } => capsules.push(GPIO::<
-                    <<C as Chip>::Peripherals as DefaultPeripherals>::Gpio,
-                >::get(pins.clone())
-                    as Rc<dyn crate::Capsule>),
-                Capsule::Led { led_type, pins } => capsules.push(Led::<
-                    <<C as Chip>::Peripherals as DefaultPeripherals>::Gpio,
-                >::get(
-                    *led_type, pins.clone()
-                )
-                    as Rc<dyn crate::Capsule>),
+                Capsule::Gpio { pins } => {
+                    let gpio = GPIO::<<<C as Chip>::Peripherals as DefaultPeripherals>::Gpio>::get(
+                        pins.clone(),
+                    );
+                    gpio.trace_dependencies(&mut *peripheral_config);
+                    capsules.push(gpio as Rc<dyn crate::Capsule>)
+                }
+                Capsule::Led { led_type, pins } => {
+                    let led = Led::<<<C as Chip>::Peripherals as DefaultPeripherals>::Gpio>::get(
+                        *led_type,
+                        pins.clone(),
+                    );
+                    led.trace_dependencies(&mut *peripheral_config);
+                    capsules.push(led as Rc<dyn crate::Capsule>)
+                }
                 Capsule::Hmac { hmac, length } => {
-                    capsules
-                        .push(HmacCapsule::get(Rc::clone(hmac), *length) as Rc<dyn crate::Capsule>)
+                    let hmac = HmacCapsule::get(Rc::clone(hmac), *length);
+                    hmac.trace_dependencies(&mut *peripheral_config);
+                    capsules.push(hmac as Rc<dyn crate::Capsule>)
                 }
                 Capsule::KvDriver { flash } => {
-                    capsules.push(KvDriver::get(flash.clone()) as Rc<dyn crate::Capsule>);
+                    let kv_driver = KvDriver::get(Rc::clone(flash));
+                    kv_driver.trace_dependencies(&mut *peripheral_config);
+                    capsules.push(kv_driver as Rc<dyn crate::Capsule>);
                 }
                 Capsule::InfoFlash { flash } => {
-                    capsules.push(InfoFlash::get(Rc::clone(flash)) as Rc<dyn crate::Capsule>)
+                    let info_flash = InfoFlash::get(Rc::clone(&flash));
+                    info_flash.trace_dependencies(&mut *peripheral_config);
+                    capsules.push(info_flash as Rc<dyn crate::Capsule>)
                 }
                 Capsule::Lldb { uart, baud_rate } => {
                     let mux_uart = MuxUart::insert_get(Rc::clone(uart), *baud_rate, &mut visited);
-                    capsules.push(Lldb::get(mux_uart) as Rc<dyn crate::Capsule>);
+                    let lldb = Lldb::get(mux_uart);
+                    lldb.trace_dependencies(&mut *peripheral_config);
+                    capsules.push(lldb as Rc<dyn crate::Capsule>);
                 }
                 Capsule::Aes {
                     aes,
                     number_of_blocks,
                 } => {
-                    capsules
-                        .push(AesCapsule::get(aes.clone(), *number_of_blocks)
-                            as Rc<dyn crate::Capsule>);
+                    let aes = AesCapsule::get(aes.clone(), *number_of_blocks);
+                    aes.trace_dependencies(&mut *peripheral_config);
+                    capsules.push(aes as Rc<dyn crate::Capsule>);
                 }
                 Capsule::Pattgen { pattgen } => {
-                    capsules.push(PattgenCapsule::get(pattgen.clone()) as Rc<dyn crate::Capsule>);
+                    let pattgen = PattgenCapsule::get(pattgen.clone());
+                    pattgen.trace_dependencies(&mut *peripheral_config);
+                    capsules.push(pattgen as Rc<dyn crate::Capsule>);
                 }
                 Capsule::SystemResetController {
                     system_reset_controller,
                 } => {
-                    capsules.push(
-                        SystemResetControllerCapsule::get(system_reset_controller.clone())
-                            as Rc<dyn crate::Capsule>,
-                    );
+                    let sysreset =
+                        SystemResetControllerCapsule::get(system_reset_controller.clone());
+                    sysreset.trace_dependencies(&mut *peripheral_config);
+                    capsules.push(sysreset as Rc<dyn crate::Capsule>);
                 }
                 Capsule::AlertHandler { alert_handler } => {
-                    capsules
-                        .push(AlertHandlerCapsule::get(alert_handler.clone())
-                            as Rc<dyn crate::Capsule>);
+                    let alert_handler = AlertHandlerCapsule::get(alert_handler.clone());
+                    alert_handler.trace_dependencies(&mut *peripheral_config);
+                    capsules.push(alert_handler as Rc<dyn crate::Capsule>);
                 }
                 Capsule::Usb { usb } => {
-                    capsules.push(UsbCapsule::get(usb.clone()) as Rc<dyn crate::Capsule>);
+                    let usb = UsbCapsule::get(usb.clone());
+                    usb.trace_dependencies(&mut *peripheral_config);
+                    capsules.push(usb as Rc<dyn crate::Capsule>);
                 }
                 Capsule::ResetManager { reset_manager } => {
-                    capsules
-                        .push(ResetManagerCapsule::get(reset_manager.clone())
-                            as Rc<dyn crate::Capsule>);
+                    let reset_manager = ResetManagerCapsule::get(reset_manager.clone());
+                    reset_manager.trace_dependencies(&mut *peripheral_config);
+                    capsules.push(reset_manager as Rc<dyn crate::Capsule>);
                 }
                 Capsule::Ipc {} => {
-                    capsules.push(IPC::get() as Rc<dyn crate::Capsule>);
+                    let ipc = IPC::get();
+                    ipc.trace_dependencies(&mut *peripheral_config);
+                    capsules.push(ipc as Rc<dyn crate::Capsule>);
                 }
                 Capsule::Attestation { attestation } => {
-                    capsules.push(
-                        AttestationCapsule::get(attestation.clone()) as Rc<dyn crate::Capsule>
-                    );
+                    let attestation = AttestationCapsule::get(Rc::clone(attestation));
+                    attestation.trace_dependencies(&mut *peripheral_config);
+                    capsules.push(attestation as Rc<dyn crate::Capsule>);
                 }
                 Capsule::P256 { p256 } => {
-                    capsules.push(AsymmetricCryptoCapsule::get(
+                    let p256 = AsymmetricCryptoCapsule::get(
                         "DRIVER_NUM_P256".to_string(),
                         "<kernel::hil::public_key_crypto::ecc::P256 as kernel::hil::public_key_crypto::ecc::EllipticCurve>::HASH_LEN".to_string(),
                         "<kernel::hil::public_key_crypto::ecc::P256 as kernel::hil::public_key_crypto::ecc::EllipticCurve>::SIG_LEN".to_string(),
                         "EcdsaP256".to_string(),
                         p256.clone(),
-                    ) as Rc<dyn crate::Capsule>);
+                    );
+                    p256.trace_dependencies(&mut *peripheral_config);
+                    capsules.push(p256 as Rc<dyn crate::Capsule>);
                 }
                 Capsule::P384 { p384 } => {
-                    capsules.push(AsymmetricCryptoCapsule::get(
+                    let p384 = AsymmetricCryptoCapsule::get(
                         "DRIVER_NUM_P384".to_string(),
                         "<kernel::hil::public_key_crypto::ecc::P384 as kernel::hil::public_key_crypto::ecc::EllipticCurve>::HASH_LEN".to_string(),
                         "<kernel::hil::public_key_crypto::ecc::P384 as kernel::hil::public_key_crypto::ecc::EllipticCurve>::SIG_LEN".to_string(),
                         "EcdsaP384".to_string(),
                         p384.clone(),
-                    ) as Rc<dyn crate::Capsule>);
+                    );
+                    p384.trace_dependencies(&mut *peripheral_config);
+                    capsules.push(p384 as Rc<dyn crate::Capsule>);
                 }
                 Capsule::OneshotSha256 { oneshot_sha256 } => {
-                    capsules
-                        .push(OneshotSha256Capsule::get(oneshot_sha256.clone())
-                            as Rc<dyn crate::Capsule>);
+                    let oneshot_sha256 = OneshotSha256Capsule::get(oneshot_sha256.clone());
+                    oneshot_sha256.trace_dependencies(&mut *peripheral_config);
+                    capsules.push(oneshot_sha256 as Rc<dyn crate::Capsule>);
                 }
                 Capsule::OneshotSha384 { oneshot_sha384 } => {
-                    capsules
-                        .push(OneshotSha384Capsule::get(oneshot_sha384.clone())
-                            as Rc<dyn crate::Capsule>);
+                    let oneshot_sha384 = OneshotSha384Capsule::get(oneshot_sha384.clone());
+                    oneshot_sha384.trace_dependencies(&mut *peripheral_config);
+                    capsules.push(oneshot_sha384 as Rc<dyn crate::Capsule>);
                 }
                 Capsule::OneshotSha512 { oneshot_sha512 } => {
-                    capsules
-                        .push(OneshotSha512Capsule::get(oneshot_sha512.clone())
-                            as Rc<dyn crate::Capsule>);
+                    let oneshot_sha512 = OneshotSha512Capsule::get(oneshot_sha512.clone());
+                    oneshot_sha512.trace_dependencies(&mut *peripheral_config);
+                    capsules.push(oneshot_sha512 as Rc<dyn crate::Capsule>);
                 }
                 Capsule::OneshotSha3_224 { oneshot_sha3_224 } => {
-                    capsules.push(OneshotSha3_224Capsule::get(oneshot_sha3_224.clone())
-                        as Rc<dyn crate::Capsule>);
+                    let oneshot_sha3_224 = OneshotSha3_224Capsule::get(oneshot_sha3_224.clone());
+                    oneshot_sha3_224.trace_dependencies(&mut *peripheral_config);
+                    capsules.push(oneshot_sha3_224 as Rc<dyn crate::Capsule>);
                 }
                 Capsule::OneshotSha3_256 { oneshot_sha3_256 } => {
-                    capsules.push(OneshotSha3_256Capsule::get(oneshot_sha3_256.clone())
-                        as Rc<dyn crate::Capsule>);
+                    let oneshot_sha3_256 = OneshotSha3_256Capsule::get(oneshot_sha3_256.clone());
+                    oneshot_sha3_256.trace_dependencies(&mut *peripheral_config);
+                    capsules.push(oneshot_sha3_256 as Rc<dyn crate::Capsule>);
                 }
                 Capsule::OneshotSha3_384 { oneshot_sha3_384 } => {
-                    capsules.push(OneshotSha3_384Capsule::get(oneshot_sha3_384.clone())
-                        as Rc<dyn crate::Capsule>);
+                    let oneshot_sha3_384 = OneshotSha3_384Capsule::get(oneshot_sha3_384.clone());
+                    oneshot_sha3_384.trace_dependencies(&mut *peripheral_config);
+                    capsules.push(oneshot_sha3_384 as Rc<dyn crate::Capsule>);
                 }
                 Capsule::OneshotSha3_512 { oneshot_sha3_512 } => {
-                    capsules.push(OneshotSha3_512Capsule::get(oneshot_sha3_512.clone())
-                        as Rc<dyn crate::Capsule>);
+                    let oneshot_sha3_512 = OneshotSha3_512Capsule::get(oneshot_sha3_512.clone());
+                    oneshot_sha3_512.trace_dependencies(&mut *peripheral_config);
+                    capsules.push(oneshot_sha3_512 as Rc<dyn crate::Capsule>);
                 }
                 Capsule::OneshotShake128 { oneshot_shake128 } => {
-                    capsules.push(OneshotShake128Capsule::get(oneshot_shake128.clone())
-                        as Rc<dyn crate::Capsule>);
+                    let oneshot_shake128 = OneshotShake128Capsule::get(oneshot_shake128.clone());
+
+                    oneshot_shake128.trace_dependencies(&mut *peripheral_config);
+                    capsules.push(oneshot_shake128 as Rc<dyn crate::Capsule>);
                 }
                 Capsule::OneshotShake256 { oneshot_shake256 } => {
-                    capsules.push(OneshotShake256Capsule::get(oneshot_shake256.clone())
-                        as Rc<dyn crate::Capsule>);
+                    let oneshot_shake256 = OneshotShake256Capsule::get(oneshot_shake256.clone());
+
+                    oneshot_shake256.trace_dependencies(&mut *peripheral_config);
+                    capsules.push(oneshot_shake256 as Rc<dyn crate::Capsule>);
                 }
                 Capsule::OneshotCshake128 { oneshot_cshake128 } => {
-                    capsules.push(OneshotCshake128Capsule::get(oneshot_cshake128.clone())
-                        as Rc<dyn crate::Capsule>);
+                    let oneshot_cshake128 = OneshotCshake128Capsule::get(oneshot_cshake128.clone());
+
+                    oneshot_cshake128.trace_dependencies(&mut *peripheral_config);
+                    capsules.push(oneshot_cshake128 as Rc<dyn crate::Capsule>);
                 }
                 Capsule::OneshotCshake256 { oneshot_cshake256 } => {
-                    capsules.push(OneshotCshake256Capsule::get(oneshot_cshake256.clone())
-                        as Rc<dyn crate::Capsule>);
+                    let oneshot_cshake256 = OneshotCshake256Capsule::get(oneshot_cshake256.clone());
+
+                    oneshot_cshake256.trace_dependencies(&mut *peripheral_config);
+                    capsules.push(oneshot_cshake256 as Rc<dyn crate::Capsule>);
                 }
                 Capsule::OneshotHmacSha256 {
                     oneshot_hmac_sha256,
                 } => {
-                    capsules.push(OneshotHmacSha256Capsule::get(oneshot_hmac_sha256.clone())
-                        as Rc<dyn crate::Capsule>);
+                    let oneshot_hmac_sha256 =
+                        OneshotHmacSha256Capsule::get(oneshot_hmac_sha256.clone());
+                    oneshot_hmac_sha256.trace_dependencies(&mut *peripheral_config);
+                    capsules.push(oneshot_hmac_sha256 as Rc<dyn crate::Capsule>);
                 }
                 Capsule::OneshotHmacSha384 {
                     oneshot_hmac_sha384,
                 } => {
-                    capsules.push(OneshotHmacSha384Capsule::get(oneshot_hmac_sha384.clone())
-                        as Rc<dyn crate::Capsule>);
+                    let oneshot_hmac_sha384 =
+                        OneshotHmacSha384Capsule::get(oneshot_hmac_sha384.clone());
+                    oneshot_hmac_sha384.trace_dependencies(&mut *peripheral_config);
+                    capsules.push(oneshot_hmac_sha384 as Rc<dyn crate::Capsule>);
                 }
                 Capsule::OneshotHmacSha512 {
                     oneshot_hmac_sha512,
                 } => {
-                    capsules.push(OneshotHmacSha512Capsule::get(oneshot_hmac_sha512.clone())
-                        as Rc<dyn crate::Capsule>);
+                    let oneshot_hmac_sha512 =
+                        OneshotHmacSha512Capsule::get(oneshot_hmac_sha512.clone());
+                    oneshot_hmac_sha512.trace_dependencies(&mut *peripheral_config);
+                    capsules.push(oneshot_hmac_sha512 as Rc<dyn crate::Capsule>);
                 }
                 Capsule::OneshotKmac128 { oneshot_kmac128 } => {
-                    capsules.push(OneshotKmac128Capsule::get(oneshot_kmac128.clone())
-                        as Rc<dyn crate::Capsule>);
+                    let oneshot_kmac128 = OneshotKmac128Capsule::get(oneshot_kmac128.clone());
+
+                    oneshot_kmac128.trace_dependencies(&mut *peripheral_config);
+                    capsules.push(oneshot_kmac128 as Rc<dyn crate::Capsule>);
                 }
                 Capsule::OneshotKmac256 { oneshot_kmac256 } => {
-                    capsules.push(OneshotKmac256Capsule::get(oneshot_kmac256.clone())
-                        as Rc<dyn crate::Capsule>);
-                }
+                    let oneshot_kmac256 = OneshotKmac256Capsule::get(oneshot_kmac256.clone());
 
+                    oneshot_kmac256.trace_dependencies(&mut *peripheral_config);
+                    capsules.push(oneshot_kmac256 as Rc<dyn crate::Capsule>);
+                }
                 _ => unreachable!("Capsule context branch not set."),
             };
         }
+        let scheduler = Scheduler::insert_get(config.scheduler, &mut visited);
+        let systick = chip.systick()?;
+        let watchdog = chip.watchdog()?;
+
+        scheduler.trace_dependencies(&mut *peripheral_config);
+        systick.trace_dependencies(&mut *peripheral_config);
+        watchdog.trace_dependencies(&mut *peripheral_config);
 
         Ok(Self {
             platform: Rc::new(Platform::<C>::new(
                 config.r#type,
                 capsules,
-                Scheduler::insert_get(config.scheduler, &mut visited),
-                chip.systick()?,
-                chip.watchdog()?,
+                scheduler,
+                systick,
+                watchdog,
             )),
             chip: Rc::new(chip),
             process_count: config.process_count,

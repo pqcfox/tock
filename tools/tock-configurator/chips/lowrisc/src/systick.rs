@@ -4,9 +4,15 @@
 
 #[derive(Debug)]
 #[parse::component(serde, ident = "scheduler_timer")]
-pub struct Systick;
+pub struct Systick {
+    virtual_mux_alarm: Rc<lowrisc::timer::RvTimer<'static>>,
+}
 
 impl parse::Component for Systick {
+    fn dependencies(&self) -> Option<Vec<Rc<dyn Component>>> {
+        Some(vec![self.virtual_mux_alarm.clone()])
+    }
+
     fn ty(&self) -> Result<parse::proc_macro2::TokenStream, parse::Error> {
         Ok(quote::quote!(
             kernel::platform::scheduler_timer::VirtualSchedulerTimer<
