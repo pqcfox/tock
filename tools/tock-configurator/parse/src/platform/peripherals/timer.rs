@@ -123,6 +123,10 @@ impl<T: Timer> crate::Ident for MuxAlarm<T> {
 }
 
 impl<T: Timer> crate::Component for MuxAlarm<T> {
+    fn dependencies(&self) -> Option<Vec<Rc<dyn crate::Component>>> {
+        Some(vec![self.peripheral.clone()])
+    }
+
     fn ty(&self) -> Result<proc_macro2::TokenStream, crate::Error> {
         let (timer_ident, timer_type): (proc_macro2::TokenStream, _) = (
             self.peripheral.ident()?.parse().unwrap(),
@@ -137,7 +141,7 @@ impl<T: Timer> crate::Component for MuxAlarm<T> {
         let timer_ident: proc_macro2::TokenStream =
             self.peripheral.ident().unwrap().parse().unwrap();
         Some(quote! {
-            let __timer = &#timer_ident;
+            let __timer = #timer_ident;
         })
     }
 

@@ -62,7 +62,12 @@ impl<G: gpio::Gpio + 'static> Component for GPIO<G> {
     }
 
     fn dependencies(&self) -> Option<Vec<Rc<dyn Component>>> {
-        None
+        Some(
+            self.pins
+                .iter()
+                .map(|p| Rc::new(*p) as Rc<dyn Component>)
+                .collect(),
+        )
     }
 }
 

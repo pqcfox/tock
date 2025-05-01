@@ -67,10 +67,6 @@ impl parse::Component for PinId {
         ))
     }
 
-    fn init_expr(&self) -> Result<proc_macro2::TokenStream, parse::Error> {
-        todo!()
-    }
-
     fn trace_dependencies(&self, peripherals: &mut dyn parse::component::ConfigPeripherals) {
         peripherals.require(Peripheral::GpioPort as usize, *self as usize)
     }

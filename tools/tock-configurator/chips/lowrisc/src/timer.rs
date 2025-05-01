@@ -4,6 +4,8 @@
 
 use parse::Ident as _;
 
+use crate::peripherals::{Peripheral, NO_PARAM};
+
 #[derive(serde::Serialize, serde::Deserialize, Debug, PartialEq)]
 pub struct RvTimer {}
 
@@ -27,6 +29,10 @@ impl parse::Component for RvTimer {
     fn after_init(&self) -> Option<parse::proc_macro2::TokenStream> {
         let ident: proc_macro2::TokenStream = self.ident().unwrap().parse().unwrap();
         Some(quote::quote!(#ident.setup()))
+    }
+
+    fn trace_dependencies(&self, peripherals: &mut dyn parse::component::ConfigPeripherals) {
+        peripherals.require(Peripheral::Timer as usize, NO_PARAM)
     }
 }
 

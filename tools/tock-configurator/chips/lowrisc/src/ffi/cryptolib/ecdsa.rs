@@ -3,6 +3,7 @@
 // Copyright Tock Contributors 2022.
 
 use crate::ffi::cryptolib::mux::CryptolibMux;
+use crate::peripherals::{Peripheral, NO_PARAM};
 use parse::{Component, Error, Ident};
 use std::rc::Rc;
 
@@ -60,6 +61,17 @@ macro_rules! cryptolib_asymmetric {
                 Some(quote::quote!(
                     #ident.set_self_ref();
                 ))
+            }
+
+            fn trace_dependencies(&self, peripherals: &mut dyn parse::component::ConfigPeripherals) {
+                peripherals.require_interrupts(
+                    Peripheral::Keymgr as usize,
+                    NO_PARAM
+                );
+                peripherals.require_interrupts(
+                    Peripheral::Otbn as usize,
+                    NO_PARAM
+                )
             }
         }
 
