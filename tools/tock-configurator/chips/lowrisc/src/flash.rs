@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // Copyright Tock Contributors 2022.
 
-use crate::peripherals::EarlgreyPeripheralConfig;
+use crate::peripherals::{
+    EarlgreyPeripheralConfig, Peripheral, FLASH_CTRL_CONFIG_DATA, FLASH_CTRL_CONFIG_INFO,
+};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -47,6 +49,12 @@ impl parse::Ident for FlashCtrl {
 impl parse::Component for FlashCtrl {
     fn ty(&self) -> Result<proc_macro2::TokenStream, parse::Error> {
         Ok(quote::quote!(earlgrey::flash_ctrl::FlashCtrl<'static>))
+    }
+
+    fn trace_dependencies(&self, peripherals: &mut dyn parse::component::ConfigPeripherals) {
+        // TODO: Disambiguate between requiring data / info muxes.
+        peripherals.require(Peripheral::FlashCtrl as usize, FLASH_CTRL_CONFIG_DATA);
+        peripherals.require(Peripheral::FlashCtrl as usize, FLASH_CTRL_CONFIG_INFO);
     }
 }
 

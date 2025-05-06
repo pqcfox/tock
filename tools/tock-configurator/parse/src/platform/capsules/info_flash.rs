@@ -13,6 +13,10 @@ pub struct InfoFlashUser<F: flash::Flash + 'static> {
 }
 
 impl<F: flash::Flash + 'static> Component for InfoFlashUser<F> {
+    fn dependencies(&self) -> Option<Vec<Rc<dyn crate::Component>>> {
+        Some(vec![self.peripheral.clone()])
+    }
+
     fn ty(&self) -> Result<proc_macro2::TokenStream, crate::Error> {
         let peripheral_ty = self.peripheral.ty()?;
         Ok(
@@ -25,7 +29,7 @@ impl<F: flash::Flash + 'static> Component for InfoFlashUser<F> {
             self.peripheral.ident().unwrap().parse().unwrap();
         let peripheral_ty = self.peripheral.ty().unwrap();
         Some(quote::quote! {
-            let mux_info_flash = components::flash::InfoFlashMuxComponent::new(&#peripheral_ident)
+            let mux_info_flash = components::flash::InfoFlashMuxComponent::new(#peripheral_ident)
                 .finalize(components::info_flash_mux_component_static!(
                     #peripheral_ty
                 ));
@@ -124,8 +128,7 @@ impl<F: flash::Flash> Component for InfoFlash<F> {
             self.info_flash_user.ident().unwrap().parse().unwrap();
 
         Some(quote::quote! {
-            use kernel::hil::flash::HasInfoClient;
-            #info_flash_user_identifier.set_info_client(#ident);
+            HasInfoClient::set_info_client(#info_flash_user_identifier, #ident);
         })
     }
 }
