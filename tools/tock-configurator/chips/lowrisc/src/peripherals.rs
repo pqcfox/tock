@@ -27,7 +27,11 @@ pub struct Drivers {
     timers: [Rc<crate::timer::RvTimer>; 1],
     uarts: [Rc<crate::uart::Uart>; 1],
     usbs: [Rc<crate::usb::Usb>; 1],
-    attestations: [Rc<crate::attestation::EarlgreyAttestation<crate::flash::FlashCtrl>>; 1],
+    attestations: [Rc<
+        crate::attestation::EarlgreyAttestation<
+            parse::platform::capsules::info_flash::InfoFlashUser<crate::flash::FlashCtrl>,
+        >,
+    >; 1],
     oneshot_sha256s: [Rc<crate::ffi::cryptolib::oneshot_digest::OtCryptoOneshotSha256>; 1],
     oneshot_sha384s: [Rc<crate::ffi::cryptolib::oneshot_digest::OtCryptoOneshotSha384>; 1],
     oneshot_sha512s: [Rc<crate::ffi::cryptolib::oneshot_digest::OtCryptoOneshotSha512>; 1],
@@ -60,6 +64,9 @@ impl Drivers {
         let mux_alarm = Rc::new(parse::peripherals::timer::MuxAlarm::new(timer.clone()));
         let timeout_mux = Rc::new(parse::timeout_mux::TimeoutMux::new(mux_alarm));
         let cryptolib_mux = Rc::new(crate::ffi::cryptolib::mux::CryptolibMux::new(timeout_mux));
+        let info_flash_user = Rc::new(parse::platform::capsules::info_flash::InfoFlashUser::get(
+            Rc::clone(&flash),
+        ));
         Self {
             aes: [Rc::new(crate::aes::Aes::new())],
             alert_handlers: [Rc::new(crate::alert_handler::AlertHandler::new())],
@@ -81,7 +88,7 @@ impl Drivers {
             uarts: [Rc::new(crate::uart::Uart::new())],
             usbs: [Rc::new(crate::usb::Usb::new())],
             attestations: [Rc::new(crate::attestation::EarlgreyAttestation::new(
-                flash.clone(),
+                Rc::clone(&info_flash_user),
             ))],
             oneshot_sha256s: [Rc::new(
                 crate::ffi::cryptolib::oneshot_digest::OtCryptoOneshotSha256::new(),
@@ -363,7 +370,9 @@ impl parse::DefaultPeripherals for Drivers {
     type AlertHandler = crate::alert_handler::AlertHandler;
     type Usb = crate::usb::Usb;
     type ResetManager = crate::reset_manager::ResetManager;
-    type Attestation = crate::attestation::EarlgreyAttestation<crate::flash::FlashCtrl>;
+    type Attestation = crate::attestation::EarlgreyAttestation<
+        parse::platform::capsules::info_flash::InfoFlashUser<crate::flash::FlashCtrl>,
+    >;
     type OneshotSha256 = crate::ffi::cryptolib::oneshot_digest::OtCryptoOneshotSha256;
     type OneshotSha384 = crate::ffi::cryptolib::oneshot_digest::OtCryptoOneshotSha384;
     type OneshotSha512 = crate::ffi::cryptolib::oneshot_digest::OtCryptoOneshotSha512;
