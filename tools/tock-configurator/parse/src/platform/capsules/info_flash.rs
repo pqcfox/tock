@@ -12,6 +12,13 @@ pub struct InfoFlashUser<F: flash::Flash + 'static> {
     peripheral: Rc<F>,
 }
 
+impl<F: flash::Flash + 'static> InfoFlashUser<F> {
+    #[inline]
+    pub fn get(peripheral: Rc<F>) -> Rc<InfoFlashUser<F>> {
+        Rc::new(Self::new(peripheral))
+    }
+}
+
 impl<F: flash::Flash + 'static> Component for InfoFlashUser<F> {
     fn dependencies(&self) -> Option<Vec<Rc<dyn crate::Component>>> {
         Some(vec![self.peripheral.clone()])
