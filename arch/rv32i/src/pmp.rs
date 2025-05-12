@@ -96,6 +96,40 @@ impl From<mpu::Permissions> for TORUserPMPCFG {
     }
 }
 
+/// A RISC-V PMP memory region specification, configured in NA4 mode.
+///
+/// This type checks that the supplied `start` value meets the RISC-V NA4
+/// requirements, namely that
+///
+/// - the region's start address is aligned to the region size (4 bytes)
+///
+/// By accepting this type, PMP implementations can rely on these requirements
+/// to be verified.
+#[derive(Copy, Clone, Debug)]
+pub struct NA4RegionSpec {
+    start: *const u8,
+}
+
+impl NA4RegionSpec {
+    /// Construct a new [`NA4RegionSpec`]
+    ///
+    /// This method acepts a `start` address, and returns `Some(region)` when
+    /// the alignment constraint in the [`NA4RegionSpec`]'s documentation is
+    /// satisfied, otherwise `None`.
+    pub fn new(start: *const u8) -> Option<Self> {
+        if (start as usize) % 4 != 0 {
+            None
+        } else {
+            Some(NA4RegionSpec { start })
+        }
+    }
+
+    /// Retrieve the start address of this [`NA4RegionSpec`].
+    pub fn start(&self) -> *const u8 {
+        self.start
+    }
+}
+
 /// A RISC-V PMP memory region specification, configured in NAPOT mode.
 ///
 /// This type checks that the supplied `start` and `size` values meet the RISC-V
