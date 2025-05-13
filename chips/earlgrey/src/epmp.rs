@@ -13,7 +13,8 @@ use kernel::platform::mpu;
 use kernel::utilities::registers::FieldValue;
 use rv32i::csr;
 use rv32i::pmp::{
-    format_pmp_entries, pmpcfg_octet, NAPOTRegionSpec, TORRegionSpec, TORUserPMP, TORUserPMPCFG,
+    format_pmp_entries, pmpcfg_octet, NA4RegionSpec, NAPOTRegionSpec, TORRegionSpec, TORUserPMP,
+    TORUserPMPCFG,
 };
 
 // ---------- EarlGrey ePMP implementation named constants ---------------------
@@ -51,6 +52,12 @@ pub struct RAMRegion(pub NAPOTRegionSpec);
 /// Configured in the PMP as a `NAPOT` region.
 #[derive(Copy, Clone, Debug)]
 pub struct MMIORegion(pub NAPOTRegionSpec);
+
+/// The EarlGrey SOC's Stack Guard memory region.
+///
+/// Configured in the PMP as a `NA4` region.
+#[derive(Copy, Clone, Debug)]
+pub struct StackGuardRegion(pub NA4RegionSpec);
 
 /// The EarlGrey SOC's PMP region specification for the kernel `.text` section.
 ///
@@ -267,7 +274,7 @@ pub enum EarlGreyEPMPError {
 ///   |       |                                        |           |   |       |
 ///   |    12 | FLASH (spanning kernel & apps)         | NAPOT     | X | R     |
 ///   |       |                                        |           |   |       |
-///   |    13 | -------------------------------------- | OFF       | X | ----- |
+///   |    13 | Stack guard                            | NA4       | X | R     |
 ///   |       |                                        |           |   |       |
 ///   |    14 | RAM (spanning kernel & apps)           | NAPOT     | X | R/W   |
 ///   |       |                                        |           |   |       |
@@ -433,6 +440,7 @@ pub struct EarlGreyEPMP<const HANDOVER_CONFIG_CHECK: bool, DBG: EPMPDebugConfig>
 impl<const HANDOVER_CONFIG_CHECK: bool> EarlGreyEPMP<{ HANDOVER_CONFIG_CHECK }, EPMPDebugDisable> {
     pub unsafe fn new(
         flash: FlashRegion,
+        stack_guard: StackGuardRegion,
         ram: RAMRegion,
         mmio: MMIORegion,
         kernel_text: KernelTextRegion,
@@ -469,6 +477,11 @@ impl<const HANDOVER_CONFIG_CHECK: bool> EarlGreyEPMP<{ HANDOVER_CONFIG_CHECK }, 
         // kernel & apps, but overlayed by the R/X kernel text TOR section)
         csr::CSR.pmpaddr12.set(flash.0.napot_addr());
 
+        // Configure a Read-Only NA4 region for the kernel stack
+        csr::CSR
+            .pmpaddr13
+            .set((stack_guard.0.start() as usize) >> 2);
+
         // Configure a Read-Write NAPOT region for MMIO.
         csr::CSR.pmpaddr14.set(mmio.0.napot_addr());
 
@@ -484,12 +497,12 @@ impl<const HANDOVER_CONFIG_CHECK: bool> EarlGreyEPMP<{ HANDOVER_CONFIG_CHECK }, 
         // 0x99 = 0b10011001, for FLASH NAPOT region
         //        setting L(7) = 1, A(4-3) = NAPOT, X(2) = 0, W(1) = 0, R(0) = 1
         //
-        // 0x80 = 0b10000000, for the unused region
-        //        setting L(7) = 1, A(4-3) = OFF, X(2) = 0, W(1) = 0, R(0) = 0
+        // 0x91 = 0b10010001, for stack guard NA4 region
+        //        setting L(7) = 1, A(4-3) = NA4, X(2) = 0, W(1) = 0, R(0) = 1
         //
         // 0x9B = 0b10011011, for RAM & MMIO NAPOT regions
         //        setting L(7) = 1, A(4-3) = NAPOT, X(2) = 0, W(1) = 1, R(0) = 1
-        csr::CSR.pmpcfg3.set(0x9B_9B_80_99);
+        csr::CSR.pmpcfg3.set(0x9B_9B_91_99);
 
         // Ensure that the other pmpcfgX CSRs are cleared:
         csr::CSR.pmpcfg1.set(0x00000000);
@@ -515,10 +528,11 @@ impl<const HANDOVER_CONFIG_CHECK: bool> EarlGreyEPMP<{ HANDOVER_CONFIG_CHECK }, 
             || (csr::CSR.pmpcfg0.get() & 0xFFFF8080) != 0x8d808080
             || csr::CSR.pmpcfg1.get() != 0x00000000
             || csr::CSR.pmpcfg2.get() != 0x00000000
-            || csr::CSR.pmpcfg3.get() != 0x9B9B8099
+            || csr::CSR.pmpcfg3.get() != 0x9B9B9199
             || csr::CSR.pmpaddr2.get() != (kernel_text.0.start() as usize) >> 2
             || csr::CSR.pmpaddr3.get() != (kernel_text.0.end() as usize) >> 2
             || csr::CSR.pmpaddr12.get() != flash.0.napot_addr()
+            || csr::CSR.pmpaddr13.get() != (stack_guard.0.start() as usize) >> 2
             || csr::CSR.pmpaddr14.get() != mmio.0.napot_addr()
             || csr::CSR.pmpaddr15.get() != ram.0.napot_addr()
         {

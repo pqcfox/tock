@@ -527,6 +527,8 @@ impl KernelResources<EarlGreyChip> for EarlGrey {
 
 // These symbols are defined in the linker script.
 extern "C" {
+    /// The start of the kernel stack (Included only for kernel PMP)
+    static _sstack: u8;
     /// Beginning of the ROM region containing app images.
     static _sapps: u8;
     /// End of the ROM region containing app images.
@@ -736,13 +738,19 @@ unsafe fn setup() -> (
     );
 
     #[cfg(feature = "sival")]
-    let earlgrey_epmp = earlgrey::epmp::EarlGreyEPMP::new(
-        flash_region,
-        ram_region,
-        mmio_region,
-        kernel_text_region,
-    )
-    .unwrap();
+    let earlgrey_epmp = {
+        let stack_guard_region = earlgrey::epmp::StackGuardRegion(
+            rv32i::pmp::NA4RegionSpec::new(core::ptr::addr_of!(_sstack)).unwrap(),
+        );
+        earlgrey::epmp::EarlGreyEPMP::new(
+            flash_region,
+            stack_guard_region,
+            ram_region,
+            mmio_region,
+            kernel_text_region,
+        )
+        .unwrap()
+    };
     #[cfg(not(feature = "sival"))]
     let earlgrey_epmp = {
         let debug_region = earlgrey::epmp::RVDMRegion(
