@@ -99,7 +99,7 @@ pub unsafe fn main() {
 
     // Create the base board:
     let (board_kernel, base_platform, chip, nrf52840_peripherals, _mux_alarm) =
-        nrf52840dk_lib::start();
+        nrf52840dk_lib::start_no_pconsole();
 
     //--------------------------------------------------------------------------
     // HMAC-SHA256
